@@ -115,7 +115,7 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
   const terrainScale = (vars[3] ?? 50) / 100 * 0.08 + 0.02;
   const waterLevel = (vars[4] ?? 30) / 100 * 0.35 + 0.15;
   const forestDensity = (vars[5] ?? 40) / 100;
-  const mountainMult = (vars[6] ?? 50) / 100 * 1.5 + 0.5;
+  const heightMultiplier = (vars[6] ?? 50) / 100 * 2.0 + 0.5; // VAR[6] now affects actual height
   const roughness = (vars[8] ?? 50) / 100 * 0.6 + 0.3;
   const landmarkDensity = (vars[9] ?? 20) / 100 * 0.12;
   
@@ -125,28 +125,34 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
   for (let y = 0; y < GRID_SIZE; y++) {
     terrain[y] = [];
     for (let x = 0; x < GRID_SIZE; x++) {
-      // Multi-octave noise for elevation
-      const elevation = fbm(noise, x * terrainScale, y * terrainScale, 4, roughness);
+      // Multi-octave noise for base elevation
+      let baseElevation = fbm(noise, x * terrainScale, y * terrainScale, 4, roughness);
       
-      // Determine terrain type
+      // Apply height multiplier to non-water areas
+      const scaledElevation = baseElevation * heightMultiplier;
+      
+      // Determine terrain type based on base elevation (before scaling)
       let type: TerrainCell['type'];
-      if (elevation < waterLevel) {
+      if (baseElevation < waterLevel) {
         type = 'water';
-      } else if (elevation > 0.7 * mountainMult) {
+      } else if (baseElevation > 0.65) {
         type = 'mountain';
       } else {
         const forestNoise = noise2(x * 0.1, y * 0.1);
-        type = forestNoise < forestDensity * elevation ? 'forest' : 'ground';
+        type = forestNoise < forestDensity * baseElevation ? 'forest' : 'ground';
       }
       
       // Landmarks
       const landmarkNoise = noise3(x * 0.15, y * 0.15);
       const hasLandmark = type !== 'water' && type !== 'mountain' && landmarkNoise < landmarkDensity;
       
+      // Final elevation - water stays low, land gets height multiplier
+      const finalElevation = type === 'water' ? waterLevel * 0.3 : scaledElevation;
+      
       terrain[y][x] = {
         x,
         y,
-        elevation: type === 'water' ? waterLevel * 0.5 : elevation,
+        elevation: finalElevation,
         type,
         hasLandmark,
         landmarkType: hasLandmark ? Math.floor(landmarkNoise * 100) % 3 : 0

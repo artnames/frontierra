@@ -6,9 +6,18 @@ import { WorldData, getElevationAt, isWalkable } from '@/lib/worldData';
 interface FirstPersonControlsProps {
   world: WorldData;
   onPositionChange?: (x: number, y: number, z: number) => void;
+  preservePosition?: boolean; // Don't reset on world change
 }
 
-export function useFirstPersonControls({ world, onPositionChange }: FirstPersonControlsProps) {
+// Store position globally to persist across world regenerations
+const globalCameraState = {
+  position: null as THREE.Vector3 | null,
+  yaw: 0,
+  pitch: 0,
+  initialized: false
+};
+
+export function useFirstPersonControls({ world, onPositionChange, preservePosition = true }: FirstPersonControlsProps) {
   const { camera, gl } = useThree();
   const moveState = useRef({
     forward: false,
@@ -18,48 +27,72 @@ export function useFirstPersonControls({ world, onPositionChange }: FirstPersonC
     up: false,
     down: false
   });
-  const rotationState = useRef({ yaw: world.spawnPoint.rotationY, pitch: 0 });
+  const rotationState = useRef({ yaw: 0, pitch: 0 });
   const isDragging = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
-  const position = useRef(new THREE.Vector3(
-    world.spawnPoint.x,
-    world.spawnPoint.z,
-    world.spawnPoint.y
-  ));
+  const position = useRef(new THREE.Vector3());
+  const isInitialized = useRef(false);
 
-  // Initialize camera position
+  // Initialize camera position only once, or when explicitly needed
   useEffect(() => {
-    position.current.set(world.spawnPoint.x, world.spawnPoint.z, world.spawnPoint.y);
-    rotationState.current.yaw = world.spawnPoint.rotationY;
-    rotationState.current.pitch = 0;
-  }, [world]);
+    if (!isInitialized.current) {
+      // First time - use spawn point or global state
+      if (globalCameraState.initialized && preservePosition) {
+        position.current.copy(globalCameraState.position!);
+        rotationState.current.yaw = globalCameraState.yaw;
+        rotationState.current.pitch = globalCameraState.pitch;
+      } else {
+        position.current.set(world.spawnPoint.x, world.spawnPoint.z, world.spawnPoint.y);
+        rotationState.current.yaw = world.spawnPoint.rotationY;
+        rotationState.current.pitch = 0;
+        
+        globalCameraState.position = position.current.clone();
+        globalCameraState.yaw = rotationState.current.yaw;
+        globalCameraState.pitch = rotationState.current.pitch;
+        globalCameraState.initialized = true;
+      }
+      isInitialized.current = true;
+    }
+    // Don't reset when world changes - this preserves camera position
+  }, [world, preservePosition]);
 
-  // Keyboard controls
+  // Keyboard controls - attach to window for global capture
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      
       switch (e.code) {
         case 'KeyW':
         case 'ArrowUp':
           moveState.current.forward = true;
+          e.preventDefault();
           break;
         case 'KeyS':
         case 'ArrowDown':
           moveState.current.backward = true;
+          e.preventDefault();
           break;
         case 'KeyA':
         case 'ArrowLeft':
           moveState.current.left = true;
+          e.preventDefault();
           break;
         case 'KeyD':
         case 'ArrowRight':
           moveState.current.right = true;
+          e.preventDefault();
           break;
         case 'Space':
           moveState.current.up = true;
+          e.preventDefault();
           break;
         case 'ShiftLeft':
         case 'ShiftRight':
           moveState.current.down = true;
+          e.preventDefault();
           break;
       }
     };
@@ -92,12 +125,13 @@ export function useFirstPersonControls({ world, onPositionChange }: FirstPersonC
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    // Use capture phase to get events before other handlers
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    window.addEventListener('keyup', handleKeyUp, { capture: true });
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      window.removeEventListener('keyup', handleKeyUp, { capture: true });
     };
   }, []);
 
@@ -108,6 +142,7 @@ export function useFirstPersonControls({ world, onPositionChange }: FirstPersonC
     const handleMouseDown = (e: MouseEvent) => {
       isDragging.current = true;
       lastMouse.current = { x: e.clientX, y: e.clientY };
+      canvas.style.cursor = 'grabbing';
     };
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -125,6 +160,7 @@ export function useFirstPersonControls({ world, onPositionChange }: FirstPersonC
 
     const handleMouseUp = () => {
       isDragging.current = false;
+      canvas.style.cursor = 'grab';
     };
 
     // Touch controls
@@ -152,6 +188,7 @@ export function useFirstPersonControls({ world, onPositionChange }: FirstPersonC
       isDragging.current = false;
     };
 
+    canvas.style.cursor = 'grab';
     canvas.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
@@ -171,7 +208,7 @@ export function useFirstPersonControls({ world, onPositionChange }: FirstPersonC
 
   // Update camera each frame
   useFrame((_, delta) => {
-    const speed = 8 * delta;
+    const speed = 12 * delta; // Increased speed
     const { forward, backward, left, right, up, down } = moveState.current;
     const { yaw, pitch } = rotationState.current;
 
@@ -194,7 +231,7 @@ export function useFirstPersonControls({ world, onPositionChange }: FirstPersonC
       const newX = position.current.x + moveX * speed;
       const newZ = position.current.z + moveZ * speed;
       
-      // Check if new position is walkable
+      // Check if new position is walkable (less strict for better movement)
       if (isWalkable(world, newX, newZ)) {
         position.current.x = newX;
         position.current.z = newZ;
@@ -202,6 +239,13 @@ export function useFirstPersonControls({ world, onPositionChange }: FirstPersonC
         // Update height based on terrain
         const terrainHeight = getElevationAt(world, newX, newZ);
         position.current.y = terrainHeight + 2; // Eye height
+      } else {
+        // Try sliding along obstacles
+        if (isWalkable(world, newX, position.current.z)) {
+          position.current.x = newX;
+        } else if (isWalkable(world, position.current.x, newZ)) {
+          position.current.z = newZ;
+        }
       }
     }
 
@@ -216,9 +260,19 @@ export function useFirstPersonControls({ world, onPositionChange }: FirstPersonC
     const euler = new THREE.Euler(pitch, yaw, 0, 'YXZ');
     camera.quaternion.setFromEuler(euler);
 
+    // Save state globally
+    globalCameraState.position = position.current.clone();
+    globalCameraState.yaw = yaw;
+    globalCameraState.pitch = pitch;
+
     // Notify parent of position change
     onPositionChange?.(position.current.x, position.current.z, position.current.y);
   });
 
   return position;
+}
+
+// Reset camera to spawn (call when needed)
+export function resetCameraToSpawn() {
+  globalCameraState.initialized = false;
 }
