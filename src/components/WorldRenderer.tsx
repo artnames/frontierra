@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { WorldData } from '@/lib/worldData';
+import { WorldAction } from '@/lib/worldContract';
 
 interface TerrainMeshProps {
   world: WorldData;
