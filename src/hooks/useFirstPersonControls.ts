@@ -7,6 +7,7 @@ interface FirstPersonControlsProps {
   world: WorldData;
   onPositionChange?: (x: number, y: number, z: number) => void;
   preservePosition?: boolean; // Don't reset on world change
+  enabled?: boolean; // Whether controls are active
 }
 
 // Store position globally to persist across world regenerations
@@ -17,7 +18,7 @@ const globalCameraState = {
   initialized: false
 };
 
-export function useFirstPersonControls({ world, onPositionChange, preservePosition = true }: FirstPersonControlsProps) {
+export function useFirstPersonControls({ world, onPositionChange, preservePosition = true, enabled = true }: FirstPersonControlsProps) {
   const { camera, gl } = useThree();
   const moveState = useRef({
     forward: false,
@@ -208,6 +209,9 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
 
   // Update camera each frame
   useFrame((_, delta) => {
+    // Skip updates if disabled (replay mode)
+    if (!enabled) return;
+    
     const speed = 12 * delta; // Increased speed
     const { forward, backward, left, right, up, down } = moveState.current;
     const { yaw, pitch } = rotationState.current;

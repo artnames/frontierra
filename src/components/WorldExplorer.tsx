@@ -55,10 +55,12 @@ function FirstPersonScene({
     }
   }, [world, isDiscovered, onPositionChange, onDiscovery]);
   
-  // Only use first-person controls when not replaying
-  if (!isReplaying) {
-    useFirstPersonControls({ world, onPositionChange: handlePositionChange });
-  }
+  // Always call the hook - pass enabled flag to control behavior
+  useFirstPersonControls({ 
+    world, 
+    onPositionChange: handlePositionChange,
+    enabled: !isReplaying 
+  });
   
   return (
     <>
