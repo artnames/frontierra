@@ -373,6 +373,13 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
     return 0;
   }
   
+  // Check if we're on a bridge - return bridge height
+  const cell = world.terrain[gridY]?.[gridX];
+  if (cell?.type === 'bridge') {
+    const waterLevel = (world.vars[4] ?? 30) / 100 * 0.35 + 0.15;
+    return waterLevel * 20 + 0.3 * 20; // Bridge height (same as visual)
+  }
+  
   const fx = worldX - gridX;
   const fy = worldY - gridY;
   
