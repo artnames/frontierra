@@ -17,6 +17,10 @@ interface TerrainMeshProps {
 export function TerrainMesh({ world }: TerrainMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   
+  // Height scale for converting 0-1 elevation to world units
+  const heightScale = 15;
+  const waterThreshold = (world.vars[4] ?? 30) / 100 * 0.20 + 0.28;
+  
   const { geometry } = useMemo(() => {
     const size = world.gridSize;
     const geometry = new THREE.PlaneGeometry(size, size, size - 1, size - 1);
@@ -32,11 +36,12 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
       
       const cell = world.terrain[y]?.[x];
       if (cell) {
-        // Height from NexArt-derived elevation
-        positions.setY(i, cell.elevation * 20);
+        // Height DIRECTLY from continuous elevation (Red channel)
+        // No categorical adjustments - pure heightfield interpretation
+        positions.setY(i, cell.elevation * heightScale);
         
-        // Color from NexArt-derived type and moisture
-        const { r, g, b } = getTerrainColor(cell);
+        // Color derived from elevation + moisture (continuous gradient)
+        const { r, g, b } = getContinuousTerrainColor(cell.elevation, cell.moisture, waterThreshold);
         
         colors[i * 3] = r;
         colors[i * 3 + 1] = g;
@@ -48,7 +53,7 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
     geometry.computeVertexNormals();
     
     return { geometry };
-  }, [world]);
+  }, [world, heightScale, waterThreshold]);
   
   return (
     <mesh ref={meshRef} geometry={geometry} position={[world.gridSize / 2, 0, world.gridSize / 2]}>
@@ -57,24 +62,69 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
   );
 }
 
-function getTerrainColor(cell: TerrainCell): { r: number; g: number; b: number } {
-  // Use moisture from NexArt Green channel to modulate colors
-  const moistureVar = cell.moisture * 0.15;
+// Continuous color gradient based on elevation and moisture
+// No categorical "biome painting" - pure gradient interpretation
+function getContinuousTerrainColor(
+  elevation: number, 
+  moisture: number, 
+  waterThreshold: number
+): { r: number; g: number; b: number } {
   
-  switch (cell.type) {
-    case 'water':
-      return { r: 0.15 + moistureVar, g: 0.35 + moistureVar, b: 0.55 + moistureVar * 0.5 };
-    case 'mountain':
-      return { r: 0.4 - moistureVar * 0.5, g: 0.4 - moistureVar * 0.5, b: 0.45 };
-    case 'forest':
-      return { r: 0.12, g: 0.32 + moistureVar, b: 0.12 };
-    case 'path':
-      return { r: 0.58, g: 0.48, b: 0.32 };
-    case 'bridge':
-      return { r: 0.42, g: 0.32, b: 0.22 };
-    default: // ground
-      return { r: 0.35 - moistureVar * 0.3, g: 0.30 + moistureVar * 0.2, b: 0.20 };
+  // Water gradient (deep to shallow)
+  if (elevation < waterThreshold) {
+    const depth = elevation / waterThreshold;
+    return {
+      r: 0.08 + depth * 0.12,
+      g: 0.25 + depth * 0.18,
+      b: 0.45 + depth * 0.15
+    };
   }
+  
+  // Land: continuous gradient from lowlands to peaks
+  const landFraction = (elevation - waterThreshold) / (1 - waterThreshold);
+  
+  // Coastal/lowland (green-brown based on moisture)
+  if (landFraction < 0.25) {
+    const t = landFraction / 0.25;
+    const moistureInfluence = moisture * 0.4;
+    return {
+      r: 0.28 - moistureInfluence * 0.1 + t * 0.08,
+      g: 0.35 + moistureInfluence * 0.15 + t * 0.05,
+      b: 0.18 + moistureInfluence * 0.05
+    };
+  }
+  
+  // Midlands/hills (transition zone)
+  if (landFraction < 0.55) {
+    const t = (landFraction - 0.25) / 0.30;
+    const moistureInfluence = moisture * 0.3;
+    return {
+      r: 0.36 - moistureInfluence * 0.08 + t * 0.12,
+      g: 0.40 + moistureInfluence * 0.1 - t * 0.05,
+      b: 0.22 + t * 0.08
+    };
+  }
+  
+  // Highlands/mountains (rock and snow gradient)
+  const t = (landFraction - 0.55) / 0.45;
+  const snowLine = 0.75;
+  
+  if (t > snowLine) {
+    // Snow caps
+    const snowT = (t - snowLine) / (1 - snowLine);
+    return {
+      r: 0.65 + snowT * 0.30,
+      g: 0.68 + snowT * 0.27,
+      b: 0.72 + snowT * 0.23
+    };
+  }
+  
+  // Rocky mountain
+  return {
+    r: 0.42 + t * 0.20,
+    g: 0.40 + t * 0.22,
+    b: 0.38 + t * 0.28
+  };
 }
 
 // ============================================
