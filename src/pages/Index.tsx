@@ -1,9 +1,11 @@
 import { useCallback, useState, useMemo, useEffect } from 'react';
-import { Eye, Map, Copy, Check, Shuffle, Settings, ChevronLeft, Users, Globe, Compass, Pencil } from 'lucide-react';
+import { Eye, Map, Copy, Check, Shuffle, Settings, ChevronLeft, Users, Globe, Compass, Pencil, LogIn, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { useWorldParams } from '@/hooks/useWorldParams';
+import { useAuth } from '@/hooks/useAuth';
 import { VAR_LABELS } from '@/lib/worldGenerator';
 import { generateWorldData } from '@/lib/worldData';
 import { 
@@ -41,6 +43,10 @@ const Index = () => {
   const [replayFrame, setReplayFrame] = useState<ReplayFrame | null>(null);
   const [playerPosition, setPlayerPosition] = useState({ x: 32, y: 32, z: 0 });
   const { toast } = useToast();
+  const navigate = useNavigate();
+  
+  // Authentication
+  const { user, isAuthenticated, isLoading: isAuthLoading, signOut } = useAuth();
   
   const [searchParams, setSearchParams] = useSearchParams();
   
@@ -53,9 +59,10 @@ const Index = () => {
     randomizeSeed
   } = useWorldParams();
 
-  // Multiplayer world management
+  // Multiplayer world management - use authenticated user ID
   const multiplayer = useMultiplayerWorld({
-    autoCreate: true
+    autoCreate: worldMode === 'multiplayer' && isAuthenticated,
+    initialPlayerId: user?.id
   });
   
   // Check if we're on someone else's land (multiplayer)
@@ -93,12 +100,22 @@ const Index = () => {
     }
   }, [isOtherPlayerLand, toast]);
   
-  // Initialize multiplayer land on first load
+  // Initialize multiplayer land on first load (requires auth)
   useEffect(() => {
-    if (worldMode === 'multiplayer' && !multiplayer.currentLand && !multiplayer.isLoading) {
-      multiplayer.initializePlayerLand();
+    if (worldMode === 'multiplayer' && isAuthenticated && !multiplayer.currentLand && !multiplayer.isLoading) {
+      multiplayer.initializePlayerLand(user?.id);
     }
-  }, [worldMode, multiplayer.currentLand, multiplayer.isLoading, multiplayer.initializePlayerLand]);
+  }, [worldMode, isAuthenticated, user?.id, multiplayer.currentLand, multiplayer.isLoading, multiplayer.initializePlayerLand]);
+  
+  // Handle sign out
+  const handleSignOut = useCallback(async () => {
+    await signOut();
+    setWorldMode('solo');
+    toast({
+      title: 'Signed out',
+      description: 'You have been logged out'
+    });
+  }, [signOut, toast]);
 
   // Parse actions from URL
   const [actions, setActions] = useState<WorldAction[]>(() => {
@@ -269,12 +286,18 @@ const Index = () => {
               <Button
                 variant={worldMode === 'multiplayer' ? 'default' : 'ghost'}
                 size="sm"
-                onClick={() => setWorldMode('multiplayer')}
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    navigate('/auth');
+                  } else {
+                    setWorldMode('multiplayer');
+                  }
+                }}
                 className="gap-1.5 h-7 text-xs"
                 disabled={isReplaying}
               >
                 <Users className="w-3.5 h-3.5" />
-                Multiplayer
+                {isAuthenticated ? 'Multiplayer' : 'Login'}
               </Button>
             </div>
             
@@ -348,6 +371,30 @@ const Index = () => {
               {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">{copied ? 'Copied!' : 'Share'}</span>
             </Button>
+            
+            {/* Auth Button */}
+            {isAuthenticated ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSignOut}
+                className="gap-1.5 text-muted-foreground hover:text-foreground"
+                title={user?.email}
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/auth')}
+                className="gap-1.5"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Login</span>
+              </Button>
+            )}
           </div>
         </div>
       </header>

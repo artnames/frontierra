@@ -103,10 +103,9 @@ export function WorldAMap({
 
       {/* 10x10 Grid */}
       <div 
-        className="grid gap-0.5 bg-border/50 p-1 rounded-lg"
+        className="grid gap-[2px] bg-border p-2 rounded-lg"
         style={{ 
-          gridTemplateColumns: `repeat(${WORLD_A_GRID_WIDTH}, 1fr)`,
-          aspectRatio: '1'
+          gridTemplateColumns: `repeat(${WORLD_A_GRID_WIDTH}, 1fr)`
         }}
       >
         {grid.map((cell) => {
@@ -121,13 +120,13 @@ export function WorldAMap({
               onMouseLeave={() => setHoveredCell(null)}
               disabled={!isOwned}
               className={cn(
-                "relative aspect-square rounded-sm transition-all duration-150",
+                "relative w-6 h-6 rounded-sm transition-all duration-150",
                 "flex items-center justify-center text-[8px] font-mono",
-                // Base states
-                !isOwned && "bg-secondary/30 cursor-not-allowed",
-                isOwned && !isCurrent && !isOwnLand && "bg-muted hover:bg-muted/80 cursor-pointer",
-                isOwnLand && !isCurrent && "bg-primary/30 hover:bg-primary/40 cursor-pointer",
-                isCurrent && "bg-accent ring-2 ring-accent ring-offset-1 ring-offset-background",
+                // Base states with solid visible colors
+                !isOwned && "bg-muted/60 border border-border/50 cursor-not-allowed",
+                isOwned && !isCurrent && !isOwnLand && "bg-secondary border border-border hover:bg-secondary/80 cursor-pointer",
+                isOwnLand && !isCurrent && "bg-primary/40 border border-primary/60 hover:bg-primary/50 cursor-pointer",
+                isCurrent && "bg-accent border-2 border-accent-foreground",
                 // Hover highlight
                 isHovered && isOwned && "scale-110 z-10 shadow-lg"
               )}
@@ -141,10 +140,10 @@ export function WorldAMap({
                 <MapPin className="w-3 h-3 text-accent-foreground" />
               )}
               {!isCurrent && isOwnLand && (
-                <User className="w-2.5 h-2.5 text-primary" />
+                <User className="w-2.5 h-2.5 text-primary-foreground" />
               )}
               {!isCurrent && !isOwnLand && isOwned && isHovered && (
-                <Eye className="w-2.5 h-2.5 text-muted-foreground" />
+                <Eye className="w-2.5 h-2.5 text-foreground" />
               )}
             </button>
           );
@@ -154,19 +153,19 @@ export function WorldAMap({
       {/* Legend */}
       <div className="flex flex-wrap gap-3 text-[10px] text-muted-foreground">
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-accent ring-1 ring-accent" />
+          <div className="w-3 h-3 rounded-sm bg-accent border-2 border-accent-foreground" />
           <span>Current</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-primary/30" />
+          <div className="w-3 h-3 rounded-sm bg-primary/40 border border-primary/60" />
           <span>Your Land</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-muted" />
+          <div className="w-3 h-3 rounded-sm bg-secondary border border-border" />
           <span>Owned</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-secondary/30" />
+          <div className="w-3 h-3 rounded-sm bg-muted/60 border border-border/50" />
           <span>Empty</span>
         </div>
       </div>
