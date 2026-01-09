@@ -125,35 +125,28 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
   // Generate terrain
   const terrain: TerrainCell[][] = [];
   
-  // Generate road network deterministically
-  // Roads are created at specific intervals based on seed
-  const roadRng = mulberry32(seed + 5000);
+  // Generate organic path network using noise-based curves
+  const pathNoiseH = createNoise2D(seed + 3000); // Horizontal path curves
+  const pathNoiseV = createNoise2D(seed + 4000); // Vertical path curves
+  const pathNoiseWander = createNoise2D(seed + 5000); // Extra wandering
   
-  // Determine road positions - create grid-like road network
-  const numHRoads = 2 + Math.floor(pathDensity * 4); // 2-6 horizontal roads
-  const numVRoads = 2 + Math.floor(pathDensity * 4); // 2-6 vertical roads
+  // Number of main paths based on density
+  const numPaths = 2 + Math.floor(pathDensity * 5); // 2-7 paths
   
-  const hRoadPositions: number[] = [];
-  const vRoadPositions: number[] = [];
+  // Generate path "spine" positions - these are the base Y or X positions
+  const pathRng = mulberry32(seed + 6000);
+  const pathSpines: { basePos: number; isHorizontal: boolean; amplitude: number; frequency: number }[] = [];
   
-  // Generate horizontal road Y positions
-  for (let i = 0; i < numHRoads; i++) {
-    const pos = Math.floor(roadRng() * (GRID_SIZE - 10)) + 5;
-    hRoadPositions.push(pos);
+  for (let i = 0; i < numPaths; i++) {
+    const isHorizontal = pathRng() > 0.5;
+    const basePos = Math.floor(pathRng() * (GRID_SIZE - 16)) + 8;
+    const amplitude = 3 + pathRng() * 6; // How much the path curves (3-9 cells)
+    const frequency = 0.03 + pathRng() * 0.05; // How often it curves
+    pathSpines.push({ basePos, isHorizontal, amplitude, frequency });
   }
   
-  // Generate vertical road X positions
-  for (let i = 0; i < numVRoads; i++) {
-    const pos = Math.floor(roadRng() * (GRID_SIZE - 10)) + 5;
-    vRoadPositions.push(pos);
-  }
-  
-  // Sort for consistent checking
-  hRoadPositions.sort((a, b) => a - b);
-  vRoadPositions.sort((a, b) => a - b);
-  
-  // Road width (1-2 cells)
-  const roadWidth = pathDensity > 0.5 ? 2 : 1;
+  // Road width
+  const roadWidth = pathDensity > 0.5 ? 2.5 : 1.5;
   
   // First pass: generate base terrain
   for (let y = 0; y < GRID_SIZE; y++) {
@@ -165,18 +158,25 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
       // Apply height multiplier to non-water areas
       const scaledElevation = baseElevation * heightMultiplier;
       
-      // Check if this cell is on a road
+      // Check if this cell is on an organic path
       let isOnRoad = false;
       if (pathDensity > 0.05) {
-        for (const roadY of hRoadPositions) {
-          if (Math.abs(y - roadY) < roadWidth) {
-            isOnRoad = true;
-            break;
-          }
-        }
-        if (!isOnRoad) {
-          for (const roadX of vRoadPositions) {
-            if (Math.abs(x - roadX) < roadWidth) {
+        for (const spine of pathSpines) {
+          if (spine.isHorizontal) {
+            // Horizontal path - curves in Y based on X position
+            const curve = pathNoiseH(x * spine.frequency, spine.basePos * 0.1) * spine.amplitude;
+            const wander = pathNoiseWander(x * 0.08, spine.basePos * 0.05) * 2;
+            const pathY = spine.basePos + curve + wander;
+            if (Math.abs(y - pathY) < roadWidth) {
+              isOnRoad = true;
+              break;
+            }
+          } else {
+            // Vertical path - curves in X based on Y position
+            const curve = pathNoiseV(spine.basePos * 0.1, y * spine.frequency) * spine.amplitude;
+            const wander = pathNoiseWander(spine.basePos * 0.05, y * 0.08) * 2;
+            const pathX = spine.basePos + curve + wander;
+            if (Math.abs(x - pathX) < roadWidth) {
               isOnRoad = true;
               break;
             }
