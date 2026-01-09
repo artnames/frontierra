@@ -20,15 +20,15 @@ export const WORLD_LAYOUT_SOURCE = `
 // Path:     RGB ~(200, 180, 140) - Light brown
 // Bridge:   RGB ~(100, 70, 40)  - Dark brown
 
-const GRID_SIZE = 64;
+var GRID_SIZE = 64;
 
 // Color definitions
-const WATER_COLOR = [0, 50, 200];
-const GROUND_COLOR = [180, 140, 100];
-const FOREST_COLOR = [60, 140, 60];
-const MOUNTAIN_COLOR = [140, 140, 160];
-const PATH_COLOR = [200, 180, 140];
-const BRIDGE_COLOR = [100, 70, 40];
+var WATER_COLOR = [0, 50, 200];
+var GROUND_COLOR = [180, 140, 100];
+var FOREST_COLOR = [60, 140, 60];
+var MOUNTAIN_COLOR = [140, 140, 160];
+var PATH_COLOR = [200, 180, 140];
+var BRIDGE_COLOR = [100, 70, 40];
 
 function setup() {
   colorMode("RGB");
@@ -179,9 +179,9 @@ export const WORLD_SOURCE = `
 // Isometric Preview (visual representation only)
 // The canonical layout comes from WORLD_LAYOUT_SOURCE
 
-const GRID_SIZE = 32;
-const TILE_WIDTH = 16;
-const TILE_HEIGHT = 8;
+var GRID_SIZE = 32;
+var TILE_WIDTH = 16;
+var TILE_HEIGHT = 8;
 
 function setup() {
   colorMode("HSB");
