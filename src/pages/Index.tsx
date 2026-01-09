@@ -475,14 +475,15 @@ const Index = () => {
               {sidebarTab === 'worldmap' && worldMode === 'multiplayer' && (
                 <WorldAMap
                   currentLand={multiplayer.currentLand}
-                  playerId={multiplayer.playerId}
+                  playerId={user?.id ?? null}
                   onVisitLand={multiplayer.visitLand}
+                  onLandClaimed={() => multiplayer.initializePlayerLand(user?.id)}
                 />
               )}
               
               {sidebarTab === 'social' && worldMode === 'multiplayer' && (
                 <SocialPanel
-                  playerId={multiplayer.playerId}
+                  playerId={user?.id ?? null}
                   currentLand={multiplayer.currentLand}
                 />
               )}
