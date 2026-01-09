@@ -274,62 +274,40 @@ function parseRGBAPixels(
   };
 }
 
-// Classify tile type from RGB values
-// FUZZY MATCHING: P5.js anti-aliasing can shift RGB values slightly
-// Use wider ranges and distance-based matching for robustness
+// Classify tile type from RGB values using Euclidean Color Distance
+// This is robust against P5.js anti-aliasing shifts
 function classifyTileFromRGB(r: number, g: number, b: number): TileType {
-  // Object: bright yellow (255, 220, 60) - tight match for landmarks
-  if (r > 230 && g > 180 && b < 120) {
-    return TileType.OBJECT;
+  // Define Canonical Target Colors from the P5.js Source
+  const targets = [
+    { type: TileType.OBJECT,   r: 255, g: 220, b: 60  },
+    { type: TileType.BRIDGE,   r: 120, g: 80,  b: 50  },
+    { type: TileType.PATH,     r: 180, g: 150, b: 100 },
+    { type: TileType.RIVER,    r: 70,  g: 160, b: 180 },
+    { type: TileType.WATER,    r: 30,  g: 80,  b: 140 },
+    { type: TileType.FOREST,   r: 60,  g: 120, b: 50  },
+    { type: TileType.MOUNTAIN, r: 130, g: 125, b: 120 },
+    { type: TileType.GROUND,   r: 160, g: 140, b: 100 }
+  ];
+
+  let bestMatch = TileType.GROUND;
+  let minDistance = Infinity;
+
+  // Calculate Euclidean distance in 3D Color Space
+  for (const target of targets) {
+    const distance = Math.sqrt(
+      Math.pow(r - target.r, 2) +
+      Math.pow(g - target.g, 2) +
+      Math.pow(b - target.b, 2)
+    );
+
+    if (distance < minDistance) {
+      minDistance = distance;
+      bestMatch = target.type;
+    }
   }
-  
-  // Bridge: dark brown (120, 80, 50) - FUZZY: allow ±25 variance
-  // Check if color is close to target brown
-  const bridgeDist = Math.abs(r - 120) + Math.abs(g - 80) + Math.abs(b - 50);
-  if (bridgeDist < 75 && r > 90 && r < 150 && g > 50 && g < 110 && b > 20 && b < 80) {
-    return TileType.BRIDGE;
-  }
-  
-  // Path: light brown (180, 150, 100) - FUZZY: allow ±30 variance for anti-aliasing
-  const pathDist = Math.abs(r - 180) + Math.abs(g - 150) + Math.abs(b - 100);
-  if (pathDist < 90 && r > 145 && r < 215 && g > 115 && g < 185 && b > 65 && b < 135) {
-    return TileType.PATH;
-  }
-  
-  // River: cyan-ish (70, 160, 180) - FUZZY: wider range
-  const riverDist = Math.abs(r - 70) + Math.abs(g - 160) + Math.abs(b - 180);
-  if (riverDist < 100 && r < 120 && g > 110 && b > 130) {
-    return TileType.RIVER;
-  }
-  
-  // Snow cap: very bright, near white (240, 245, 250)
-  if (r > 220 && g > 220 && b > 220) {
-    return TileType.MOUNTAIN; // Snow caps are mountain tiles
-  }
-  
-  // Water: blue tones (low R, high B) - FUZZY: wider range
-  if (r < 80 && b > 80 && b > g * 0.8) {
-    return TileType.WATER;
-  }
-  
-  // Forest: green tones (low R, high G, lower B) - FUZZY
-  if (r < 110 && g > 70 && g > r && g > b * 0.9 && b < 100) {
-    return TileType.FOREST;
-  }
-  
-  // Mountain: gray tones (R~G~B, all > 90) - check for grayness
-  const grayness = Math.abs(r - g) + Math.abs(g - b) + Math.abs(r - b);
-  if (r > 90 && g > 85 && b > 80 && grayness < 60) {
-    return TileType.MOUNTAIN;
-  }
-  
-  // Ground: tan/earthy (high R, medium G, lower B) - FUZZY
-  if (r > 100 && g > 80 && r > b && g > b * 0.7) {
-    return TileType.GROUND;
-  }
-  
-  // Default to ground
-  return TileType.GROUND;
+
+  // Threshold: If color is too far from all targets, default to ground
+  return minDistance < 60 ? bestMatch : TileType.GROUND;
 }
 
 function createFailedWorld(seed: number, vars: number[], errorMessage: string): NexArtWorldGrid {
