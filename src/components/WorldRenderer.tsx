@@ -421,26 +421,41 @@ export function WaterPlane({ world }: { world: WorldData }) {
   // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
   const waterLevel = (world.vars[4] ?? 50) / 100 * 0.50 + 0.15;
   
-  // Calculate minimum terrain elevation to prevent flooding above water line
-  const minTerrainElevation = useMemo(() => {
-    let minElev = Infinity;
+  // Calculate water plane height from actual water cells only
+  // This ensures water stays in oceans/lakes and doesn't flood terrain
+  const waterPlaneHeight = useMemo(() => {
+    let waterCellCount = 0;
+    let avgWaterElevation = 0;
+    let maxNonWaterElevation = 0;
+    
     for (const row of world.terrain) {
       for (const cell of row) {
         if (cell.type === 'water') {
-          minElev = Math.min(minElev, cell.elevation);
+          avgWaterElevation += cell.elevation;
+          waterCellCount++;
+        } else if (cell.type !== 'bridge') {
+          // Track lowest non-water elevation for clamping
+          if (maxNonWaterElevation === 0 || cell.elevation < maxNonWaterElevation) {
+            maxNonWaterElevation = cell.elevation;
+          }
         }
       }
     }
-    // If no water cells, use water level as baseline
-    return minElev === Infinity ? waterLevel * 0.8 : minElev;
-  }, [world.terrain, waterLevel]);
-  
-  // Water plane height: clamped to not exceed lowest water cell elevation
-  // This ensures water stays in basins and doesn't flood forests/ground
-  const waterPlaneHeight = Math.min(
-    waterLevel * heightScale - 0.5,
-    minTerrainElevation * heightScale + 0.5
-  );
+    
+    if (waterCellCount === 0) {
+      // No water in world - place plane below all terrain
+      return maxNonWaterElevation * heightScale - 2;
+    }
+    
+    avgWaterElevation = avgWaterElevation / waterCellCount;
+    
+    // Water plane at average water cell elevation
+    // Clamped to never exceed the lowest non-water terrain
+    const baseHeight = avgWaterElevation * heightScale;
+    const maxHeight = maxNonWaterElevation * heightScale - 0.5;
+    
+    return Math.min(baseHeight, maxHeight);
+  }, [world.terrain, heightScale]);
   
   return (
     <mesh 
