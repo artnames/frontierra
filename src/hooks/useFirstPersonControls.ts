@@ -17,7 +17,8 @@ const globalCameraState = {
   manualHeight: null as number | null,
   yaw: 0,
   pitch: 0,
-  initialized: false
+  initialized: false,
+  pendingTransition: null as { x: number; z: number } | null  // Pending position for land transition
 };
 
 export function useFirstPersonControls({ world, onPositionChange, preservePosition = true, enabled = true, allowVerticalMovement = true }: FirstPersonControlsProps) {
@@ -38,7 +39,26 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
   const isInitialized = useRef(false);
 
   // Initialize camera position only once (preserve across seed changes in editor mode)
+  // OR apply pending transition position when world regenerates after land crossing
   useEffect(() => {
+    // Check for pending land transition first
+    if (globalCameraState.pendingTransition) {
+      const { x, z } = globalCameraState.pendingTransition;
+      const terrainHeight = getElevationAt(world, x, z);
+      const eyeHeight = 0.7;
+      
+      position.current.set(x, terrainHeight + eyeHeight, z);
+      manualHeightOffset.current = 0;
+      // Preserve rotation for smooth transition
+      
+      globalCameraState.position = position.current.clone();
+      globalCameraState.manualHeight = 0;
+      globalCameraState.initialized = true;
+      globalCameraState.pendingTransition = null;
+      isInitialized.current = true;
+      return;
+    }
+    
     if (!isInitialized.current) {
       if (globalCameraState.initialized && preservePosition && globalCameraState.position) {
         // Restore previous position
@@ -336,4 +356,11 @@ export function setCameraToEditorView(world: WorldData) {
 export function setCameraToExploreView(world: WorldData) {
   globalCameraState.initialized = false;
   globalCameraState.manualHeight = 0;
+}
+
+// Set pending camera position for land transition (multiplayer edge crossing)
+// This stores the position, which will be applied when the new world generates
+export function setCameraForLandTransition(x: number, z: number) {
+  globalCameraState.pendingTransition = { x, z };
+  globalCameraState.initialized = false;  // Force re-initialization with new position
 }
