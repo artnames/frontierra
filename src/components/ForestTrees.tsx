@@ -1,4 +1,4 @@
-// Forest Trees - 3D trees placed on forest tiles from NexArt
+// Forest Trees & Vegetation - 3D objects placed on terrain from NexArt
 
 import { useMemo } from 'react';
 import * as THREE from 'three';
@@ -9,54 +9,175 @@ interface ForestTreesProps {
   world: WorldData;
 }
 
+// Vegetation types enum for variety
+type VegetationType = 'pine' | 'deciduous' | 'bush' | 'birch' | 'willow' | 'deadTree' | 'flower' | 'rock' | 'grassClump' | 'mushroom' | 'fern';
+
+interface VegetationItem {
+  x: number;
+  y: number;
+  z: number;
+  scale: number;
+  type: VegetationType;
+  colorVariant: number; // 0-1 for color variation
+  rotation: number; // Y-axis rotation
+}
+
+// Deterministic pseudo-random based on coordinates and seed
+function seededRandom(x: number, y: number, seedOffset: number): number {
+  const n = Math.sin(x * 12.9898 + y * 78.233 + seedOffset) * 43758.5453;
+  return n - Math.floor(n);
+}
+
 export function ForestTrees({ world }: ForestTreesProps) {
-  const heightScale = WORLD_HEIGHT_SCALE;
-  
-  const trees = useMemo(() => {
-    const items: { x: number; y: number; z: number; scale: number; variant: number }[] = [];
+  const vegetation = useMemo(() => {
+    const items: VegetationItem[] = [];
+    const seed = world.seed || 0;
     
-    // Sample every 2 cells for performance, use deterministic placement
-    for (let gy = 1; gy < world.gridSize - 1; gy += 2) {
-      for (let gx = 1; gx < world.gridSize - 1; gx += 2) {
+    // Define vegetation distribution based on terrain properties
+    for (let gy = 1; gy < world.gridSize - 1; gy += 1) {
+      for (let gx = 1; gx < world.gridSize - 1; gx += 1) {
         const cell = world.terrain[gy]?.[gx];
-        if (cell?.type === 'forest') {
-          // Deterministic offset within cell
-          const offsetX = ((gx * 17 + gy * 31) % 100) / 100 - 0.5;
-          const offsetZ = ((gx * 23 + gy * 13) % 100) / 100 - 0.5;
+        if (!cell) continue;
+        
+        const flippedZ = world.gridSize - 1 - gy;
+        const r1 = seededRandom(gx, gy, seed);
+        const r2 = seededRandom(gx + 100, gy + 100, seed);
+        const r3 = seededRandom(gx + 200, gy + 200, seed);
+        
+        // Forest tiles - trees and understory
+        if (cell.type === 'forest') {
+          // Main tree (70% chance per cell)
+          if (r1 < 0.7) {
+            const offsetX = (r2 - 0.5) * 0.8;
+            const offsetZ = (r3 - 0.5) * 0.8;
+            const treeX = gx + offsetX;
+            const treeZ = flippedZ + offsetZ;
+            const terrainY = getElevationAt(world, treeX, treeZ);
+            
+            // Select tree type based on elevation and moisture
+            let treeType: VegetationType;
+            const elevation = cell.elevation || 0;
+            const moisture = cell.moisture || 0.5;
+            const typeRoll = seededRandom(gx * 3, gy * 3, seed + 50);
+            
+            if (elevation > 0.6) {
+              // High elevation - mostly pines
+              treeType = typeRoll < 0.8 ? 'pine' : (typeRoll < 0.95 ? 'deadTree' : 'birch');
+            } else if (moisture > 0.7) {
+              // High moisture - willows and birches
+              treeType = typeRoll < 0.4 ? 'willow' : (typeRoll < 0.7 ? 'birch' : 'deciduous');
+            } else if (moisture < 0.3) {
+              // Low moisture - dead trees and sparse pines
+              treeType = typeRoll < 0.5 ? 'deadTree' : (typeRoll < 0.8 ? 'pine' : 'bush');
+            } else {
+              // Normal conditions - mixed forest
+              treeType = typeRoll < 0.25 ? 'pine' : (typeRoll < 0.5 ? 'deciduous' : (typeRoll < 0.7 ? 'birch' : (typeRoll < 0.85 ? 'willow' : 'bush')));
+            }
+            
+            items.push({
+              x: treeX,
+              y: terrainY,
+              z: treeZ,
+              scale: 0.8 + r1 * 0.6,
+              type: treeType,
+              colorVariant: seededRandom(gx * 7, gy * 11, seed + 100),
+              rotation: r2 * Math.PI * 2
+            });
+          }
           
-          // COORDINATE FIX: Flip Y-axis for Three.js positioning
-          const flippedZ = world.gridSize - 1 - gy;
+          // Understory vegetation (ferns, mushrooms, flowers)
+          if (r2 > 0.5 && cell.moisture > 0.4) {
+            const offsetX2 = (seededRandom(gx + 300, gy + 300, seed) - 0.5) * 0.9;
+            const offsetZ2 = (seededRandom(gx + 400, gy + 400, seed) - 0.5) * 0.9;
+            const understoryX = gx + offsetX2;
+            const understoryZ = flippedZ + offsetZ2;
+            const understoryY = getElevationAt(world, understoryX, understoryZ);
+            
+            const understoryRoll = seededRandom(gx * 5, gy * 5, seed + 150);
+            const understoryType: VegetationType = understoryRoll < 0.4 ? 'fern' : (understoryRoll < 0.7 ? 'mushroom' : 'flower');
+            
+            items.push({
+              x: understoryX,
+              y: understoryY,
+              z: understoryZ,
+              scale: 0.3 + seededRandom(gx + 500, gy + 500, seed) * 0.4,
+              type: understoryType,
+              colorVariant: seededRandom(gx * 9, gy * 13, seed + 200),
+              rotation: seededRandom(gx + 600, gy + 600, seed) * Math.PI * 2
+            });
+          }
           
-          // Get proper terrain elevation using getElevationAt
-          const treeX = gx + offsetX * 0.8;
-          const treeZ = flippedZ + offsetZ * 0.8;
-          const terrainY = getElevationAt(world, treeX, treeZ);
-          
-          // Larger tree scale for better visibility
-          items.push({
-            x: treeX,
-            y: terrainY,
-            z: treeZ,
-            scale: 1.0 + ((gx * 7 + gy * 11) % 50) / 80,
-            variant: (gx + gy) % 3
-          });
-          
-          // Add second tree for denser forests
-          if (cell.moisture > 0.5) {
-            const offsetX2 = ((gx * 41 + gy * 19) % 100) / 100 - 0.5;
-            const offsetZ2 = ((gx * 29 + gy * 37) % 100) / 100 - 0.5;
-            const tree2X = gx + offsetX2 * 0.8;
-            const tree2Z = flippedZ + offsetZ2 * 0.8;
+          // Dense forests get extra trees
+          if (cell.moisture > 0.6 && r3 < 0.5) {
+            const offsetX3 = (seededRandom(gx + 700, gy + 700, seed) - 0.5) * 0.7;
+            const offsetZ3 = (seededRandom(gx + 800, gy + 800, seed) - 0.5) * 0.7;
+            const tree2X = gx + offsetX3;
+            const tree2Z = flippedZ + offsetZ3;
             const terrain2Y = getElevationAt(world, tree2X, tree2Z);
             
             items.push({
               x: tree2X,
               y: terrain2Y,
               z: tree2Z,
-              scale: 0.8 + ((gx * 13 + gy * 19) % 40) / 80,
-              variant: (gx + gy + 1) % 3
+              scale: 0.6 + r1 * 0.4,
+              type: seededRandom(gx * 11, gy * 17, seed + 250) < 0.5 ? 'bush' : 'deciduous',
+              colorVariant: seededRandom(gx * 13, gy * 19, seed + 300),
+              rotation: seededRandom(gx + 900, gy + 900, seed) * Math.PI * 2
             });
           }
+        }
+        
+        // Ground tiles - sparse vegetation
+        if (cell.type === 'ground' && r1 < 0.15) {
+          const offsetX = (r2 - 0.5) * 0.9;
+          const offsetZ = (r3 - 0.5) * 0.9;
+          const vegX = gx + offsetX;
+          const vegZ = flippedZ + offsetZ;
+          const vegY = getElevationAt(world, vegX, vegZ);
+          
+          const groundRoll = seededRandom(gx * 4, gy * 4, seed + 350);
+          let groundType: VegetationType;
+          
+          if (groundRoll < 0.3) {
+            groundType = 'rock';
+          } else if (groundRoll < 0.5) {
+            groundType = 'grassClump';
+          } else if (groundRoll < 0.7) {
+            groundType = 'flower';
+          } else {
+            groundType = 'bush';
+          }
+          
+          items.push({
+            x: vegX,
+            y: vegY,
+            z: vegZ,
+            scale: 0.4 + r1 * 0.5,
+            type: groundType,
+            colorVariant: seededRandom(gx * 15, gy * 21, seed + 400),
+            rotation: r2 * Math.PI * 2
+          });
+        }
+        
+        // Mountain tiles - rocks and hardy plants
+        if (cell.type === 'mountain' && r1 < 0.2) {
+          const offsetX = (r2 - 0.5) * 0.8;
+          const offsetZ = (r3 - 0.5) * 0.8;
+          const rockX = gx + offsetX;
+          const rockZ = flippedZ + offsetZ;
+          const rockY = getElevationAt(world, rockX, rockZ);
+          
+          const mountainRoll = seededRandom(gx * 6, gy * 6, seed + 450);
+          
+          items.push({
+            x: rockX,
+            y: rockY,
+            z: rockZ,
+            scale: 0.5 + r1 * 0.8,
+            type: mountainRoll < 0.7 ? 'rock' : (mountainRoll < 0.9 ? 'deadTree' : 'pine'),
+            colorVariant: seededRandom(gx * 17, gy * 23, seed + 500),
+            rotation: r2 * Math.PI * 2
+          });
         }
       }
     }
@@ -66,75 +187,355 @@ export function ForestTrees({ world }: ForestTreesProps) {
 
   return (
     <group>
-      {trees.map((tree, i) => (
-        <Tree key={i} {...tree} />
+      {vegetation.map((item, i) => (
+        <Vegetation key={i} {...item} />
       ))}
     </group>
   );
 }
 
-function Tree({ x, y, z, scale, variant }: { x: number; y: number; z: number; scale: number; variant: number }) {
-  if (variant === 0) {
-    // Pine tree
-    return (
-      <group position={[x, y, z]} scale={scale}>
-        <mesh position={[0, 0.4, 0]}>
-          <cylinderGeometry args={[0.06, 0.1, 0.8, 6]} />
-          <meshLambertMaterial color="#4a3020" />
-        </mesh>
-        <mesh position={[0, 1.0, 0]}>
-          <coneGeometry args={[0.4, 0.8, 6]} />
-          <meshLambertMaterial color="#1a4a1a" />
-        </mesh>
-        <mesh position={[0, 1.5, 0]}>
-          <coneGeometry args={[0.3, 0.6, 6]} />
-          <meshLambertMaterial color="#1f5520" />
-        </mesh>
-        <mesh position={[0, 1.9, 0]}>
-          <coneGeometry args={[0.2, 0.5, 6]} />
-          <meshLambertMaterial color="#256028" />
-        </mesh>
-      </group>
-    );
-  } else if (variant === 1) {
-    // Deciduous tree
-    return (
-      <group position={[x, y, z]} scale={scale}>
-        <mesh position={[0, 0.5, 0]}>
-          <cylinderGeometry args={[0.08, 0.12, 1.0, 6]} />
-          <meshLambertMaterial color="#3d2517" />
-        </mesh>
-        <mesh position={[0, 1.4, 0]}>
-          <sphereGeometry args={[0.55, 8, 6]} />
-          <meshLambertMaterial color="#2a5a25" />
-        </mesh>
-        <mesh position={[0.25, 1.2, 0.15]}>
-          <sphereGeometry args={[0.35, 6, 5]} />
-          <meshLambertMaterial color="#326530" />
-        </mesh>
-        <mesh position={[-0.2, 1.3, -0.1]}>
-          <sphereGeometry args={[0.3, 6, 5]} />
-          <meshLambertMaterial color="#285522" />
-        </mesh>
-      </group>
-    );
-  } else {
-    // Bush/small tree
-    return (
-      <group position={[x, y, z]} scale={scale}>
-        <mesh position={[0, 0.2, 0]}>
-          <cylinderGeometry args={[0.04, 0.06, 0.4, 5]} />
-          <meshLambertMaterial color="#5a4030" />
-        </mesh>
-        <mesh position={[0, 0.5, 0]}>
-          <sphereGeometry args={[0.35, 7, 5]} />
-          <meshLambertMaterial color="#3a6a35" />
-        </mesh>
-        <mesh position={[0.15, 0.45, 0.1]}>
-          <sphereGeometry args={[0.2, 5, 4]} />
-          <meshLambertMaterial color="#457040" />
-        </mesh>
-      </group>
-    );
+// Main vegetation component that renders the appropriate type
+function Vegetation({ x, y, z, scale, type, colorVariant, rotation }: VegetationItem) {
+  switch (type) {
+    case 'pine':
+      return <PineTree x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+    case 'deciduous':
+      return <DeciduousTree x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+    case 'bush':
+      return <Bush x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+    case 'birch':
+      return <BirchTree x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+    case 'willow':
+      return <WillowTree x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+    case 'deadTree':
+      return <DeadTree x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+    case 'flower':
+      return <Flower x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+    case 'rock':
+      return <Rock x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+    case 'grassClump':
+      return <GrassClump x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+    case 'mushroom':
+      return <Mushroom x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+    case 'fern':
+      return <Fern x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+    default:
+      return null;
   }
+}
+
+interface VegProps {
+  x: number;
+  y: number;
+  z: number;
+  scale: number;
+  colorVariant: number;
+  rotation: number;
+}
+
+// Pine tree - tall conifer
+function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const greenShift = Math.floor(colorVariant * 30) - 15;
+  const baseGreen = 74 + greenShift;
+  
+  return (
+    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+      <mesh position={[0, 0.4, 0]}>
+        <cylinderGeometry args={[0.06, 0.1, 0.8, 6]} />
+        <meshLambertMaterial color="#4a3020" />
+      </mesh>
+      <mesh position={[0, 1.0, 0]}>
+        <coneGeometry args={[0.4, 0.8, 6]} />
+        <meshLambertMaterial color={`rgb(26, ${baseGreen}, 26)`} />
+      </mesh>
+      <mesh position={[0, 1.5, 0]}>
+        <coneGeometry args={[0.3, 0.6, 6]} />
+        <meshLambertMaterial color={`rgb(31, ${baseGreen + 11}, 32)`} />
+      </mesh>
+      <mesh position={[0, 1.9, 0]}>
+        <coneGeometry args={[0.2, 0.5, 6]} />
+        <meshLambertMaterial color={`rgb(37, ${baseGreen + 22}, 40)`} />
+      </mesh>
+    </group>
+  );
+}
+
+// Deciduous tree - round leafy tree
+function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const greenShift = Math.floor(colorVariant * 40) - 20;
+  const baseGreen = 90 + greenShift;
+  
+  return (
+    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+      <mesh position={[0, 0.5, 0]}>
+        <cylinderGeometry args={[0.08, 0.12, 1.0, 6]} />
+        <meshLambertMaterial color="#3d2517" />
+      </mesh>
+      <mesh position={[0, 1.4, 0]}>
+        <sphereGeometry args={[0.55, 8, 6]} />
+        <meshLambertMaterial color={`rgb(42, ${baseGreen}, 37)`} />
+      </mesh>
+      <mesh position={[0.25, 1.2, 0.15]}>
+        <sphereGeometry args={[0.35, 6, 5]} />
+        <meshLambertMaterial color={`rgb(50, ${baseGreen + 11}, 48)`} />
+      </mesh>
+      <mesh position={[-0.2, 1.3, -0.1]}>
+        <sphereGeometry args={[0.3, 6, 5]} />
+        <meshLambertMaterial color={`rgb(40, ${baseGreen - 5}, 34)`} />
+      </mesh>
+    </group>
+  );
+}
+
+// Bush - small shrub
+function Bush({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const greenShift = Math.floor(colorVariant * 35) - 15;
+  const baseGreen = 106 + greenShift;
+  
+  return (
+    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+      <mesh position={[0, 0.15, 0]}>
+        <cylinderGeometry args={[0.03, 0.05, 0.3, 5]} />
+        <meshLambertMaterial color="#5a4030" />
+      </mesh>
+      <mesh position={[0, 0.4, 0]}>
+        <sphereGeometry args={[0.3, 7, 5]} />
+        <meshLambertMaterial color={`rgb(58, ${baseGreen}, 53)`} />
+      </mesh>
+      <mesh position={[0.12, 0.35, 0.08]}>
+        <sphereGeometry args={[0.18, 5, 4]} />
+        <meshLambertMaterial color={`rgb(69, ${baseGreen + 6}, 64)`} />
+      </mesh>
+    </group>
+  );
+}
+
+// Birch tree - white bark, slender
+function BirchTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const greenShift = Math.floor(colorVariant * 30) - 10;
+  const baseGreen = 140 + greenShift;
+  
+  return (
+    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+      <mesh position={[0, 0.6, 0]}>
+        <cylinderGeometry args={[0.05, 0.07, 1.2, 6]} />
+        <meshLambertMaterial color="#e8e0d0" />
+      </mesh>
+      {/* Dark bark marks */}
+      <mesh position={[0.03, 0.4, 0.04]}>
+        <boxGeometry args={[0.02, 0.08, 0.01]} />
+        <meshLambertMaterial color="#2a2a2a" />
+      </mesh>
+      <mesh position={[-0.02, 0.7, -0.03]}>
+        <boxGeometry args={[0.015, 0.06, 0.01]} />
+        <meshLambertMaterial color="#3a3a3a" />
+      </mesh>
+      <mesh position={[0, 1.4, 0]}>
+        <sphereGeometry args={[0.45, 7, 6]} />
+        <meshLambertMaterial color={`rgb(100, ${baseGreen}, 60)`} />
+      </mesh>
+      <mesh position={[0.2, 1.5, 0.1]}>
+        <sphereGeometry args={[0.25, 6, 5]} />
+        <meshLambertMaterial color={`rgb(120, ${baseGreen + 15}, 70)`} />
+      </mesh>
+    </group>
+  );
+}
+
+// Willow tree - drooping branches
+function WillowTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const greenShift = Math.floor(colorVariant * 25);
+  const baseGreen = 130 + greenShift;
+  
+  return (
+    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+      <mesh position={[0, 0.5, 0]}>
+        <cylinderGeometry args={[0.1, 0.15, 1.0, 6]} />
+        <meshLambertMaterial color="#4a3828" />
+      </mesh>
+      {/* Drooping foliage */}
+      <mesh position={[0, 1.2, 0]}>
+        <sphereGeometry args={[0.5, 8, 6]} />
+        <meshLambertMaterial color={`rgb(80, ${baseGreen}, 50)`} />
+      </mesh>
+      {/* Hanging branches */}
+      <mesh position={[0.35, 0.8, 0]}>
+        <cylinderGeometry args={[0.15, 0.05, 0.8, 5]} />
+        <meshLambertMaterial color={`rgb(70, ${baseGreen - 10}, 45)`} />
+      </mesh>
+      <mesh position={[-0.3, 0.75, 0.2]}>
+        <cylinderGeometry args={[0.12, 0.04, 0.7, 5]} />
+        <meshLambertMaterial color={`rgb(75, ${baseGreen - 5}, 48)`} />
+      </mesh>
+      <mesh position={[0.1, 0.7, -0.35]}>
+        <cylinderGeometry args={[0.1, 0.03, 0.6, 5]} />
+        <meshLambertMaterial color={`rgb(85, ${baseGreen + 5}, 55)`} />
+      </mesh>
+    </group>
+  );
+}
+
+// Dead tree - bare branches
+function DeadTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const grayShift = Math.floor(colorVariant * 20);
+  const baseGray = 60 + grayShift;
+  
+  return (
+    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+      <mesh position={[0, 0.5, 0]}>
+        <cylinderGeometry args={[0.06, 0.1, 1.0, 5]} />
+        <meshLambertMaterial color={`rgb(${baseGray}, ${baseGray - 10}, ${baseGray - 20})`} />
+      </mesh>
+      {/* Bare branches */}
+      <mesh position={[0.15, 0.9, 0]} rotation={[0, 0, -0.5]}>
+        <cylinderGeometry args={[0.02, 0.03, 0.4, 4]} />
+        <meshLambertMaterial color={`rgb(${baseGray - 5}, ${baseGray - 15}, ${baseGray - 25})`} />
+      </mesh>
+      <mesh position={[-0.12, 1.0, 0.05]} rotation={[0.2, 0, 0.6]}>
+        <cylinderGeometry args={[0.015, 0.025, 0.35, 4]} />
+        <meshLambertMaterial color={`rgb(${baseGray - 8}, ${baseGray - 18}, ${baseGray - 28})`} />
+      </mesh>
+      <mesh position={[0.05, 1.1, -0.1]} rotation={[-0.3, 0, 0.2]}>
+        <cylinderGeometry args={[0.01, 0.02, 0.25, 4]} />
+        <meshLambertMaterial color={`rgb(${baseGray - 3}, ${baseGray - 13}, ${baseGray - 23})`} />
+      </mesh>
+    </group>
+  );
+}
+
+// Flower - colorful small plant
+function Flower({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  // Different flower colors based on variant
+  const flowerColors = [
+    '#ff6b8a', // Pink
+    '#ffeb3b', // Yellow
+    '#9c27b0', // Purple
+    '#ff9800', // Orange
+    '#e91e63', // Magenta
+    '#03a9f4', // Light blue
+    '#f44336', // Red
+  ];
+  const colorIndex = Math.floor(colorVariant * flowerColors.length);
+  const flowerColor = flowerColors[colorIndex % flowerColors.length];
+  
+  return (
+    <group position={[x, y, z]} scale={scale * 0.5} rotation={[0, rotation, 0]}>
+      {/* Stem */}
+      <mesh position={[0, 0.15, 0]}>
+        <cylinderGeometry args={[0.015, 0.02, 0.3, 4]} />
+        <meshLambertMaterial color="#228b22" />
+      </mesh>
+      {/* Flower head */}
+      <mesh position={[0, 0.35, 0]}>
+        <sphereGeometry args={[0.08, 6, 5]} />
+        <meshLambertMaterial color={flowerColor} />
+      </mesh>
+      {/* Center */}
+      <mesh position={[0, 0.38, 0.05]}>
+        <sphereGeometry args={[0.03, 4, 4]} />
+        <meshLambertMaterial color="#ffd700" />
+      </mesh>
+    </group>
+  );
+}
+
+// Rock - natural stone
+function Rock({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const grayBase = 90 + Math.floor(colorVariant * 40);
+  
+  return (
+    <group position={[x, y, z]} scale={scale * 0.6} rotation={[0, rotation, colorVariant * 0.3]}>
+      <mesh position={[0, 0.12, 0]}>
+        <dodecahedronGeometry args={[0.2, 0]} />
+        <meshLambertMaterial color={`rgb(${grayBase}, ${grayBase - 5}, ${grayBase - 10})`} />
+      </mesh>
+      {colorVariant > 0.5 && (
+        <mesh position={[0.15, 0.08, 0.1]}>
+          <dodecahedronGeometry args={[0.1, 0]} />
+          <meshLambertMaterial color={`rgb(${grayBase - 15}, ${grayBase - 20}, ${grayBase - 25})`} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+// Grass clump - tall grass
+function GrassClump({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const greenShift = Math.floor(colorVariant * 40) - 20;
+  const baseGreen = 140 + greenShift;
+  
+  return (
+    <group position={[x, y, z]} scale={scale * 0.4} rotation={[0, rotation, 0]}>
+      {[0, 0.4, 0.8, 1.2, 1.6].map((angle, i) => (
+        <mesh key={i} position={[Math.sin(angle) * 0.05, 0.15 + i * 0.02, Math.cos(angle) * 0.05]} rotation={[0.1 - i * 0.02, angle, 0]}>
+          <boxGeometry args={[0.02, 0.3 + colorVariant * 0.1, 0.005]} />
+          <meshLambertMaterial color={`rgb(${80 + i * 5}, ${baseGreen + i * 3}, ${50 + i * 3})`} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// Mushroom - forest floor fungus
+function Mushroom({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const mushroomColors = [
+    { cap: '#8b4513', spots: '#f5deb3' }, // Brown
+    { cap: '#dc143c', spots: '#ffffff' }, // Red with white spots
+    { cap: '#daa520', spots: '#8b4513' }, // Golden
+    { cap: '#f4a460', spots: '#ffffff' }, // Sandy
+  ];
+  const colorIndex = Math.floor(colorVariant * mushroomColors.length);
+  const colors = mushroomColors[colorIndex % mushroomColors.length];
+  
+  return (
+    <group position={[x, y, z]} scale={scale * 0.3} rotation={[0, rotation, 0]}>
+      {/* Stem */}
+      <mesh position={[0, 0.1, 0]}>
+        <cylinderGeometry args={[0.04, 0.05, 0.2, 6]} />
+        <meshLambertMaterial color="#f5f5dc" />
+      </mesh>
+      {/* Cap */}
+      <mesh position={[0, 0.22, 0]}>
+        <sphereGeometry args={[0.12, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshLambertMaterial color={colors.cap} />
+      </mesh>
+      {/* Spots */}
+      {colorVariant > 0.3 && (
+        <>
+          <mesh position={[0.05, 0.28, 0.03]}>
+            <sphereGeometry args={[0.02, 4, 4]} />
+            <meshLambertMaterial color={colors.spots} />
+          </mesh>
+          <mesh position={[-0.04, 0.26, -0.05]}>
+            <sphereGeometry args={[0.015, 4, 4]} />
+            <meshLambertMaterial color={colors.spots} />
+          </mesh>
+        </>
+      )}
+    </group>
+  );
+}
+
+// Fern - forest understory plant
+function Fern({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const greenShift = Math.floor(colorVariant * 30);
+  const baseGreen = 120 + greenShift;
+  
+  return (
+    <group position={[x, y, z]} scale={scale * 0.5} rotation={[0, rotation, 0]}>
+      {/* Multiple fronds spreading out */}
+      {[0, 1, 2, 3, 4].map((i) => {
+        const angle = (i / 5) * Math.PI * 2 + colorVariant;
+        const tilt = 0.4 + colorVariant * 0.2;
+        return (
+          <group key={i} rotation={[tilt, angle, 0]}>
+            <mesh position={[0, 0.15, 0.1]}>
+              <boxGeometry args={[0.08, 0.02, 0.25]} />
+              <meshLambertMaterial color={`rgb(${50 + i * 5}, ${baseGreen + i * 2}, ${40 + i * 3})`} />
+            </mesh>
+          </group>
+        );
+      })}
+    </group>
+  );
 }
