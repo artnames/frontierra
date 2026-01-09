@@ -27,39 +27,50 @@ export function WorldCanvas({ params, onGenerate }: WorldCanvasProps) {
       mode: 'static'
     });
     
-    const { executeCodeMode } = await import('@nexart/codemode-sdk');
-    
-    const result = await executeCodeMode({
-      source: WORLD_SOURCE,
-      width: 512,
-      height: 512,
-      seed: input.seed,
-      vars: input.vars,
-      mode: input.mode,
-    });
+    let result;
+    try {
+      const { executeCodeMode } = await import('@nexart/codemode-sdk');
+      result = await executeCodeMode({
+        source: WORLD_SOURCE,
+        width: 512,
+        height: 512,
+        seed: input.seed,
+        vars: input.vars,
+        mode: input.mode,
+      });
+    } catch (err) {
+      // Surface NexArt error verbatim - NO FALLBACK
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`World cannot be verified — ${message}`);
+      setLastGenerated(paramsKey);
+      setIsGenerating(false);
+      return;
+    }
       
-      // The SDK returns result.image as a PNG Blob for static mode
-      if (canvasRef.current && result.image) {
-        const ctx = canvasRef.current.getContext('2d');
-        if (ctx) {
-          const url = URL.createObjectURL(result.image);
-          const img = new Image();
-          img.onload = () => {
-            ctx.clearRect(0, 0, 512, 512);
-            ctx.drawImage(img, 0, 0);
-            URL.revokeObjectURL(url);
-            setLastGenerated(paramsKey);
-            setIsGenerating(false);
-            onGenerate?.();
-          };
-          img.onerror = () => {
-            URL.revokeObjectURL(url);
-            throw new Error('Failed to load generated image');
-          };
-          img.src = url;
-          return;
-        }
+    // The SDK returns result.image as a PNG Blob for static mode
+    if (canvasRef.current && result.image) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+        const url = URL.createObjectURL(result.image);
+        const img = new Image();
+        img.onload = () => {
+          ctx.clearRect(0, 0, 512, 512);
+          ctx.drawImage(img, 0, 0);
+          URL.revokeObjectURL(url);
+          setLastGenerated(paramsKey);
+          setIsGenerating(false);
+          onGenerate?.();
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          setError('World cannot be verified — failed to load generated image.');
+          setLastGenerated(paramsKey);
+          setIsGenerating(false);
+        };
+        img.src = url;
+        return;
       }
+    }
       
     setError('World cannot be verified — invalid canonical input.');
     setLastGenerated(paramsKey);
