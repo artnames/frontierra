@@ -14,7 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      player_lands: {
+        Row: {
+          created_at: string
+          player_id: string
+          pos_x: number
+          pos_y: number
+          seed: number
+          updated_at: string
+          vars: number[]
+        }
+        Insert: {
+          created_at?: string
+          player_id?: string
+          pos_x?: number
+          pos_y?: number
+          seed?: number
+          updated_at?: string
+          vars?: number[]
+        }
+        Update: {
+          created_at?: string
+          player_id?: string
+          pos_x?: number
+          pos_y?: number
+          seed?: number
+          updated_at?: string
+          vars?: number[]
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
