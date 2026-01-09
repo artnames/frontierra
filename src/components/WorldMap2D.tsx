@@ -23,7 +23,6 @@ const TILE_LEGEND = [
   { label: 'Mountain', color: '#8a8278', desc: 'High elevation' },
   { label: 'Path', color: '#b4966e', desc: 'Walkable routes' },
   { label: 'Bridge', color: '#785032', desc: 'Over water' },
-  { label: 'Landmark', color: '#dc5050', desc: 'Points of interest' },
   { label: 'River', color: '#46a0b4', desc: 'Flowing water' },
   { label: 'Object', color: '#ffdc3c', desc: 'Placed items' },
 ];
