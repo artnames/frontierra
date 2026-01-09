@@ -26,7 +26,11 @@ const LEGEND_ITEMS = [
 ];
 
 const FEATURE_LEGEND = [
-  { label: 'Landmark', color: '#ff6b6b', desc: 'Alpha 250–254' },
+  { label: 'Ruins', color: '#ff6b6b', desc: 'Alpha 250' },
+  { label: 'Crystal', color: '#66aaff', desc: 'Alpha 251' },
+  { label: 'Ancient Tree', color: '#4a8a4a', desc: 'Alpha 252' },
+  { label: 'Stone Circle', color: '#8a8a8a', desc: 'Alpha 253' },
+  { label: 'Obelisk', color: '#c4a860', desc: 'Alpha 254' },
   { label: 'River', color: '#4ecdc4', desc: 'Alpha 245–249' },
   { label: 'Object', color: '#ffd93d', desc: 'Alpha = 1' },
 ];
