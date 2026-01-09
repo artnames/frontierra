@@ -300,7 +300,7 @@ export const VAR_LABELS = [
   'Water Level',
   'Forest Density',
   'Mountain Height',
-  'Color Shift',
+  'Path Density',
   'Roughness',
   'Landmarks'
 ];

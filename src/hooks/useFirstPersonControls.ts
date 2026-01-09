@@ -5,17 +5,19 @@ import { WorldData, getElevationAt, isWalkable } from '@/lib/worldData';
 
 interface FirstPersonControlsProps {
   world: WorldData;
-  onPositionChange?: (x: number, y: number, z: number) => void;
-  preservePosition?: boolean; // Don't reset on world change
-  enabled?: boolean; // Whether controls are active
+  onPositionChange?: (x: number, z: number, y: number) => void; // x, z (ground), y (height)
+  preservePosition?: boolean;
+  enabled?: boolean;
 }
 
 // Store position globally to persist across world regenerations
 const globalCameraState = {
   position: null as THREE.Vector3 | null,
+  manualHeight: null as number | null,
   yaw: 0,
   pitch: 0,
-  initialized: false
+  initialized: false,
+  lastWorldSeed: null as number | null
 };
 
 export function useFirstPersonControls({ world, onPositionChange, preservePosition = true, enabled = true }: FirstPersonControlsProps) {
@@ -32,35 +34,47 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
   const isDragging = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
   const position = useRef(new THREE.Vector3());
+  const manualHeightOffset = useRef(0); // Store manual height offset from terrain
   const isInitialized = useRef(false);
 
-  // Initialize camera position only once, or when explicitly needed
+  // Initialize camera position only once, or when seed changes
   useEffect(() => {
-    if (!isInitialized.current) {
-      // First time - use spawn point or global state
-      if (globalCameraState.initialized && preservePosition) {
-        position.current.copy(globalCameraState.position!);
+    // Reset if seed changes (new world) or not yet initialized
+    const seedChanged = globalCameraState.lastWorldSeed !== null && 
+                        globalCameraState.lastWorldSeed !== world.seed;
+    
+    if (!isInitialized.current || seedChanged) {
+      if (globalCameraState.initialized && preservePosition && globalCameraState.position && !seedChanged) {
+        position.current.copy(globalCameraState.position);
+        manualHeightOffset.current = globalCameraState.manualHeight ?? 0;
         rotationState.current.yaw = globalCameraState.yaw;
         rotationState.current.pitch = globalCameraState.pitch;
       } else {
-        position.current.set(world.spawnPoint.x, world.spawnPoint.z, world.spawnPoint.y);
+        // Spawn: x,z are ground coords, y is height in Three.js
+        const spawnX = world.spawnPoint.x;
+        const spawnZ = world.spawnPoint.y; // world y -> Three.js z
+        const terrainHeight = getElevationAt(world, spawnX, spawnZ);
+        const eyeHeight = 1.8;
+        
+        position.current.set(spawnX, terrainHeight + eyeHeight, spawnZ);
+        manualHeightOffset.current = 0;
         rotationState.current.yaw = world.spawnPoint.rotationY;
         rotationState.current.pitch = 0;
         
         globalCameraState.position = position.current.clone();
+        globalCameraState.manualHeight = 0;
         globalCameraState.yaw = rotationState.current.yaw;
         globalCameraState.pitch = rotationState.current.pitch;
         globalCameraState.initialized = true;
+        globalCameraState.lastWorldSeed = world.seed;
       }
       isInitialized.current = true;
     }
-    // Don't reset when world changes - this preserves camera position
   }, [world, preservePosition]);
 
-  // Keyboard controls - attach to window for global capture
+  // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
@@ -126,7 +140,6 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
       }
     };
 
-    // Use capture phase to get events before other handlers
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     window.addEventListener('keyup', handleKeyUp, { capture: true });
 
@@ -209,74 +222,92 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
 
   // Update camera each frame
   useFrame((_, delta) => {
-    // Skip updates if disabled (replay mode)
     if (!enabled) return;
     
-    const speed = 12 * delta; // Increased speed
+    const speed = 8 * delta;
     const { forward, backward, left, right, up, down } = moveState.current;
     const { yaw, pitch } = rotationState.current;
 
-    // Calculate movement direction
+    // Calculate movement direction in XZ plane (ground plane)
     const direction = new THREE.Vector3();
     
+    // W/S = forward/backward along view direction
     if (forward) direction.z -= 1;
     if (backward) direction.z += 1;
+    // A/D = strafe left/right
     if (left) direction.x -= 1;
     if (right) direction.x += 1;
 
     if (direction.length() > 0) {
       direction.normalize();
       
-      // Rotate direction by yaw
+      // Rotate direction by yaw (horizontal rotation only)
       const moveX = direction.x * Math.cos(yaw) - direction.z * Math.sin(yaw);
       const moveZ = direction.x * Math.sin(yaw) + direction.z * Math.cos(yaw);
       
-      // Calculate new position
+      // New position on ground plane
       const newX = position.current.x + moveX * speed;
       const newZ = position.current.z + moveZ * speed;
       
-      // Check if new position is walkable (less strict for better movement)
+      // Check walkability
       if (isWalkable(world, newX, newZ)) {
         position.current.x = newX;
         position.current.z = newZ;
         
-        // Update height based on terrain
+        // Update height based on terrain + manual offset
         const terrainHeight = getElevationAt(world, newX, newZ);
-        position.current.y = terrainHeight + 2; // Eye height
+        position.current.y = terrainHeight + 1.8 + manualHeightOffset.current;
       } else {
         // Try sliding along obstacles
         if (isWalkable(world, newX, position.current.z)) {
           position.current.x = newX;
+          const terrainHeight = getElevationAt(world, newX, position.current.z);
+          position.current.y = terrainHeight + 1.8 + manualHeightOffset.current;
         } else if (isWalkable(world, position.current.x, newZ)) {
           position.current.z = newZ;
+          const terrainHeight = getElevationAt(world, position.current.x, newZ);
+          position.current.y = terrainHeight + 1.8 + manualHeightOffset.current;
         }
       }
     }
 
-    // Vertical movement (for flying/debugging)
-    if (up) position.current.y += speed;
-    if (down) position.current.y = Math.max(1, position.current.y - speed);
+    // Vertical movement (fly mode) - accumulate offset
+    if (up) {
+      manualHeightOffset.current += speed;
+    }
+    if (down) {
+      manualHeightOffset.current = Math.max(-1, manualHeightOffset.current - speed);
+      const terrainHeight = getElevationAt(world, position.current.x, position.current.z);
+      position.current.y = Math.max(terrainHeight + 0.5, terrainHeight + 1.8 + manualHeightOffset.current);
+    }
+    
+    // Apply current height with offset
+    if (up || down) {
+      const terrainHeight = getElevationAt(world, position.current.x, position.current.z);
+      position.current.y = terrainHeight + 1.8 + manualHeightOffset.current;
+    }
 
     // Apply position and rotation to camera
     camera.position.copy(position.current);
     
-    // Create rotation from yaw and pitch
     const euler = new THREE.Euler(pitch, yaw, 0, 'YXZ');
     camera.quaternion.setFromEuler(euler);
 
-    // Save state globally
+    // Save state globally for persistence
     globalCameraState.position = position.current.clone();
+    globalCameraState.manualHeight = manualHeightOffset.current;
     globalCameraState.yaw = yaw;
     globalCameraState.pitch = pitch;
 
-    // Notify parent of position change
+    // Notify parent: x (ground), z (ground), y (height)
     onPositionChange?.(position.current.x, position.current.z, position.current.y);
   });
 
   return position;
 }
 
-// Reset camera to spawn (call when needed)
+// Reset camera to spawn
 export function resetCameraToSpawn() {
   globalCameraState.initialized = false;
+  globalCameraState.manualHeight = null;
 }

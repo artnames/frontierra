@@ -5,9 +5,10 @@ export interface TerrainCell {
   x: number;
   y: number;
   elevation: number;
-  type: 'water' | 'ground' | 'forest' | 'mountain';
+  type: 'water' | 'ground' | 'forest' | 'mountain' | 'path';
   hasLandmark: boolean;
   landmarkType: number;
+  isPath: boolean;
 }
 
 export interface WorldObject {
@@ -115,12 +116,16 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
   const terrainScale = (vars[3] ?? 50) / 100 * 0.08 + 0.02;
   const waterLevel = (vars[4] ?? 30) / 100 * 0.35 + 0.15;
   const forestDensity = (vars[5] ?? 40) / 100;
-  const heightMultiplier = (vars[6] ?? 50) / 100 * 2.0 + 0.5; // VAR[6] now affects actual height
+  const heightMultiplier = (vars[6] ?? 50) / 100 * 2.0 + 0.5;
+  const pathDensity = (vars[7] ?? 50) / 100; // VAR[7] = path network density
   const roughness = (vars[8] ?? 50) / 100 * 0.6 + 0.3;
-  const landmarkDensity = (vars[9] ?? 20) / 100 * 0.12;
+  const landmarkDensity = (vars[9] ?? 20) / 100 * 0.5 + 0.05; // Much higher landmark density
   
   // Generate terrain
   const terrain: TerrainCell[][] = [];
+  
+  // Generate path network using a separate noise layer
+  const pathNoise = createNoise2D(seed + 3000);
   
   for (let y = 0; y < GRID_SIZE; y++) {
     terrain[y] = [];
@@ -131,20 +136,29 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
       // Apply height multiplier to non-water areas
       const scaledElevation = baseElevation * heightMultiplier;
       
+      // Path detection - paths form along specific noise contours
+      const pathValue = pathNoise(x * 0.08, y * 0.08);
+      const pathThreshold = 0.05 + (1 - pathDensity) * 0.15; // Higher density = more paths
+      const isPath = baseElevation >= waterLevel && baseElevation < 0.65 && 
+                     Math.abs(pathValue - 0.5) < pathThreshold;
+      
       // Determine terrain type based on base elevation (before scaling)
       let type: TerrainCell['type'];
       if (baseElevation < waterLevel) {
         type = 'water';
       } else if (baseElevation > 0.65) {
         type = 'mountain';
+      } else if (isPath) {
+        type = 'path';
       } else {
         const forestNoise = noise2(x * 0.1, y * 0.1);
         type = forestNoise < forestDensity * baseElevation ? 'forest' : 'ground';
       }
       
-      // Landmarks
+      // Landmarks - more of them, but not on paths
       const landmarkNoise = noise3(x * 0.15, y * 0.15);
-      const hasLandmark = type !== 'water' && type !== 'mountain' && landmarkNoise < landmarkDensity;
+      const hasLandmark = type !== 'water' && type !== 'mountain' && type !== 'path' && 
+                          landmarkNoise < landmarkDensity;
       
       // Final elevation - water stays low, land gets height multiplier
       const finalElevation = type === 'water' ? waterLevel * 0.3 : scaledElevation;
@@ -155,7 +169,8 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
         elevation: finalElevation,
         type,
         hasLandmark,
-        landmarkType: hasLandmark ? Math.floor(landmarkNoise * 100) % 3 : 0
+        landmarkType: hasLandmark ? Math.floor(landmarkNoise * 100) % 3 : 0,
+        isPath
       };
     }
   }
