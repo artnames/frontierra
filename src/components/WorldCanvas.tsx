@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { WorldParams, WORLD_SOURCE } from '@/lib/worldGenerator';
+import { normalizeNexArtInput } from '@/lib/nexartWorld';
 
 interface WorldCanvasProps {
   params: WorldParams;
@@ -19,17 +20,23 @@ export function WorldCanvas({ params, onGenerate }: WorldCanvasProps) {
     setIsGenerating(true);
     setError(null);
     
-    try {
-      const { executeCodeMode } = await import('@nexart/codemode-sdk');
-      
-      const result = await executeCodeMode({
-        source: WORLD_SOURCE,
-        width: 512,
-        height: 512,
-        seed: params.seed,
-        vars: params.vars,
-        mode: 'static',
-      });
+    // Normalize inputs BEFORE calling NexArt
+    const input = normalizeNexArtInput({
+      seed: params.seed,
+      vars: params.vars,
+      mode: 'static'
+    });
+    
+    const { executeCodeMode } = await import('@nexart/codemode-sdk');
+    
+    const result = await executeCodeMode({
+      source: WORLD_SOURCE,
+      width: 512,
+      height: 512,
+      seed: input.seed,
+      vars: input.vars,
+      mode: input.mode,
+    });
       
       // The SDK returns result.image as a PNG Blob for static mode
       if (canvasRef.current && result.image) {
@@ -54,15 +61,7 @@ export function WorldCanvas({ params, onGenerate }: WorldCanvasProps) {
         }
       }
       
-      throw new Error('NexArt did not return an image');
-    } catch (err) {
-      console.error('NexArt generation error:', err);
-      const message = err instanceof Error ? err.message : 'Failed to generate world';
-      setError(message);
-      setIsGenerating(false);
-      // NO FALLBACK - NexArt failure means world cannot be generated
-    }
-    
+    setError('World cannot be verified — invalid canonical input.');
     setLastGenerated(paramsKey);
     setIsGenerating(false);
     onGenerate?.();

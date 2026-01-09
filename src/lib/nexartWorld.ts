@@ -77,6 +77,34 @@ export interface NexArtWorldGrid {
 }
 
 // ============================================
+// NEXART INPUT NORMALIZATION
+// ============================================
+
+export interface NormalizedNexArtInput {
+  seed: number;
+  vars: number[];
+  mode: 'static' | 'loop';
+}
+
+/**
+ * Normalize input parameters before passing to NexArt.
+ * This ensures all values are the correct type.
+ */
+export function normalizeNexArtInput(params: {
+  seed?: unknown;
+  vars?: unknown;
+  mode?: unknown;
+}): NormalizedNexArtInput {
+  return {
+    seed: Number(params.seed) || 0,
+    vars: Array.isArray(params.vars)
+      ? params.vars.map(v => Number(v) || 0).slice(0, 10)
+      : new Array(10).fill(0),
+    mode: params.mode === 'loop' ? 'loop' : 'static'
+  };
+}
+
+// ============================================
 // NEXART EXECUTION & EXTRACTION
 // ============================================
 
@@ -87,46 +115,45 @@ export interface NexArtWorldGrid {
  * @throws Error if NexArt execution fails (no fallback)
  */
 export async function generateNexArtWorld(params: WorldParams): Promise<NexArtWorldGrid> {
-  const { seed, vars } = params;
   const GRID_SIZE = 64; // Must match WORLD_LAYOUT_SOURCE
   
-  try {
-    const { executeCodeMode } = await import('@nexart/codemode-sdk');
+  // Normalize inputs BEFORE calling NexArt
+  const input = normalizeNexArtInput({
+    seed: params.seed,
+    vars: params.vars,
+    mode: 'static'
+  });
+  
+  const { executeCodeMode } = await import('@nexart/codemode-sdk');
+  
+  // Execute NexArt with normalized values ONLY
+  const result = await executeCodeMode({
+    source: WORLD_LAYOUT_SOURCE,
+    width: GRID_SIZE,
+    height: GRID_SIZE,
+    seed: input.seed,
+    vars: input.vars,
+    mode: input.mode,
+  });
     
-    // Execute NexArt with layout source
-    const result = await executeCodeMode({
-      source: WORLD_LAYOUT_SOURCE,
-      width: GRID_SIZE,
-      height: GRID_SIZE,
-      seed,
-      vars,
-      mode: 'static',
-    });
-    
-    if (!result.image) {
-      return createFailedWorld(seed, vars, 'NexArt did not return an image');
-    }
-    
-    // Extract pixels from the blob
-    const imageData = await extractPixelData(result.image, GRID_SIZE);
-    
-    // Compute pixel hash for verification
-    const pixelHash = computePixelHash(imageData);
-    
-    // Parse pixels into grid
-    const grid = parsePixelsToGrid(imageData, GRID_SIZE, seed, vars);
-    
-    return {
-      ...grid,
-      pixelHash,
-      isValid: true
-    };
-    
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown NexArt error';
-    console.error('NexArt execution failed:', message);
-    return createFailedWorld(seed, vars, message);
+  if (!result.image) {
+    return createFailedWorld(input.seed, input.vars, 'World cannot be verified — invalid canonical input.');
   }
+  
+  // Extract pixels from the blob
+  const imageData = await extractPixelData(result.image, GRID_SIZE);
+  
+  // Compute pixel hash for verification
+  const pixelHash = computePixelHash(imageData);
+  
+  // Parse pixels into grid
+  const grid = parsePixelsToGrid(imageData, GRID_SIZE, input.seed, input.vars);
+  
+  return {
+    ...grid,
+    pixelHash,
+    isValid: true
+  };
 }
 
 /**
