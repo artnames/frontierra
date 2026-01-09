@@ -42,7 +42,7 @@ function setup() {
       var py = isHoriz ? floor(noise(p * 300 + 999) * (GRID_SIZE - 10)) + 5 : 0;
       var baseAngle = isHoriz ? 0 : PI / 2;
       var angle = baseAngle + (noise(p * 400 + 1111) - 0.5) * 0.4;
-      var curviness = 0.5 + noise(p * 500 + seed * 0.01) * 0.6;
+      var curviness = 0.5 + noise(p * 500 + 111) * 0.6;
       
       for (var s = 0; s < GRID_SIZE + 20; s++) {
         points.push({x: px, y: py});
@@ -315,7 +315,7 @@ function setup() {
   fill(170, 80, 70);
   textSize(10);
   textFont('monospace');
-  text('SEED: ' + seed, 14, 26);
+  text('SEED', 14, 26);
   
   fill(85, 70, 60);
   text('DETERMINISTIC', 80, 26);
