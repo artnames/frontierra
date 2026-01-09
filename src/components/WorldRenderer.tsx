@@ -42,6 +42,9 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
           case 'forest':
             r = 0.15; g = 0.35; b = 0.15;
             break;
+          case 'path':
+            r = 0.55; g = 0.45; b = 0.35; // Sandy/dirt path color
+            break;
           default: // ground
             r = 0.35; g = 0.3; b = 0.2;
         }

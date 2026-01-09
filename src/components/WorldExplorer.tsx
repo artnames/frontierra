@@ -169,7 +169,7 @@ export function WorldExplorer({
       )}
       
       <Canvas
-        camera={{ fov: 75, near: 0.1, far: 200 }}
+        camera={{ fov: 60, near: 0.1, far: 150 }}
         gl={{ antialias: true, alpha: false }}
         style={{ background: '#0a1520' }}
       >
