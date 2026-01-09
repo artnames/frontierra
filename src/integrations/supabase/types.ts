@@ -14,33 +14,126 @@ export type Database = {
   }
   public: {
     Tables: {
+      land_notes: {
+        Row: {
+          author_id: string | null
+          created_at: string | null
+          id: string
+          message: string
+          world_x: number
+          world_y: number
+        }
+        Insert: {
+          author_id?: string | null
+          created_at?: string | null
+          id?: string
+          message: string
+          world_x: number
+          world_y: number
+        }
+        Update: {
+          author_id?: string | null
+          created_at?: string | null
+          id?: string
+          message?: string
+          world_x?: number
+          world_y?: number
+        }
+        Relationships: []
+      }
+      land_trails: {
+        Row: {
+          created_at: string | null
+          from_world_x: number
+          from_world_y: number
+          id: string
+          player_id: string | null
+          to_world_x: number
+          to_world_y: number
+        }
+        Insert: {
+          created_at?: string | null
+          from_world_x: number
+          from_world_y: number
+          id?: string
+          player_id?: string | null
+          to_world_x: number
+          to_world_y: number
+        }
+        Update: {
+          created_at?: string | null
+          from_world_x?: number
+          from_world_y?: number
+          id?: string
+          player_id?: string | null
+          to_world_x?: number
+          to_world_y?: number
+        }
+        Relationships: []
+      }
       player_lands: {
         Row: {
           created_at: string
+          display_name: string | null
           player_id: string
           pos_x: number
           pos_y: number
+          presence_ping_at: string | null
           seed: number
           updated_at: string
           vars: number[]
         }
         Insert: {
           created_at?: string
+          display_name?: string | null
           player_id?: string
           pos_x?: number
           pos_y?: number
+          presence_ping_at?: string | null
           seed?: number
           updated_at?: string
           vars?: number[]
         }
         Update: {
           created_at?: string
+          display_name?: string | null
           player_id?: string
           pos_x?: number
           pos_y?: number
+          presence_ping_at?: string | null
           seed?: number
           updated_at?: string
           vars?: number[]
+        }
+        Relationships: []
+      }
+      world_features: {
+        Row: {
+          created_at: string | null
+          feature_type: string
+          id: string
+          name: string
+          named_by: string | null
+          world_x: number
+          world_y: number
+        }
+        Insert: {
+          created_at?: string | null
+          feature_type: string
+          id?: string
+          name: string
+          named_by?: string | null
+          world_x: number
+          world_y: number
+        }
+        Update: {
+          created_at?: string | null
+          feature_type?: string
+          id?: string
+          name?: string
+          named_by?: string | null
+          world_x?: number
+          world_y?: number
         }
         Relationships: []
       }
