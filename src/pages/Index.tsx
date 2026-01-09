@@ -245,8 +245,8 @@ const Index = () => {
         <div className="px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div>
-              <h1 className="font-display text-lg font-bold text-foreground glow-text">
-                Deterministic World Explorer
+             <h1 className="font-display text-lg font-bold text-foreground glow-text">
+                Frontierra
               </h1>
               <p className="text-xs text-muted-foreground">
                 {worldMode === 'multiplayer' && multiplayer.currentLand ? (

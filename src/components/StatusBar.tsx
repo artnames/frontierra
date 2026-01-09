@@ -25,10 +25,10 @@ export function StatusBar({ params }: StatusBarProps) {
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">NexArt</span>
-          <span className="text-primary">●</span>
-        </div>
+         <div className="flex items-center gap-2">
+           <span className="text-muted-foreground">Frontierra</span>
+           <span className="text-primary">●</span>
+         </div>
       </div>
     </div>
   );

@@ -137,8 +137,8 @@ export function WorldAMap({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-display text-sm font-semibold text-foreground">
-            World A Continent
+         <h3 className="font-display text-sm font-semibold text-foreground">
+            Frontierra Continent
           </h3>
           <p className="text-xs text-muted-foreground">
             {allLands.length} / {WORLD_A_GRID_WIDTH * WORLD_A_GRID_HEIGHT} lands claimed
