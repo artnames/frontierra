@@ -130,7 +130,7 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
   const branchNoise = createNoise2D(seed + 4000);
   
   // Consistent path width (like stroke weight)
-  const PATH_WIDTH = 1.2;
+  const PATH_WIDTH = 0.7;
   
   // Number of main flow paths based on density
   const numMainPaths = 2 + Math.floor(pathDensity * 4); // 2-6 main paths
@@ -139,6 +139,10 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
   // Each path is a series of points that flow across the map
   const pathRng = mulberry32(seed + 6000);
   const pathPoints: { x: number; y: number }[][] = [];
+  
+  // Additional noise layers for more organic curves
+  const waveNoise = createNoise2D(seed + 7000);
+  const microNoise = createNoise2D(seed + 8000);
   
   for (let p = 0; p < numMainPaths; p++) {
     const points: { x: number; y: number }[] = [];
@@ -150,41 +154,60 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
     
     // Flow direction with some randomness
     const baseAngle = isHorizontal ? 0 : Math.PI / 2;
-    let angle = baseAngle + (pathRng() - 0.5) * 0.3;
+    let angle = baseAngle + (pathRng() - 0.5) * 0.4;
+    
+    // Per-path characteristics for variety
+    const curviness = 0.6 + pathRng() * 0.6; // 0.6-1.2 - how much it curves
+    const waveFreq = 0.04 + pathRng() * 0.06; // Wave frequency
     
     // Trace the path
     const steps = GRID_SIZE + 20;
     for (let s = 0; s < steps; s++) {
       points.push({ x: px, y: py });
       
-      // Flow influenced by noise for organic curves
-      const noiseVal = flowNoise(px * 0.08, py * 0.08);
-      const angleOffset = (noiseVal - 0.5) * 0.4; // Gentle curves
-      angle = baseAngle + angleOffset;
+      // Multi-layered noise for organic, non-straight curves
+      const noise1 = flowNoise(px * 0.06, py * 0.06); // Large-scale curves
+      const noise2 = waveNoise(px * waveFreq * 2, py * waveFreq * 2); // Medium waves
+      const noise3 = microNoise(px * 0.15, py * 0.15); // Small wiggles
       
-      // Move along flow
-      px += Math.cos(angle) * 1.2;
-      py += Math.sin(angle) * 1.2;
+      // Combine noise layers with different weights
+      const combinedNoise = noise1 * 0.5 + noise2 * 0.35 + noise3 * 0.15;
+      const angleOffset = (combinedNoise - 0.5) * curviness * 1.2;
+      
+      // Smooth angle changes for natural flow
+      const targetAngle = baseAngle + angleOffset;
+      angle = angle * 0.7 + targetAngle * 0.3; // Lerp for smooth transitions
+      
+      // Move along flow with smaller steps for smoother curves
+      px += Math.cos(angle) * 0.8;
+      py += Math.sin(angle) * 0.8;
       
       // Check for branching
-      if (pathDensity > 0.3 && s > 5 && s < steps - 10 && pathRng() < 0.03) {
-        // Create a branch
+      if (pathDensity > 0.3 && s > 5 && s < steps - 10 && pathRng() < 0.04) {
+        // Create a branch with same organic curve behavior
         const branchPoints: { x: number; y: number }[] = [];
         let bx = px;
         let by = py;
-        const branchAngle = angle + (pathRng() > 0.5 ? 0.6 : -0.6); // Branch off at angle
+        let bAngle = angle + (pathRng() > 0.5 ? 0.5 : -0.5); // Branch off at angle
+        const bCurviness = 0.5 + pathRng() * 0.5;
         
-        for (let b = 0; b < 15 + Math.floor(pathRng() * 15); b++) {
+        for (let b = 0; b < 20 + Math.floor(pathRng() * 25); b++) {
           branchPoints.push({ x: bx, y: by });
-          const bNoiseVal = branchNoise(bx * 0.1, by * 0.1);
-          const bAngleOffset = (bNoiseVal - 0.5) * 0.5;
-          bx += Math.cos(branchAngle + bAngleOffset) * 1.2;
-          by += Math.sin(branchAngle + bAngleOffset) * 1.2;
+          
+          // Multi-layer noise for branches too
+          const bn1 = branchNoise(bx * 0.08, by * 0.08);
+          const bn2 = microNoise(bx * 0.12, by * 0.12);
+          const bNoiseVal = bn1 * 0.6 + bn2 * 0.4;
+          const bAngleOffset = (bNoiseVal - 0.5) * bCurviness * 1.0;
+          bAngle = bAngle * 0.75 + (bAngle + bAngleOffset) * 0.25;
+          
+          bx += Math.cos(bAngle) * 0.7;
+          by += Math.sin(bAngle) * 0.7;
           
           if (bx < 0 || bx >= GRID_SIZE || by < 0 || by >= GRID_SIZE) break;
         }
         
-        if (branchPoints.length > 3) {
+        if (branchPoints.length > 5) {
           pathPoints.push(branchPoints);
         }
       }
