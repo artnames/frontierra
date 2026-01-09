@@ -398,9 +398,9 @@ const Index = () => {
           )}
         </div>
 
-        {/* Control Sidebar */}
+        {/* Control Sidebar - Absolute positioned to overlay canvas */}
         {showSidebar && (
-          <aside className="w-80 border-l border-border bg-card/95 backdrop-blur-sm flex flex-col flex-shrink-0 overflow-hidden relative z-40 shadow-lg">
+          <aside className="fixed top-[52px] right-0 bottom-0 w-80 border-l border-border bg-card/95 backdrop-blur-sm flex flex-col overflow-hidden z-[100] shadow-xl">
             {/* Tab Navigation */}
             <div className="flex border-b border-border bg-secondary/30">
               {(['contract', 'actions', 'replay', 'parameters'] as SidebarTab[]).map(tab => (
