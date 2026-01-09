@@ -10,7 +10,8 @@ import {
   getLandsInArea,
   createLand, 
   findAvailablePosition,
-  subscribeLandChanges
+  subscribeLandChanges,
+  updateLand
 } from '@/lib/multiplayer/landRegistry';
 import { useNexArtWorld } from './useNexArtWorld';
 import { useEdgeTransition } from './useEdgeTransition';
@@ -190,6 +191,21 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     edgeTransition.handlePositionUpdate(x, z);
   }, [edgeTransition]);
   
+  // Update land parameters (seed/vars) - only works on own land
+  const updateLandParams = useCallback(async (updates: { seed?: number; vars?: number[] }) => {
+    if (!state.playerId || !state.currentLand) return;
+    if (state.isVisitingOtherLand) {
+      console.warn('[MultiplayerWorld] Cannot update parameters on someone else\'s land');
+      return;
+    }
+    
+    const updatedLand = await updateLand(state.playerId, updates);
+    if (updatedLand) {
+      setState(prev => ({ ...prev, currentLand: updatedLand }));
+      forceRegenerate();
+    }
+  }, [state.playerId, state.currentLand, state.isVisitingOtherLand, forceRegenerate]);
+  
   // Subscribe to real-time land updates
   useEffect(() => {
     const unsubscribe = subscribeLandChanges((updatedLand) => {
@@ -235,6 +251,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     initializePlayerLand,
     visitLand,
     updatePlayerPosition,
+    updateLandParams,
     forceRegenerate
   };
 }
