@@ -1,6 +1,10 @@
+// World Explorer - 3D First-Person View of NexArt World
+// Uses debounced NexArt generation with atomic world swap
+
 import { useState, useCallback, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { WorldData, generateWorldDataAsync, cacheWorldData, distanceToObject, isWorldValid } from '@/lib/worldData';
+import { WorldData, distanceToObject, isWorldValid } from '@/lib/worldData';
+import { useNexArtWorld } from '@/hooks/useNexArtWorld';
 import { 
   WorldAction, 
   ReplayFrame,
@@ -116,31 +120,13 @@ export function WorldExplorer({
   const [isDiscovered, setIsDiscovered] = useState(false);
   const [showDiscoveryBanner, setShowDiscoveryBanner] = useState(false);
   const [actions, setActions] = useState<WorldAction[]>(initialActions);
-  const [world, setWorld] = useState<WorldData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [nexartError, setNexartError] = useState<string | null>(null);
   
-  // Generate world data via NexArt (async)
-  useEffect(() => {
-    let cancelled = false;
-    setIsLoading(true);
-    setNexartError(null);
-    
-    generateWorldDataAsync(seed, vars).then(worldData => {
-      if (cancelled) return;
-      
-      if (!isWorldValid(worldData)) {
-        setNexartError(worldData.nexartError || 'NexArt generation failed');
-        setWorld(null);
-      } else {
-        cacheWorldData(worldData);
-        setWorld(worldData);
-      }
-      setIsLoading(false);
-    });
-    
-    return () => { cancelled = true; };
-  }, [seed, vars]);
+  // Use debounced NexArt generation hook
+  const { world, isLoading, isVerifying, error } = useNexArtWorld({
+    seed,
+    vars,
+    debounceMs: 300
+  });
   
   useEffect(() => {
     if (isDiscovered && !showDiscoveryBanner) {
@@ -162,7 +148,7 @@ export function WorldExplorer({
     setIsDiscovered(discovered);
   }, []);
   
-  const isInvalid = (deterministicTest && !deterministicTest.isValid) || nexartError !== null;
+  const isInvalid = (deterministicTest && !deterministicTest.isValid) || error !== null;
   
   // Loading state
   if (isLoading) {
@@ -177,7 +163,7 @@ export function WorldExplorer({
   }
   
   // NexArt failure - NO FALLBACK
-  if (nexartError || !world) {
+  if (error || !world) {
     return (
       <div className="relative w-full h-full flex items-center justify-center bg-destructive/10">
         <div className="terminal-panel p-8 border-destructive bg-background/95 text-center max-w-md">
@@ -188,7 +174,7 @@ export function WorldExplorer({
             NexArt execution failed. The world cannot be generated or validated.
           </div>
           <div className="text-xs text-destructive/70 font-mono p-3 bg-destructive/10 rounded mb-4">
-            {nexartError || 'Unknown error'}
+            {error || 'Unknown error'}
           </div>
           <div className="text-xs text-muted-foreground">
             NexArt is the canonical world generator. No fallback available.
@@ -200,7 +186,17 @@ export function WorldExplorer({
   
   return (
     <div className="relative w-full h-full">
-      {isInvalid && !nexartError && (
+      {/* Verifying overlay (non-blocking) */}
+      {isVerifying && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <div className="terminal-panel px-4 py-2 flex items-center gap-2 bg-background/90">
+            <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs text-muted-foreground">Verifying world...</span>
+          </div>
+        </div>
+      )}
+      
+      {isInvalid && !error && (
         <div className="absolute inset-0 z-20 pointer-events-none">
           <div className="absolute inset-0 bg-destructive/10 animate-pulse" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
