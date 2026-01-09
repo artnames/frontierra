@@ -125,62 +125,115 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
   // Generate terrain
   const terrain: TerrainCell[][] = [];
   
-  // Generate organic path network using noise-based curves
-  const pathNoiseH = createNoise2D(seed + 3000); // Horizontal path curves
-  const pathNoiseV = createNoise2D(seed + 4000); // Vertical path curves
-  const pathNoiseWander = createNoise2D(seed + 5000); // Extra wandering
+  // Generate flow-based path network with branching
+  const flowNoise = createNoise2D(seed + 3000);
+  const branchNoise = createNoise2D(seed + 4000);
   
-  // Number of main paths based on density
-  const numPaths = 2 + Math.floor(pathDensity * 5); // 2-7 paths
+  // Consistent path width (like stroke weight)
+  const PATH_WIDTH = 1.2;
   
-  // Generate path "spine" positions - these are the base Y or X positions
+  // Number of main flow paths based on density
+  const numMainPaths = 2 + Math.floor(pathDensity * 4); // 2-6 main paths
+  
+  // Generate flow paths using particle simulation approach
+  // Each path is a series of points that flow across the map
   const pathRng = mulberry32(seed + 6000);
-  const pathSpines: { basePos: number; isHorizontal: boolean; amplitude: number; frequency: number }[] = [];
+  const pathPoints: { x: number; y: number }[][] = [];
   
-  for (let i = 0; i < numPaths; i++) {
-    const isHorizontal = pathRng() > 0.5;
-    const basePos = Math.floor(pathRng() * (GRID_SIZE - 16)) + 8;
-    const amplitude = 3 + pathRng() * 6; // How much the path curves (3-9 cells)
-    const frequency = 0.03 + pathRng() * 0.05; // How often it curves
-    pathSpines.push({ basePos, isHorizontal, amplitude, frequency });
+  for (let p = 0; p < numMainPaths; p++) {
+    const points: { x: number; y: number }[] = [];
+    const isHorizontal = pathRng() > 0.4; // Slightly favor horizontal
+    
+    // Starting position
+    let px = isHorizontal ? 0 : Math.floor(pathRng() * (GRID_SIZE - 10)) + 5;
+    let py = isHorizontal ? Math.floor(pathRng() * (GRID_SIZE - 10)) + 5 : 0;
+    
+    // Flow direction with some randomness
+    const baseAngle = isHorizontal ? 0 : Math.PI / 2;
+    let angle = baseAngle + (pathRng() - 0.5) * 0.3;
+    
+    // Trace the path
+    const steps = GRID_SIZE + 20;
+    for (let s = 0; s < steps; s++) {
+      points.push({ x: px, y: py });
+      
+      // Flow influenced by noise for organic curves
+      const noiseVal = flowNoise(px * 0.08, py * 0.08);
+      const angleOffset = (noiseVal - 0.5) * 0.4; // Gentle curves
+      angle = baseAngle + angleOffset;
+      
+      // Move along flow
+      px += Math.cos(angle) * 1.2;
+      py += Math.sin(angle) * 1.2;
+      
+      // Check for branching
+      if (pathDensity > 0.3 && s > 5 && s < steps - 10 && pathRng() < 0.03) {
+        // Create a branch
+        const branchPoints: { x: number; y: number }[] = [];
+        let bx = px;
+        let by = py;
+        const branchAngle = angle + (pathRng() > 0.5 ? 0.6 : -0.6); // Branch off at angle
+        
+        for (let b = 0; b < 15 + Math.floor(pathRng() * 15); b++) {
+          branchPoints.push({ x: bx, y: by });
+          const bNoiseVal = branchNoise(bx * 0.1, by * 0.1);
+          const bAngleOffset = (bNoiseVal - 0.5) * 0.5;
+          bx += Math.cos(branchAngle + bAngleOffset) * 1.2;
+          by += Math.sin(branchAngle + bAngleOffset) * 1.2;
+          
+          if (bx < 0 || bx >= GRID_SIZE || by < 0 || by >= GRID_SIZE) break;
+        }
+        
+        if (branchPoints.length > 3) {
+          pathPoints.push(branchPoints);
+        }
+      }
+      
+      // Stop if out of bounds
+      if (px < -2 || px >= GRID_SIZE + 2 || py < -2 || py >= GRID_SIZE + 2) break;
+    }
+    
+    pathPoints.push(points);
   }
   
-  // Road width
-  const roadWidth = pathDensity > 0.5 ? 2.5 : 1.5;
-  
-  // First pass: generate base terrain
+  // First pass: generate base terrain with exponential height
   for (let y = 0; y < GRID_SIZE; y++) {
     terrain[y] = [];
     for (let x = 0; x < GRID_SIZE; x++) {
       // Multi-octave noise for base elevation
       let baseElevation = fbm(noise, x * terrainScale, y * terrainScale, 4, roughness);
       
-      // Apply height multiplier to non-water areas
-      const scaledElevation = baseElevation * heightMultiplier;
+      // Exponential elevation curve for smoother water-to-mountain transition
+      // Values near water level stay flat, mountains grow exponentially
+      let scaledElevation: number;
+      if (baseElevation <= waterLevel) {
+        // Below water - keep flat
+        scaledElevation = baseElevation;
+      } else {
+        // Above water - apply exponential curve
+        // Normalize to 0-1 range above water
+        const aboveWater = (baseElevation - waterLevel) / (1 - waterLevel);
+        // Apply exponential curve (power of 2-3 based on height multiplier)
+        const exponent = 1.5 + heightMultiplier * 0.8;
+        const exponentialHeight = Math.pow(aboveWater, exponent);
+        // Scale back to elevation range
+        scaledElevation = waterLevel + exponentialHeight * (1 - waterLevel) * heightMultiplier;
+      }
       
-      // Check if this cell is on an organic path
+      // Check if this cell is on a flow path (consistent width)
       let isOnRoad = false;
       if (pathDensity > 0.05) {
-        for (const spine of pathSpines) {
-          if (spine.isHorizontal) {
-            // Horizontal path - curves in Y based on X position
-            const curve = pathNoiseH(x * spine.frequency, spine.basePos * 0.1) * spine.amplitude;
-            const wander = pathNoiseWander(x * 0.08, spine.basePos * 0.05) * 2;
-            const pathY = spine.basePos + curve + wander;
-            if (Math.abs(y - pathY) < roadWidth) {
-              isOnRoad = true;
-              break;
-            }
-          } else {
-            // Vertical path - curves in X based on Y position
-            const curve = pathNoiseV(spine.basePos * 0.1, y * spine.frequency) * spine.amplitude;
-            const wander = pathNoiseWander(spine.basePos * 0.05, y * 0.08) * 2;
-            const pathX = spine.basePos + curve + wander;
-            if (Math.abs(x - pathX) < roadWidth) {
+        for (const points of pathPoints) {
+          for (const pt of points) {
+            const dx = x - pt.x;
+            const dy = y - pt.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < PATH_WIDTH) {
               isOnRoad = true;
               break;
             }
           }
+          if (isOnRoad) break;
         }
       }
       
@@ -208,7 +261,7 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
       const hasLandmark = type !== 'water' && type !== 'mountain' && type !== 'path' && type !== 'bridge' && 
                           landmarkNoise < landmarkDensity;
       
-      // Final elevation - water stays low, bridges sit above water, land gets height multiplier
+      // Final elevation - water stays low, bridges sit above water, land gets exponential height
       let finalElevation: number;
       if (type === 'bridge') {
         finalElevation = waterLevel * 0.3 + 0.05; // Slightly above water
