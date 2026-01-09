@@ -163,8 +163,8 @@ function setup() {
   
   // FIRST: Create low-frequency region mask that defines WHERE mountains CAN form
   // This creates distinct island-like clusters with clear valleys between
-  // CRITICAL: Use seed offset so mountains move with different seeds
-  var seedOffset = seed * 0.1;
+  // CRITICAL: Use SEED offset so mountains move with different seeds
+  var seedOffset = SEED * 0.1;
   var mountainRegionMask = [];
   for (var ry = 0; ry < GRID_SIZE; ry++) {
     mountainRegionMask[ry] = [];
@@ -190,11 +190,11 @@ function setup() {
   
   // SECOND: Create circular mountain patches ONLY within eligible regions
   // More patches at high density for ~60% coverage at 100%
-  // Use seed to vary patch positions
+  // Use SEED to vary patch positions
   var numPatches = floor(4 + mountainDensity * 25);
   for (var mp = 0; mp < numPatches; mp++) {
-    var patchX = noise(mp * 137 + seed * 0.3) * GRID_SIZE;
-    var patchY = noise(mp * 251 + seed * 0.5) * GRID_SIZE;
+    var patchX = noise(mp * 137 + SEED * 0.3) * GRID_SIZE;
+    var patchY = noise(mp * 251 + SEED * 0.5) * GRID_SIZE;
     
     // Check if patch center is in an eligible region
     var patchCenterRegion = 0;
@@ -207,10 +207,10 @@ function setup() {
       continue;
     }
     
-    // Patch size scales with density and region strength - use seed for variety
-    var patchRadius = 5 + mountainDensity * 15 + noise(mp * 373 + seed * 0.2) * 8;
+    // Patch size scales with density and region strength - use SEED for variety
+    var patchRadius = 5 + mountainDensity * 15 + noise(mp * 373 + SEED * 0.2) * 8;
     patchRadius = patchRadius * (0.6 + patchCenterRegion * 0.6);
-    var patchStrength = 0.5 + noise(mp * 491 + seed * 0.4) * 0.5;
+    var patchStrength = 0.5 + noise(mp * 491 + SEED * 0.4) * 0.5;
     
     for (var mpy = 0; mpy < GRID_SIZE; mpy++) {
       for (var mpx = 0; mpx < GRID_SIZE; mpx++) {
@@ -233,11 +233,11 @@ function setup() {
   }
   
   // THIRD: Add elongated ranges within regions for variety (not continent-spanning)
-  // Use seed to vary range positions
+  // Use SEED to vary range positions
   var numRanges = floor(1 + mountainDensity * 4);
   for (var mr = 0; mr < numRanges; mr++) {
-    var rangeStartX = noise(mr * 571 + seed * 0.25) * GRID_SIZE;
-    var rangeStartY = noise(mr * 683 + seed * 0.35) * GRID_SIZE;
+    var rangeStartX = noise(mr * 571 + SEED * 0.25) * GRID_SIZE;
+    var rangeStartY = noise(mr * 683 + SEED * 0.35) * GRID_SIZE;
     
     // Check if range starts in eligible region
     var rsx = floor(constrain(rangeStartX, 0, GRID_SIZE - 1));
@@ -246,8 +246,8 @@ function setup() {
       continue;
     }
     
-    var rangeAngle = noise(mr * 797 + seed * 0.15) * TWO_PI;
-    var rangeLength = 10 + noise(mr * 911 + seed * 0.45) * 20;
+    var rangeAngle = noise(mr * 797 + SEED * 0.15) * TWO_PI;
+    var rangeLength = 10 + noise(mr * 911 + SEED * 0.45) * 20;
     var rangeWidth = 3 + mountainDensity * 6;
     
     for (var rs = 0; rs < rangeLength; rs++) {
