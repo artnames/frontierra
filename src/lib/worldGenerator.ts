@@ -26,8 +26,10 @@ function setup() {
   noStroke();
   background(0, 0, 0, 0);
 
-  // Ensure the execution seed actually drives noise()/random() deterministically.
-  // (Some runtimes do not auto-seed p5 noise; this makes seed changes visible.)
+  // ============================================
+  // SEED INITIALIZATION - Critical for determinism
+  // The seed MUST affect ALL noise calculations
+  // ============================================
   var __seed = 0;
   if (typeof SEED !== "undefined") {
     __seed = SEED;
@@ -37,32 +39,50 @@ function setup() {
   noiseSeed(__seed);
   randomSeed(__seed);
   
+  // Create seed-derived offsets for unique worlds
+  // These make each seed produce completely different noise patterns
+  var seedOffsetA = (__seed % 10000) * 0.1;
+  var seedOffsetB = ((__seed * 7) % 10000) * 0.1;
+  var seedOffsetC = ((__seed * 13) % 10000) * 0.1;
+  var seedOffsetD = ((__seed * 31) % 10000) * 0.1;
+  
   var GRID_SIZE = 64;
   
-  // VAR mappings:
+  // ============================================
+  // VAR MAPPINGS - All ranges tuned for visible effects
+  // ============================================
   // VAR[3] = Continent Scale (terrain frequency)
   // VAR[4] = Water Level (0=very low, 50=normal, 100=very high)
   // VAR[5] = Forest Density
   // VAR[6] = Mountain Height (peak elevation from base floor)
   // VAR[7] = Path Density
-  // VAR[8] = Terrain Roughness
+  // VAR[8] = Terrain Roughness (ground bumpiness and detail)
   // VAR[9] = Mountain Density (number of mountain patches)
   
-  var continentScale = map(VAR[3], 0, 100, 0.025, 0.08);
-  var waterLevel = map(VAR[4], 0, 100, 0.15, 0.65);
-  var forestDensity = map(VAR[5], 0, 100, 0.15, 0.80);
-  var mountainPeakHeight = map(VAR[6], 0, 100, 0.25, 0.95);
+  var continentScale = map(VAR[3], 0, 100, 0.02, 0.10);
+  var waterLevel = map(VAR[4], 0, 100, 0.10, 0.55);
+  var forestDensity = map(VAR[5], 0, 100, 0.10, 0.85);
+  
+  // Mountain height: from flat hills (0.2) to dramatic peaks (1.0)
+  var mountainPeakHeight = map(VAR[6], 0, 100, 0.20, 1.00);
+  
   var pathDensityVal = map(VAR[7], 0, 100, 0.0, 1.0);
-  var terrainRoughness = map(VAR[8], 0, 100, 0.10, 1.00);
-  var mountainDensity = map(VAR[9], 0, 100, 0.05, 1.00);
+  
+  // Roughness affects both frequency and amplitude of terrain detail
+  var terrainRoughness = map(VAR[8], 0, 100, 0.05, 1.50);
+  
+  // Mountain density: from sparse isolated peaks to 70% coverage
+  var mountainDensity = map(VAR[9], 0, 100, 0.02, 1.00);
   
   var objX = floor(map(VAR[1], 0, 100, 4, GRID_SIZE - 4));
   var objY = floor(map(VAR[2], 0, 100, 4, GRID_SIZE - 4));
   
-  // Fixed base floor level - never changes
-  var BASE_FLOOR = 0.30;
+  // Base floor level - provides stable ground plane
+  var BASE_FLOOR = 0.25;
   
-  // Path generation grid
+  // ============================================
+  // PATH GENERATION - Always visible paths
+  // ============================================
   var pathGrid = [];
   for (var py = 0; py < GRID_SIZE; py++) {
     pathGrid[py] = [];
@@ -71,13 +91,14 @@ function setup() {
     }
   }
   
-  // Path generation - minimum 2 paths always
+  // Minimum 2 paths, up to 8 at high density
   var numPaths = floor(2 + pathDensityVal * 6);
-  var flowScale = 0.04 + pathDensityVal * 0.04;
+  var flowScale = 0.03 + pathDensityVal * 0.05;
   
   for (var p = 0; p < numPaths; p++) {
-    var startEdge = floor(noise(p * 111 + 500) * 4);
-    var edgePos = noise(p * 222 + 600) * 0.6 + 0.2;
+    // Use seed offsets for path positions
+    var startEdge = floor(noise(p * 111 + seedOffsetA) * 4);
+    var edgePos = noise(p * 222 + seedOffsetB) * 0.6 + 0.2;
     var cx = 0;
     var cy = 0;
     
@@ -96,10 +117,10 @@ function setup() {
     }
     
     var prevAngle = 0;
-    var targetX = GRID_SIZE * 0.5 + (noise(p * 333) - 0.5) * GRID_SIZE * 0.5;
-    var targetY = GRID_SIZE * 0.5 + (noise(p * 444) - 0.5) * GRID_SIZE * 0.5;
+    var targetX = GRID_SIZE * 0.5 + (noise(p * 333 + seedOffsetC) - 0.5) * GRID_SIZE * 0.6;
+    var targetY = GRID_SIZE * 0.5 + (noise(p * 444 + seedOffsetD) - 0.5) * GRID_SIZE * 0.6;
     
-    for (var step = 0; step < GRID_SIZE * 2.5; step++) {
+    for (var step = 0; step < GRID_SIZE * 3; step++) {
       if (cx < 0 || cx >= GRID_SIZE || cy < 0 || cy >= GRID_SIZE) {
         break;
       }
@@ -108,50 +129,52 @@ function setup() {
       var gyp = floor(cy);
       if (gxp >= 0 && gxp < GRID_SIZE && gyp >= 0 && gyp < GRID_SIZE) {
         pathGrid[gyp][gxp] = 1;
-        if (gxp > 0) pathGrid[gyp][gxp - 1] = max(pathGrid[gyp][gxp - 1], 0.5);
-        if (gxp < GRID_SIZE - 1) pathGrid[gyp][gxp + 1] = max(pathGrid[gyp][gxp + 1], 0.5);
-        if (gyp > 0) pathGrid[gyp - 1][gxp] = max(pathGrid[gyp - 1][gxp], 0.5);
-        if (gyp < GRID_SIZE - 1) pathGrid[gyp + 1][gxp] = max(pathGrid[gyp + 1][gxp], 0.5);
+        // Wider paths for visibility
+        if (gxp > 0) pathGrid[gyp][gxp - 1] = max(pathGrid[gyp][gxp - 1], 0.6);
+        if (gxp < GRID_SIZE - 1) pathGrid[gyp][gxp + 1] = max(pathGrid[gyp][gxp + 1], 0.6);
+        if (gyp > 0) pathGrid[gyp - 1][gxp] = max(pathGrid[gyp - 1][gxp], 0.6);
+        if (gyp < GRID_SIZE - 1) pathGrid[gyp + 1][gxp] = max(pathGrid[gyp + 1][gxp], 0.6);
       }
       
-      var n1 = noise(cx * flowScale, cy * flowScale);
-      var n2 = noise(cx * flowScale * 2.5 + 100, cy * flowScale * 2.5);
-      var n3 = noise(cx * flowScale * 0.4 + 200, cy * flowScale * 0.4);
-      var flowAngle = (n1 * 0.45 + n2 * 0.35 + n3 * 0.20) * TWO_PI * 2.5;
+      // Use seed-dependent noise for flow
+      var n1 = noise(cx * flowScale + seedOffsetA, cy * flowScale);
+      var n2 = noise(cx * flowScale * 2 + seedOffsetB, cy * flowScale * 2);
+      var n3 = noise(cx * flowScale * 0.5 + seedOffsetC, cy * flowScale * 0.5);
+      var flowAngle = (n1 * 0.4 + n2 * 0.35 + n3 * 0.25) * TWO_PI * 2;
       
       var toTarget = atan2(targetY - cy, targetX - cx);
-      var blend = 0.35 + pathDensityVal * 0.15;
+      var blend = 0.30 + pathDensityVal * 0.20;
       var angle = flowAngle * blend + toTarget * (1 - blend);
-      angle = prevAngle * 0.55 + angle * 0.45;
+      angle = prevAngle * 0.50 + angle * 0.50;
       prevAngle = angle;
       
-      var stepLen = 0.6 + noise(cx * 0.15, cy * 0.15) * 0.25;
+      var stepLen = 0.5 + noise(cx * 0.1 + seedOffsetD, cy * 0.1) * 0.3;
       cx = cx + cos(angle) * stepLen;
       cy = cy + sin(angle) * stepLen;
       
-      // Branching paths
-      if (pathDensityVal > 0.30 && step > 10 && step % 12 === 0) {
-        if (noise(cx * 0.5 + p * 50, cy * 0.5) < 0.25) {
+      // Branching paths at higher density
+      if (pathDensityVal > 0.25 && step > 8 && step % 10 === 0) {
+        if (noise(cx * 0.4 + p * 50 + seedOffsetA, cy * 0.4) < 0.30) {
           var bx = cx;
           var by = cy;
-          var bAngle = angle + (noise(bx, by) > 0.5 ? PI * 0.35 : -PI * 0.35);
+          var bAngle = angle + (noise(bx + seedOffsetB, by) > 0.5 ? PI * 0.4 : -PI * 0.4);
           var bPrev = bAngle;
           
-          for (var bs = 0; bs < 12 + floor(noise(bx + p, by) * 15); bs++) {
+          for (var bs = 0; bs < 15 + floor(noise(bx + p + seedOffsetC, by) * 20); bs++) {
             var bgx = floor(bx);
             var bgy = floor(by);
             if (bgx >= 0 && bgx < GRID_SIZE && bgy >= 0 && bgy < GRID_SIZE) {
-              pathGrid[bgy][bgx] = max(pathGrid[bgy][bgx], 0.8);
+              pathGrid[bgy][bgx] = max(pathGrid[bgy][bgx], 0.85);
             }
             
-            var bn1 = noise(bx * flowScale * 1.8, by * flowScale * 1.8 + 300);
-            var bn2 = noise(bx * flowScale * 3.5 + 400, by * flowScale * 3.5);
+            var bn1 = noise(bx * flowScale * 1.5 + seedOffsetD, by * flowScale * 1.5);
+            var bn2 = noise(bx * flowScale * 3 + seedOffsetA, by * flowScale * 3);
             var bFlow = (bn1 * 0.55 + bn2 * 0.45) * TWO_PI * 2;
-            bAngle = bPrev * 0.65 + bFlow * 0.35;
+            bAngle = bPrev * 0.60 + bFlow * 0.40;
             bPrev = bAngle;
             
-            bx = bx + cos(bAngle) * 0.55;
-            by = by + sin(bAngle) * 0.55;
+            bx = bx + cos(bAngle) * 0.5;
+            by = by + sin(bAngle) * 0.5;
             
             if (bx < 0 || bx >= GRID_SIZE || by < 0 || by >= GRID_SIZE) {
               break;
@@ -162,8 +185,9 @@ function setup() {
     }
   }
   
-  // Generate mountain mask using CLUSTERED PATCHES (not ridges)
-  // Low-frequency noise creates distinct mountain regions with valleys between
+  // ============================================
+  // MOUNTAIN GENERATION - Seed-dependent clustering
+  // ============================================
   var mountainMask = [];
   for (var my = 0; my < GRID_SIZE; my++) {
     mountainMask[my] = [];
@@ -172,55 +196,52 @@ function setup() {
     }
   }
   
-  // FIRST: Create low-frequency region mask that defines WHERE mountains CAN form
-  // This creates distinct island-like clusters with clear valleys between
-  // NOTE: Code Mode runtime seeds noise() deterministically from the execution seed (no SEED global).
+  // FIRST: Create low-frequency region mask - WHERE mountains CAN form
+  // Using seed offsets for unique patterns per seed
   var mountainRegionMask = [];
   for (var ry = 0; ry < GRID_SIZE; ry++) {
     mountainRegionMask[ry] = [];
     for (var rx = 0; rx < GRID_SIZE; rx++) {
-      // Very low frequency for large-scale clustering
-      var region1 = noise(rx * 0.025 + 8000, ry * 0.025 + 8000 * 0.7);
-      var region2 = noise(rx * 0.05 + 8500, ry * 0.05 + 8500 * 0.5);
-      var regionVal = region1 * 0.7 + region2 * 0.3;
+      // Very low frequency for large-scale clustering with seed variation
+      var region1 = noise(rx * 0.03 + seedOffsetA, ry * 0.03 + seedOffsetB);
+      var region2 = noise(rx * 0.06 + seedOffsetC, ry * 0.06 + seedOffsetD);
+      var regionVal = region1 * 0.65 + region2 * 0.35;
       
-      // Threshold determines which areas can have mountains
-      // Higher mountainDensity = lower threshold = more areas eligible
-      var regionThreshold = 0.62 - mountainDensity * 0.45;
+      // Threshold: higher density = lower threshold = more area
+      // At 0% density: threshold = 0.70 (very few mountains)
+      // At 100% density: threshold = 0.15 (mountains everywhere)
+      var regionThreshold = 0.70 - mountainDensity * 0.55;
       
       if (regionVal > regionThreshold) {
-        // Smooth falloff from center of eligible region
         var regionStrength = (regionVal - regionThreshold) / (1.0 - regionThreshold);
-        mountainRegionMask[ry][rx] = pow(regionStrength, 0.8);
+        mountainRegionMask[ry][rx] = pow(regionStrength, 0.7);
       } else {
         mountainRegionMask[ry][rx] = 0;
       }
     }
   }
   
-  // SECOND: Create circular mountain patches ONLY within eligible regions
-  // More patches at high density for ~60% coverage at 100%
-  // NOTE: noise() is already seeded by the execution seed; use deterministic offsets here.
-  var numPatches = floor(4 + mountainDensity * 25);
+  // SECOND: Create circular mountain patches within eligible regions
+  // More patches at high density
+  var numPatches = floor(3 + mountainDensity * 30);
   for (var mp = 0; mp < numPatches; mp++) {
-    var patchX = noise(mp * 137 + 10000) * GRID_SIZE;
-    var patchY = noise(mp * 251 + 10500) * GRID_SIZE;
+    // Use seed for patch positions
+    var patchX = noise(mp * 137 + seedOffsetA) * GRID_SIZE;
+    var patchY = noise(mp * 251 + seedOffsetB) * GRID_SIZE;
     
-    // Check if patch center is in an eligible region
-    var patchCenterRegion = 0;
     var pcx = floor(constrain(patchX, 0, GRID_SIZE - 1));
     var pcy = floor(constrain(patchY, 0, GRID_SIZE - 1));
-    patchCenterRegion = mountainRegionMask[pcy][pcx];
+    var patchCenterRegion = mountainRegionMask[pcy][pcx];
     
-    // Skip patches in valleys (non-eligible regions)
-    if (patchCenterRegion < 0.2) {
+    // Skip if not in eligible region
+    if (patchCenterRegion < 0.15) {
       continue;
     }
     
-    // Patch size scales with density and region strength
-    var patchRadius = 5 + mountainDensity * 15 + noise(mp * 373 + 10800) * 8;
-    patchRadius = patchRadius * (0.6 + patchCenterRegion * 0.6);
-    var patchStrength = 0.5 + noise(mp * 491 + 10200) * 0.5;
+    // Larger patches at higher density
+    var patchRadius = 4 + mountainDensity * 18 + noise(mp * 373 + seedOffsetC) * 10;
+    patchRadius = patchRadius * (0.5 + patchCenterRegion * 0.7);
+    var patchStrength = 0.4 + noise(mp * 491 + seedOffsetD) * 0.6;
     
     for (var mpy = 0; mpy < GRID_SIZE; mpy++) {
       for (var mpx = 0; mpx < GRID_SIZE; mpx++) {
@@ -228,11 +249,9 @@ function setup() {
         var dy = mpy - patchY;
         var dist = sqrt(dx * dx + dy * dy);
         if (dist < patchRadius) {
-          // Smooth circular falloff
           var falloff = 1.0 - (dist / patchRadius);
-          falloff = pow(falloff, 1.3);
+          falloff = pow(falloff, 1.2);
           
-          // Multiply by region mask to create natural transitions
           var regionWeight = mountainRegionMask[mpy][mpx];
           var contribution = falloff * patchStrength * regionWeight;
           
@@ -242,35 +261,32 @@ function setup() {
     }
   }
   
-  // THIRD: Add elongated ranges within regions for variety (not continent-spanning)
-  // NOTE: noise() is already seeded by the execution seed; use deterministic offsets here.
-  var numRanges = floor(1 + mountainDensity * 4);
+  // THIRD: Add elongated ranges within regions
+  var numRanges = floor(1 + mountainDensity * 5);
   for (var mr = 0; mr < numRanges; mr++) {
-    var rangeStartX = noise(mr * 571 + 9000) * GRID_SIZE;
-    var rangeStartY = noise(mr * 683 + 9500) * GRID_SIZE;
+    var rangeStartX = noise(mr * 571 + seedOffsetC) * GRID_SIZE;
+    var rangeStartY = noise(mr * 683 + seedOffsetD) * GRID_SIZE;
     
-    // Check if range starts in eligible region
     var rsx = floor(constrain(rangeStartX, 0, GRID_SIZE - 1));
     var rsy = floor(constrain(rangeStartY, 0, GRID_SIZE - 1));
-    if (mountainRegionMask[rsy][rsx] < 0.3) {
+    if (mountainRegionMask[rsy][rsx] < 0.25) {
       continue;
     }
     
-    var rangeAngle = noise(mr * 797 + 9100) * TWO_PI;
-    var rangeLength = 10 + noise(mr * 911 + 9200) * 20;
-    var rangeWidth = 3 + mountainDensity * 6;
+    var rangeAngle = noise(mr * 797 + seedOffsetA) * TWO_PI;
+    var rangeLength = 12 + noise(mr * 911 + seedOffsetB) * 25;
+    var rangeWidth = 3 + mountainDensity * 8;
     
     for (var rs = 0; rs < rangeLength; rs++) {
-      var rx = rangeStartX + cos(rangeAngle) * rs * 1.2;
-      var ry = rangeStartY + sin(rangeAngle) * rs * 1.2;
+      var rx = rangeStartX + cos(rangeAngle) * rs * 1.1;
+      var ry = rangeStartY + sin(rangeAngle) * rs * 1.1;
       
-      // Add natural wobble
-      var wobble = noise(rs * 0.2 + mr * 50) * 4 - 2;
+      var wobble = noise(rs * 0.2 + mr * 50 + seedOffsetC) * 5 - 2.5;
       rx = rx + cos(rangeAngle + HALF_PI) * wobble;
       ry = ry + sin(rangeAngle + HALF_PI) * wobble;
       
-      var segRadius = rangeWidth * (0.6 + noise(rs * 0.15 + mr * 100) * 0.6);
-      var segStrength = 0.6 + noise(rs * 0.12 + mr * 200) * 0.4;
+      var segRadius = rangeWidth * (0.5 + noise(rs * 0.15 + mr * 100 + seedOffsetD) * 0.7);
+      var segStrength = 0.55 + noise(rs * 0.12 + mr * 200 + seedOffsetA) * 0.45;
       
       for (var sry = 0; sry < GRID_SIZE; sry++) {
         for (var srx = 0; srx < GRID_SIZE; srx++) {
@@ -279,11 +295,10 @@ function setup() {
           var sdist = sqrt(sdx * sdx + sdy * sdy);
           if (sdist < segRadius) {
             var sfall = 1.0 - (sdist / segRadius);
-            sfall = pow(sfall, 1.2);
+            sfall = pow(sfall, 1.1);
             
-            // Only add if within eligible region
             var segRegion = mountainRegionMask[sry][srx];
-            if (segRegion > 0.15) {
+            if (segRegion > 0.10) {
               var segContrib = sfall * segStrength * segRegion;
               mountainMask[sry][srx] = max(mountainMask[sry][srx], segContrib);
             }
@@ -293,85 +308,86 @@ function setup() {
     }
   }
   
+  // ============================================
+  // MAIN TERRAIN LOOP - Apply all effects
+  // ============================================
   for (var gy = 0; gy < GRID_SIZE; gy++) {
     for (var gx = 0; gx < GRID_SIZE; gx++) {
       
-      // Base terrain - consistent floor with gentle variation
-      var continental = noise(gx * continentScale, gy * continentScale);
-      var hills = noise(gx * continentScale * 2.5 + 500, gy * continentScale * 2.5);
-      var detail = noise(gx * continentScale * 5.0 + 1000, gy * continentScale * 5.0);
+      // Base terrain with seed-dependent noise
+      var continental = noise(gx * continentScale + seedOffsetA, gy * continentScale + seedOffsetB);
       
-      // Floor elevation with gentle hills (never goes below BASE_FLOOR)
-      var floorVariation = hills * terrainRoughness * 0.08 + detail * terrainRoughness * 0.04;
-      var baseElevation = BASE_FLOOR + continental * 0.15 + floorVariation;
+      // Roughness affects detail frequency and amplitude
+      var roughFreq = 0.08 + terrainRoughness * 0.12;
+      var roughAmp = 0.02 + terrainRoughness * 0.10;
       
-      // Mountain elevation - added ON TOP of floor
+      var hills = noise(gx * continentScale * 2 + seedOffsetC, gy * continentScale * 2);
+      var detail = noise(gx * roughFreq + seedOffsetD, gy * roughFreq);
+      var microDetail = noise(gx * roughFreq * 2.5 + seedOffsetA, gy * roughFreq * 2.5);
+      
+      // Floor elevation with roughness-controlled variation
+      var hillContrib = hills * 0.08 * (0.5 + terrainRoughness * 0.5);
+      var detailContrib = detail * roughAmp + microDetail * roughAmp * 0.5;
+      var baseElevation = BASE_FLOOR + continental * 0.12 + hillContrib + detailContrib;
+      
+      // Mountain elevation - scaled by mountainPeakHeight
       var mMask = mountainMask[gy][gx];
-      var mountainNoise = noise(gx * 0.12 + 8000, gy * 0.12);
-      var mountainDetail = noise(gx * 0.25 + 8500, gy * 0.25);
-      var mountainShape = mountainNoise * 0.7 + mountainDetail * 0.3;
+      var mountainNoise = noise(gx * 0.10 + seedOffsetB, gy * 0.10 + seedOffsetC);
+      var mountainDetail = noise(gx * 0.22 + seedOffsetD, gy * 0.22 + seedOffsetA);
+      var mountainShape = mountainNoise * 0.65 + mountainDetail * 0.35;
       
-      // Natural mountain profile - steep near peak, gradual at base
-      var peakFactor = pow(mMask, 0.7) * pow(mountainShape, 0.5);
-      var mountainElevation = peakFactor * mountainPeakHeight;
+      // Peak factor with height control
+      var peakFactor = pow(mMask, 0.65) * pow(mountainShape, 0.45);
+      var mountainElevation = peakFactor * mountainPeakHeight * 0.70;
       
       // Combined elevation
       var shaped = baseElevation + mountainElevation;
       shaped = constrain(shaped, 0, 1);
       
-      // ====== WATER SEMANTICS FIX ======
-      // Water level is absolute sea level - land NEVER goes below it visually
-      // Water check: only cells truly BELOW sea level are water
+      // ====== WATER SEMANTICS ======
       var isWater = shaped < waterLevel;
       
-      // If above water, clamp elevation to be at least at water level
-      // This ensures forests/ground are NEVER submerged
       var displayElevation = shaped;
-      if (!isWater && shaped < waterLevel + 0.02) {
-        // Coastline cells: slight boost to ensure they're visually above water
-        displayElevation = waterLevel + 0.02;
+      if (!isWater && shaped < waterLevel + 0.03) {
+        displayElevation = waterLevel + 0.03;
       }
       
-      // Moisture for forests - derived from proximity to water
-      var moistBase = noise(gx * 0.06 + 3000, gy * 0.06);
-      var moistDetail = noise(gx * 0.14 + 3500, gy * 0.14);
-      var moisture = moistBase * 0.60 + moistDetail * 0.40;
+      // Moisture from green tones
+      var moistBase = noise(gx * 0.05 + seedOffsetC, gy * 0.05 + seedOffsetD);
+      var moistDetail = noise(gx * 0.12 + seedOffsetA, gy * 0.12);
+      var moisture = moistBase * 0.55 + moistDetail * 0.45;
       if (isWater) {
         moisture = 1.0;
-      } else if (displayElevation < waterLevel + 0.10) {
-        moisture = moisture + (1 - (displayElevation - waterLevel) / 0.10) * 0.25;
+      } else if (displayElevation < waterLevel + 0.12) {
+        moisture = moisture + (1 - (displayElevation - waterLevel) / 0.12) * 0.30;
       }
       moisture = constrain(moisture, 0, 1);
       
-      // Forest detection - only on land above water
-      var forestNoise = noise(gx * 0.09 + 7000, gy * 0.09);
-      var forestNoise2 = noise(gx * 0.18 + 7500, gy * 0.18);
-      var forestVal = forestNoise * 0.6 + forestNoise2 * 0.4;
-      var isForest = forestVal < forestDensity && !isWater && mMask < 0.3 && moisture > 0.25;
+      // Forest detection
+      var forestNoise = noise(gx * 0.08 + seedOffsetB, gy * 0.08 + seedOffsetC);
+      var forestNoise2 = noise(gx * 0.16 + seedOffsetD, gy * 0.16);
+      var forestVal = forestNoise * 0.55 + forestNoise2 * 0.45;
+      var isForest = forestVal < forestDensity && !isWater && mMask < 0.35 && moisture > 0.20;
       
-      // Mountain tile detection - where mountain mask is strong
-      var isMountain = mMask > 0.25 && !isWater;
-      var isSnowCap = mMask > 0.6 && mountainPeakHeight > 0.45 && mountainShape > 0.5;
+      // Mountain and snow detection
+      var isMountain = mMask > 0.20 && !isWater;
+      var isSnowCap = mMask > 0.55 && mountainPeakHeight > 0.40 && mountainShape > 0.45;
       
-      // Path and bridge detection
-      var onPath = pathGrid[gy][gx] > 0.4;
+      // Path and bridge detection - lowered threshold for visibility
+      var onPath = pathGrid[gy][gx] > 0.30;
       var isBridge = onPath && isWater;
       var isPathTile = onPath && !isWater;
       
       var isObject = gx === objX && gy === objY;
       
-      // Rivers - only on land, near water level, not on paths
-      var riverN = noise(gx * 0.045 + 5000, gy * 0.045);
-      var isRiver = abs(riverN - 0.5) < 0.015 && !isWater && displayElevation < waterLevel + 0.15 && !onPath;
+      // Rivers
+      var riverN = noise(gx * 0.04 + seedOffsetD, gy * 0.04 + seedOffsetA);
+      var isRiver = abs(riverN - 0.5) < 0.018 && !isWater && displayElevation < waterLevel + 0.18 && !onPath;
       
       // ====== ELEVATION OUTPUT ======
-      // Alpha = elevation (0-255) - use display elevation for proper rendering
       var elevation = floor(displayElevation * 255);
       
       // ====== TILE TYPE PRIORITY (RGB) ======
-      // Order: Object > Bridge > Path > River > Water > SnowCap > Mountain > Forest > Ground
-      // This ensures paths/bridges are NEVER overwritten
-      
       var tileR = 0;
       var tileG = 0;
       var tileB = 0;
@@ -381,17 +397,14 @@ function setup() {
         tileG = 220;
         tileB = 60;
       } else if (isBridge) {
-        // Bridge: path over water - ALWAYS preserved
         tileR = 120;
         tileG = 80;
         tileB = 50;
       } else if (isPathTile) {
-        // Path: walkable trail - ALWAYS preserved
         tileR = 180;
         tileG = 150;
         tileB = 100;
       } else if (isRiver) {
-        // River: water channel through land - ALWAYS preserved
         tileR = 70;
         tileG = 160;
         tileB = 180;
@@ -401,12 +414,10 @@ function setup() {
         tileG = floor(60 + depthFactor * 25);
         tileB = floor(120 + depthFactor * 25);
       } else if (isSnowCap) {
-        // Snow-capped peaks
         tileR = 240;
         tileG = 245;
         tileB = 250;
       } else if (isMountain) {
-        // Rocky mountain gradient
         var mBlend = constrain(mMask, 0, 1);
         tileR = floor(100 + mBlend * 50);
         tileG = floor(95 + mBlend * 50);
@@ -467,232 +478,126 @@ function setup() {
   for (var y = 0; y < GRID_SIZE; y++) {
     terrain[y] = [];
     for (var x = 0; x < GRID_SIZE; x++) {
-      var elevation = 0;
-      elevation += noise(x * terrainScale, y * terrainScale) * 1.0;
-      elevation += noise(x * terrainScale * 2, y * terrainScale * 2) * 0.5 * roughness;
-      elevation += noise(x * terrainScale * 4, y * terrainScale * 4) * 0.25 * roughness;
-      elevation = elevation / (1.0 + 0.5 * roughness + 0.25 * roughness);
+      var nx = x * terrainScale;
+      var ny = y * terrainScale;
+      
+      var elevation = noise(nx, ny) * 0.5;
+      elevation = elevation + noise(nx * 2, ny * 2) * 0.25 * roughness;
+      elevation = elevation + noise(nx * 4, ny * 4) * 0.125 * roughness;
+      
+      var moisture = noise(nx + 100, ny + 100);
       
       terrain[y][x] = {
-        elevation: elevation,
-        isWater: elevation < waterLevel,
-        isForest: elevation >= waterLevel && noise(x * 0.1 + 100, y * 0.1) < forestDensity * elevation,
-        isMountain: elevation > (1 - waterLevel) * mountainMult * 0.4 + 0.4
+        elevation: elevation * mountainMult,
+        moisture: moisture,
+        isWater: elevation < waterLevel
       };
     }
   }
   
   for (var y = 0; y < GRID_SIZE; y++) {
     for (var x = 0; x < GRID_SIZE; x++) {
-      var tile = terrain[y][x];
-      var isoX = (x - y) * TILE_WIDTH / 2 + offsetX;
-      var isoY = (x + y) * TILE_HEIGHT / 2 + offsetY;
-      var heightOffset = tile.isWater ? 0 : tile.elevation * 20 * mountainMult;
+      var cell = terrain[y][x];
       
-      var tileHue, tileSat, tileBright;
+      var isoX = (x - y) * (TILE_WIDTH / 2) + offsetX;
+      var isoY = (x + y) * (TILE_HEIGHT / 2) + offsetY;
       
-      if (tile.isWater) {
-        tileHue = 200 + hueShift;
-        tileSat = 70;
-        tileBright = 35 + tile.elevation * 20;
-      } else if (tile.isMountain) {
-        tileHue = 220 + hueShift;
-        tileSat = 10;
-        tileBright = 40 + tile.elevation * 30;
-      } else if (tile.isForest) {
-        tileHue = 120 + hueShift;
-        tileSat = 50;
-        tileBright = 25 + tile.elevation * 25;
+      var heightOffset = cell.elevation * 30;
+      isoY = isoY - heightOffset;
+      
+      var hue = 0;
+      var sat = 0;
+      var bri = 0;
+      
+      if (cell.isWater) {
+        hue = 210 + hueShift;
+        sat = 60;
+        bri = 40 + cell.elevation * 20;
+      } else if (cell.elevation > 0.7) {
+        hue = 30 + hueShift;
+        sat = 10;
+        bri = 85 + cell.elevation * 15;
+      } else if (cell.moisture > forestDensity) {
+        hue = 120 + hueShift;
+        sat = 50 + cell.moisture * 30;
+        bri = 35 + cell.elevation * 25;
       } else {
-        tileHue = 30 + hueShift;
-        tileSat = 40;
-        tileBright = 25 + tile.elevation * 30;
+        hue = 80 + hueShift;
+        sat = 30 + cell.moisture * 20;
+        bri = 50 + cell.elevation * 30;
       }
       
-      fill(tileHue, tileSat, tileBright);
-      drawIsometricTile(isoX, isoY - heightOffset);
+      hue = hue % 360;
+      if (hue < 0) hue = hue + 360;
       
-      if (heightOffset > 2 && !tile.isWater) {
-        fill(tileHue, tileSat, tileBright * 0.7);
-        drawIsometricSideLeft(isoX, isoY - heightOffset, heightOffset);
-        fill(tileHue, tileSat, tileBright * 0.5);
-        drawIsometricSideRight(isoX, isoY - heightOffset, heightOffset);
-      }
+      fill(hue, sat, bri);
       
-      var landmarkNoise = noise(x * 0.2 + 200, y * 0.2 + 200);
-      if (!tile.isWater && landmarkNoise < landmarkDensity && !tile.isMountain) {
-        drawLandmark(isoX, isoY - heightOffset - 4, floor(landmarkNoise * 100) % 3, hueShift);
-      }
+      beginShape();
+      vertex(isoX, isoY);
+      vertex(isoX + TILE_WIDTH / 2, isoY + TILE_HEIGHT / 2);
+      vertex(isoX, isoY + TILE_HEIGHT);
+      vertex(isoX - TILE_WIDTH / 2, isoY + TILE_HEIGHT / 2);
+      endShape(CLOSE);
       
-      if (x === objectX && y === objectY && !tile.isWater) {
-        drawUserObject(isoX, isoY - heightOffset - 6, objectType, hueShift);
+      if (cell.elevation > 0.3 && !cell.isWater) {
+        fill(hue, sat, bri * 0.7);
+        beginShape();
+        vertex(isoX, isoY + TILE_HEIGHT);
+        vertex(isoX + TILE_WIDTH / 2, isoY + TILE_HEIGHT / 2);
+        vertex(isoX + TILE_WIDTH / 2, isoY + TILE_HEIGHT / 2 + heightOffset * 0.3);
+        vertex(isoX, isoY + TILE_HEIGHT + heightOffset * 0.3);
+        endShape(CLOSE);
       }
     }
   }
   
-  stroke(180, 100, 95);
-  strokeWeight(0.3);
-  for (var i = 0; i <= GRID_SIZE; i++) {
-    var startX = (0 - i) * TILE_WIDTH / 2 + offsetX;
-    var startY = (0 + i) * TILE_HEIGHT / 2 + offsetY;
-    var endX = (GRID_SIZE - i) * TILE_WIDTH / 2 + offsetX;
-    var endY = (GRID_SIZE + i) * TILE_HEIGHT / 2 + offsetY;
-    line(startX, startY, endX, endY);
+  if (terrain[objectY] && terrain[objectY][objectX]) {
+    var objCell = terrain[objectY][objectX];
+    var objIsoX = (objectX - objectY) * (TILE_WIDTH / 2) + offsetX;
+    var objIsoY = (objectX + objectY) * (TILE_HEIGHT / 2) + offsetY - objCell.elevation * 30;
     
-    var startX2 = (i - 0) * TILE_WIDTH / 2 + offsetX;
-    var startY2 = (i + 0) * TILE_HEIGHT / 2 + offsetY;
-    var endX2 = (i - GRID_SIZE) * TILE_WIDTH / 2 + offsetX;
-    var endY2 = (i + GRID_SIZE) * TILE_HEIGHT / 2 + offsetY;
-    line(startX2, startY2, endX2, endY2);
-  }
-  noStroke();
-  
-  fill(0, 0, 10);
-  rect(8, 8, 145, 26, 2);
-  
-  fill(170, 80, 70);
-  textSize(10);
-  textFont('monospace');
-  text('SEED', 14, 26);
-  
-  fill(85, 70, 60);
-  text('DETERMINISTIC', 80, 26);
-}
-
-function drawIsometricTile(x, y) {
-  beginShape();
-  vertex(x, y);
-  vertex(x + TILE_WIDTH / 2, y + TILE_HEIGHT / 2);
-  vertex(x, y + TILE_HEIGHT);
-  vertex(x - TILE_WIDTH / 2, y + TILE_HEIGHT / 2);
-  endShape(CLOSE);
-}
-
-function drawIsometricSideLeft(x, y, h) {
-  beginShape();
-  vertex(x - TILE_WIDTH / 2, y + TILE_HEIGHT / 2);
-  vertex(x, y + TILE_HEIGHT);
-  vertex(x, y + TILE_HEIGHT + h);
-  vertex(x - TILE_WIDTH / 2, y + TILE_HEIGHT / 2 + h);
-  endShape(CLOSE);
-}
-
-function drawIsometricSideRight(x, y, h) {
-  beginShape();
-  vertex(x + TILE_WIDTH / 2, y + TILE_HEIGHT / 2);
-  vertex(x, y + TILE_HEIGHT);
-  vertex(x, y + TILE_HEIGHT + h);
-  vertex(x + TILE_WIDTH / 2, y + TILE_HEIGHT / 2 + h);
-  endShape(CLOSE);
-}
-
-function drawLandmark(x, y, type, hueShift) {
-  push();
-  translate(x, y);
-  
-  if (type === 0) {
-    fill(120 + hueShift, 60, 25);
-    triangle(0, -12, -4, 0, 4, 0);
-    fill(30 + hueShift, 50, 30);
-    rect(-1, 0, 2, 4);
-  } else if (type === 1) {
-    fill(0, 0, 50);
-    ellipse(0, 0, 6, 4);
-    fill(0, 0, 60);
-    ellipse(-1, -1, 4, 3);
-  } else {
-    fill(100 + hueShift, 50, 35);
-    ellipse(0, 0, 8, 5);
-    fill(110 + hueShift, 55, 40);
-    ellipse(-2, -1, 5, 4);
-  }
-  
-  pop();
-}
-
-function drawUserObject(x, y, type, hueShift) {
-  push();
-  translate(x, y);
-  
-  fill(170, 80, 50, 0.3);
-  ellipse(0, 4, 20, 10);
-  
-  if (type === 0) {
-    fill(50 + hueShift, 60, 70);
-    rect(-4, -16, 8, 20);
-    fill(50 + hueShift, 70, 80);
-    triangle(0, -24, -6, -16, 6, -16);
-    fill(50, 90, 90);
-    rect(-2, -12, 4, 4);
-  } else if (type === 1) {
-    fill(280, 70, 70);
-    beginShape();
-    vertex(0, -20);
-    vertex(-5, -5);
-    vertex(-3, 4);
-    vertex(3, 4);
-    vertex(5, -5);
-    endShape(CLOSE);
-    fill(280, 60, 85);
-    triangle(0, -20, -3, -5, 2, -8);
-  } else if (type === 2) {
-    fill(40, 30, 60);
-    rect(-6, -12, 12, 16);
-    fill(40, 25, 70);
-    rect(-8, -14, 16, 4);
-    rect(-8, 2, 16, 4);
-    fill(170, 80, 50);
-    ellipse(0, -4, 6, 6);
-  } else if (type === 3) {
-    fill(30, 40, 40);
-    rect(-1, -24, 2, 28);
-    fill(0, 80, 60);
-    beginShape();
-    vertex(1, -24);
-    vertex(12, -20);
-    vertex(12, -12);
-    vertex(1, -16);
-    endShape(CLOSE);
-  } else {
-    fill(60, 20, 50);
-    rect(-5, -8, 10, 12);
-    fill(170, 90, 80);
-    ellipse(0, -12, 8, 8);
-    stroke(170, 80, 70);
-    strokeWeight(1);
-    for (var i = 0; i < 8; i++) {
-      var angle = (i / 8) * TWO_PI;
-      line(
-        cos(angle) * 6, -12 + sin(angle) * 6,
-        cos(angle) * 12, -12 + sin(angle) * 12
-      );
-    }
+    fill(50, 80, 95);
+    ellipse(objIsoX, objIsoY - 5, 8, 12);
+    
+    stroke(45, 70, 40);
+    strokeWeight(2);
+    line(objIsoX, objIsoY - 5, objIsoX, objIsoY + 3);
     noStroke();
   }
-  
-  pop();
 }
 `;
+
+// ============================================
+// WORLD PARAMS INTERFACE
+// ============================================
 
 export interface WorldParams {
   seed: number;
   vars: number[];
 }
 
-export const DEFAULT_PARAMS: WorldParams = {
-  seed: 42,
-  vars: [50, 50, 50, 50, 30, 40, 50, 50, 50, 20]
-};
+// ============================================
+// VAR LABELS FOR UI
+// ============================================
 
-export const VAR_LABELS = [
+export const VAR_LABELS: string[] = [
   'Object Type',
   'Object X',
   'Object Y',
-  'Terrain Scale',
+  'Continent Scale',
   'Water Level',
   'Forest Density',
   'Mountain Height',
   'Path Density',
-  'Roughness',
+  'Terrain Roughness',
   'Mountain Density'
 ];
+
+// ============================================
+// DEFAULT PARAMETERS
+// ============================================
+
+export const DEFAULT_PARAMS: WorldParams = {
+  seed: 12345,
+  vars: [50, 50, 50, 50, 50, 50, 50, 50, 50, 50]
+};
