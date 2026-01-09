@@ -1,16 +1,19 @@
 // World A Map - 10×10 Grid Visualization
 // Shows all lands in the shared continent with ownership status
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { PlayerLand, WORLD_A_GRID_WIDTH, WORLD_A_GRID_HEIGHT } from '@/lib/multiplayer/types';
-import { getLandsInArea } from '@/lib/multiplayer/landRegistry';
+import { getLandsInArea, createLand, getLandByPlayerId } from '@/lib/multiplayer/landRegistry';
 import { cn } from '@/lib/utils';
-import { MapPin, User, Eye, Loader2 } from 'lucide-react';
+import { MapPin, User, Eye, Loader2, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
 interface WorldAMapProps {
   currentLand: PlayerLand | null;
   playerId: string | null;
   onVisitLand?: (x: number, y: number) => void;
+  onLandClaimed?: (land: PlayerLand) => void;
   className?: string;
 }
 
@@ -18,10 +21,12 @@ export function WorldAMap({
   currentLand, 
   playerId,
   onVisitLand,
+  onLandClaimed,
   className 
 }: WorldAMapProps) {
   const [allLands, setAllLands] = useState<PlayerLand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isClaiming, setIsClaiming] = useState(false);
   const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number } | null>(null);
 
   // Fetch all lands in World A on mount
@@ -34,6 +39,12 @@ export function WorldAMap({
     }
     fetchLands();
   }, [currentLand]); // Refetch when current land changes
+
+  // Check if player already owns a land
+  const playerOwnedLand = useMemo(() => {
+    if (!playerId) return null;
+    return allLands.find(land => land.player_id === playerId) || null;
+  }, [allLands, playerId]);
 
   // Build a map of position -> land for quick lookup
   const landMap = useMemo(() => {
@@ -59,6 +70,42 @@ export function WorldAMap({
     return cells;
   }, [landMap]);
 
+  // Claim an empty cell
+  const handleClaimLand = useCallback(async (x: number, y: number) => {
+    if (!playerId) {
+      toast.error('You must be logged in to claim land');
+      return;
+    }
+
+    // Double-check player doesn't already own land
+    const existingLand = await getLandByPlayerId(playerId);
+    if (existingLand) {
+      toast.error('You already own a land! Each player can only claim one.');
+      return;
+    }
+
+    setIsClaiming(true);
+    try {
+      const randomSeed = Math.floor(Math.random() * 100000);
+      const randomVars = Array(10).fill(0).map(() => Math.floor(Math.random() * 100));
+      
+      const newLand = await createLand(playerId, randomSeed, randomVars, x, y);
+      
+      if (newLand) {
+        toast.success(`Land claimed at (${x}, ${y})!`);
+        setAllLands(prev => [...prev, newLand]);
+        onLandClaimed?.(newLand);
+      } else {
+        toast.error('Failed to claim land. Position may already be taken.');
+      }
+    } catch (error) {
+      console.error('[WorldAMap] Claim error:', error);
+      toast.error('Failed to claim land');
+    } finally {
+      setIsClaiming(false);
+    }
+  }, [playerId, onLandClaimed]);
+
   const handleCellClick = (x: number, y: number, land: PlayerLand | null) => {
     if (land && onVisitLand) {
       onVisitLand(x, y);
@@ -72,6 +119,9 @@ export function WorldAMap({
     
     return { isCurrent, isOwnLand, isOwned };
   };
+
+  // Check if user can claim (logged in + no existing land)
+  const canClaim = !!playerId && !playerOwnedLand;
 
   if (isLoading) {
     return (
@@ -101,6 +151,21 @@ export function WorldAMap({
         )}
       </div>
 
+      {/* Ownership status */}
+      {playerId && (
+        <div className="text-xs p-2 rounded bg-secondary/50">
+          {playerOwnedLand ? (
+            <span className="text-primary">
+              Your land: <span className="font-mono">({playerOwnedLand.pos_x}, {playerOwnedLand.pos_y})</span>
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              Click an empty cell to claim your land
+            </span>
+          )}
+        </div>
+      )}
+
       {/* 10x10 Grid */}
       <div 
         className="grid gap-[2px] bg-border p-2 rounded-lg"
@@ -111,29 +176,41 @@ export function WorldAMap({
         {grid.map((cell) => {
           const { isCurrent, isOwnLand, isOwned } = getCellStatus(cell);
           const isHovered = hoveredCell?.x === cell.x && hoveredCell?.y === cell.y;
+          const canClaimThis = canClaim && !isOwned;
           
           return (
             <button
               key={`${cell.x},${cell.y}`}
-              onClick={() => handleCellClick(cell.x, cell.y, cell.land)}
+              onClick={() => {
+                if (canClaimThis) {
+                  handleClaimLand(cell.x, cell.y);
+                } else {
+                  handleCellClick(cell.x, cell.y, cell.land);
+                }
+              }}
               onMouseEnter={() => setHoveredCell({ x: cell.x, y: cell.y })}
               onMouseLeave={() => setHoveredCell(null)}
-              disabled={!isOwned}
+              disabled={(!isOwned && !canClaimThis) || isClaiming}
               className={cn(
                 "relative w-6 h-6 rounded-sm transition-all duration-150",
                 "flex items-center justify-center text-[8px] font-mono",
                 // Base states with solid visible colors
-                !isOwned && "bg-muted/60 border border-border/50 cursor-not-allowed",
+                !isOwned && !canClaimThis && "bg-muted/60 border border-border/50 cursor-not-allowed",
+                !isOwned && canClaimThis && "bg-accent/20 border border-accent/50 hover:bg-accent/40 cursor-pointer",
                 isOwned && !isCurrent && !isOwnLand && "bg-secondary border border-border hover:bg-secondary/80 cursor-pointer",
                 isOwnLand && !isCurrent && "bg-primary/40 border border-primary/60 hover:bg-primary/50 cursor-pointer",
                 isCurrent && "bg-accent border-2 border-accent-foreground",
                 // Hover highlight
-                isHovered && isOwned && "scale-110 z-10 shadow-lg"
+                isHovered && (isOwned || canClaimThis) && "scale-110 z-10 shadow-lg",
+                // Claiming state
+                isClaiming && "opacity-50"
               )}
               title={
                 isOwned 
                   ? `Land (${cell.x}, ${cell.y}) - ${isOwnLand ? 'Your land' : 'Owned'}`
-                  : `Empty (${cell.x}, ${cell.y})`
+                  : canClaimThis
+                    ? `Claim (${cell.x}, ${cell.y})`
+                    : `Empty (${cell.x}, ${cell.y})`
               }
             >
               {isCurrent && (
@@ -144,6 +221,9 @@ export function WorldAMap({
               )}
               {!isCurrent && !isOwnLand && isOwned && isHovered && (
                 <Eye className="w-2.5 h-2.5 text-foreground" />
+              )}
+              {!isOwned && canClaimThis && isHovered && (
+                <Plus className="w-3 h-3 text-accent-foreground" />
               )}
             </button>
           );
@@ -164,6 +244,12 @@ export function WorldAMap({
           <div className="w-3 h-3 rounded-sm bg-secondary border border-border" />
           <span>Owned</span>
         </div>
+        {canClaim && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-sm bg-accent/20 border border-accent/50" />
+            <span>Claimable</span>
+          </div>
+        )}
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-sm bg-muted/60 border border-border/50" />
           <span>Empty</span>
@@ -177,9 +263,11 @@ export function WorldAMap({
             <span className="text-muted-foreground">
               Position: <span className="font-mono text-foreground">({hoveredCell.x}, {hoveredCell.y})</span>
             </span>
-            {landMap.get(`${hoveredCell.x},${hoveredCell.y}`) && (
+            {landMap.get(`${hoveredCell.x},${hoveredCell.y}`) ? (
               <span className="text-primary">Click to visit</span>
-            )}
+            ) : canClaim ? (
+              <span className="text-accent">Click to claim</span>
+            ) : null}
           </div>
           {landMap.get(`${hoveredCell.x},${hoveredCell.y}`) && (
             <div className="mt-1 text-muted-foreground">
