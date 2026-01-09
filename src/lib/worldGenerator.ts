@@ -19,66 +19,68 @@ function setup() {
   
   var GRID_SIZE = 64;
   
-  var continentScale = map(VAR[3], 0, 100, 0.015, 0.045);
-  var waterThreshold = map(VAR[4], 0, 100, 0.28, 0.48);
-  var vegetationDensity = map(VAR[5], 0, 100, 0.3, 0.95);
-  var mountainExponent = map(VAR[6], 0, 100, 1.4, 1.9);
+  var continentScale = map(VAR[3], 0, 100, 0.02, 0.06);
+  var waterThreshold = map(VAR[4], 0, 100, 0.25, 0.50);
+  var forestDensity = map(VAR[5], 0, 100, 0.15, 0.85);
+  var mountainScale = map(VAR[6], 0, 100, 0.6, 1.8);
   var pathDensityVal = map(VAR[7], 0, 100, 0.0, 1.0);
-  var terrainRoughness = map(VAR[8], 0, 100, 0.2, 0.7);
-  var landmarkDensity = map(VAR[9], 0, 100, 0.04, 0.25);
+  var terrainRoughness = map(VAR[8], 0, 100, 0.15, 0.55);
+  var landmarkDensity = map(VAR[9], 0, 100, 0.02, 0.35);
   
   var objX = floor(map(VAR[1], 0, 100, 4, GRID_SIZE - 4));
   var objY = floor(map(VAR[2], 0, 100, 4, GRID_SIZE - 4));
   
   var pathPoints = [];
-  var numPaths = 2 + floor(pathDensityVal * 4);
-  var pathWidth = 1.3;
+  var numPaths = floor(1 + pathDensityVal * 5);
+  var pathWidth = 1.2 + pathDensityVal * 0.3;
   
-  for (var p = 0; p < numPaths; p++) {
-    var points = [];
-    var isHoriz = noise(p * 100) > 0.4;
-    var px = isHoriz ? 0 : floor(noise(p * 200) * (GRID_SIZE - 10)) + 5;
-    var py = isHoriz ? floor(noise(p * 300) * (GRID_SIZE - 10)) + 5 : 0;
-    var baseAngle = isHoriz ? 0 : PI / 2;
-    var angle = baseAngle + (noise(p * 400) - 0.5) * 0.4;
-    var curviness = 0.5 + noise(p * 500) * 0.6;
-    
-    for (var s = 0; s < GRID_SIZE + 20; s++) {
-      points.push({x: px, y: py});
-      var flowNoise = noise(px * 0.05, py * 0.05);
-      var waveNoise = noise(px * 0.1, py * 0.1 + 100);
-      var combined = flowNoise * 0.6 + waveNoise * 0.4;
-      var angleOffset = (combined - 0.5) * curviness * 1.5;
-      var targetAngle = baseAngle + angleOffset;
-      angle = angle * 0.75 + targetAngle * 0.25;
-      px = px + cos(angle) * 0.7;
-      py = py + sin(angle) * 0.7;
+  if (pathDensityVal > 0.05) {
+    for (var p = 0; p < numPaths; p++) {
+      var points = [];
+      var isHoriz = noise(p * 100 + seed * 0.01) > 0.4;
+      var px = isHoriz ? 0 : floor(noise(p * 200 + seed * 0.01) * (GRID_SIZE - 10)) + 5;
+      var py = isHoriz ? floor(noise(p * 300 + seed * 0.01) * (GRID_SIZE - 10)) + 5 : 0;
+      var baseAngle = isHoriz ? 0 : PI / 2;
+      var angle = baseAngle + (noise(p * 400 + seed * 0.01) - 0.5) * 0.4;
+      var curviness = 0.5 + noise(p * 500 + seed * 0.01) * 0.6;
       
-      if (pathDensityVal > 0.3 && s > 5 && s < GRID_SIZE && noise(px * 0.3, py * 0.3 + p) < 0.04) {
-        var branchPts = [];
-        var bx = px;
-        var by = py;
-        var bAngle = angle + (noise(bx, by) > 0.5 ? 0.6 : -0.6);
-        for (var b = 0; b < 12 + floor(noise(bx, by + 100) * 18); b++) {
-          branchPts.push({x: bx, y: by});
-          var bn = noise(bx * 0.08, by * 0.08 + 300);
-          bAngle = bAngle * 0.82 + (bAngle + (bn - 0.5) * 0.7) * 0.18;
-          bx = bx + cos(bAngle) * 0.65;
-          by = by + sin(bAngle) * 0.65;
-          if (bx < 0 || bx >= GRID_SIZE || by < 0 || by >= GRID_SIZE) {
-            break;
+      for (var s = 0; s < GRID_SIZE + 20; s++) {
+        points.push({x: px, y: py});
+        var flowNoise = noise(px * 0.05, py * 0.05);
+        var waveNoise = noise(px * 0.1, py * 0.1 + 100);
+        var combined = flowNoise * 0.6 + waveNoise * 0.4;
+        var angleOffset = (combined - 0.5) * curviness * 1.5;
+        var targetAngle = baseAngle + angleOffset;
+        angle = angle * 0.75 + targetAngle * 0.25;
+        px = px + cos(angle) * 0.7;
+        py = py + sin(angle) * 0.7;
+        
+        if (pathDensityVal > 0.4 && s > 5 && s < GRID_SIZE && noise(px * 0.3, py * 0.3 + p) < 0.05) {
+          var branchPts = [];
+          var bx = px;
+          var by = py;
+          var bAngle = angle + (noise(bx, by) > 0.5 ? 0.6 : -0.6);
+          for (var b = 0; b < 12 + floor(noise(bx, by + 100) * 18); b++) {
+            branchPts.push({x: bx, y: by});
+            var bn = noise(bx * 0.08, by * 0.08 + 300);
+            bAngle = bAngle * 0.82 + (bAngle + (bn - 0.5) * 0.7) * 0.18;
+            bx = bx + cos(bAngle) * 0.65;
+            by = by + sin(bAngle) * 0.65;
+            if (bx < 0 || bx >= GRID_SIZE || by < 0 || by >= GRID_SIZE) {
+              break;
+            }
+          }
+          if (branchPts.length > 4) {
+            pathPoints.push(branchPts);
           }
         }
-        if (branchPts.length > 4) {
-          pathPoints.push(branchPts);
+        
+        if (px < -2 || px >= GRID_SIZE + 2 || py < -2 || py >= GRID_SIZE + 2) {
+          break;
         }
       }
-      
-      if (px < -2 || px >= GRID_SIZE + 2 || py < -2 || py >= GRID_SIZE + 2) {
-        break;
-      }
+      pathPoints.push(points);
     }
-    pathPoints.push(points);
   }
   
   for (var gy = 0; gy < GRID_SIZE; gy++) {
@@ -87,43 +89,54 @@ function setup() {
       var continental = noise(gx * continentScale, gy * continentScale);
       var hills = noise(gx * continentScale * 2.5 + 500, gy * continentScale * 2.5);
       hills = hills * terrainRoughness;
-      var detail = noise(gx * continentScale * 6 + 1000, gy * continentScale * 6);
-      detail = detail * terrainRoughness * 0.4;
-      var ridgeNoise = noise(gx * continentScale * 3 + 2000, gy * continentScale * 3);
+      var detail = noise(gx * continentScale * 5 + 1000, gy * continentScale * 5);
+      detail = detail * terrainRoughness * 0.5;
+      var ridgeNoise = noise(gx * continentScale * 3.5 + 2000, gy * continentScale * 3.5);
       var ridged = 1.0 - abs(ridgeNoise - 0.5) * 2;
-      ridged = ridged * ridged;
+      ridged = ridged * ridged * mountainScale * 0.3;
       
-      var rawElev = continental * 0.55 + hills * 0.25 + detail * 0.12 + ridged * 0.08;
-      var shapedElev = pow(rawElev, mountainExponent);
-      shapedElev = constrain(shapedElev, 0, 1);
-      var redChannel = floor(shapedElev * 255);
+      var rawElev = continental * 0.5 + hills * 0.25 + detail * 0.15 + ridged * 0.1;
+      rawElev = rawElev * (0.7 + mountainScale * 0.3);
+      rawElev = constrain(rawElev, 0, 1);
+      var redChannel = floor(rawElev * 255);
       
       var baseMoisture = noise(gx * 0.055 + 3000, gy * 0.055);
-      var moistDetail = noise(gx * 0.12 + 3500, gy * 0.12) * 0.35;
-      var moisture = baseMoisture * 0.7 + moistDetail * 0.3;
-      var elevInfluence = max(0, shapedElev - waterThreshold) / (1 - waterThreshold);
-      moisture = moisture * (1 - elevInfluence * 0.4);
-      if (shapedElev < waterThreshold + 0.08) {
-        var waterProx = 1 - (shapedElev / (waterThreshold + 0.08));
-        moisture = moisture + waterProx * 0.25;
+      var moistDetail = noise(gx * 0.12 + 3500, gy * 0.12);
+      var moisture = baseMoisture * 0.65 + moistDetail * 0.35;
+      var elevInfluence = max(0, rawElev - waterThreshold) / max(0.01, 1 - waterThreshold);
+      moisture = moisture * (1 - elevInfluence * 0.35);
+      if (rawElev < waterThreshold + 0.1) {
+        var waterProx = 1 - (rawElev / (waterThreshold + 0.1));
+        moisture = moisture + waterProx * 0.2;
       }
       moisture = constrain(moisture, 0, 1);
+      
+      var forestChance = noise(gx * 0.08 + 7000, gy * 0.08);
+      var hasForest = forestChance < forestDensity && rawElev > waterThreshold && rawElev < 0.7 && moisture > 0.3;
+      if (hasForest) {
+        moisture = moisture * 0.7 + 0.3;
+      }
       var greenChannel = floor(moisture * 255);
       
+      var isUnderwater = rawElev < waterThreshold;
       var biomeVal = 0;
-      if (shapedElev < waterThreshold) {
-        var waterDepth = shapedElev / waterThreshold;
-        biomeVal = floor(waterDepth * 80);
+      if (isUnderwater) {
+        var waterDepth = rawElev / max(0.01, waterThreshold);
+        biomeVal = floor(waterDepth * 60);
+      } else if (hasForest) {
+        biomeVal = floor(100 + moisture * 50);
+      } else if (rawElev > 0.7) {
+        var peakBlend = (rawElev - 0.7) / 0.3;
+        biomeVal = floor(180 + peakBlend * 75);
       } else {
-        var landElev = (shapedElev - waterThreshold) / (1 - waterThreshold);
-        var biomeBlend = landElev * 0.7 + (1 - moisture) * 0.3;
-        biomeVal = floor(81 + biomeBlend * 174);
+        var landElev = (rawElev - waterThreshold) / max(0.01, 0.7 - waterThreshold);
+        biomeVal = floor(61 + landElev * 80 + (1 - moisture) * 40);
       }
       var blueChannel = constrain(biomeVal, 0, 255);
       
       var alphaChannel = 255;
       
-      var minPathDist = 9999;
+      var minPathDist = 9999.0;
       for (var pi = 0; pi < pathPoints.length; pi++) {
         var pts = pathPoints[pi];
         for (var pj = 0; pj < pts.length; pj++) {
@@ -137,7 +150,6 @@ function setup() {
       }
       
       var onPath = minPathDist < pathWidth;
-      var isUnderwater = shapedElev < waterThreshold;
       
       if (onPath) {
         if (isUnderwater) {
@@ -149,20 +161,20 @@ function setup() {
         }
       }
       
-      var riverNoise = noise(gx * 0.035 + 5000, gy * 0.035);
-      var isRiverSpot = abs(riverNoise - 0.5) < 0.025;
-      var validRiverElev = shapedElev > waterThreshold && shapedElev < waterThreshold + 0.25;
+      var riverNoise = noise(gx * 0.04 + 5000, gy * 0.04);
+      var isRiverSpot = abs(riverNoise - 0.5) < 0.02;
+      var validRiverElev = rawElev > waterThreshold && rawElev < waterThreshold + 0.2;
       
       if (!onPath && isRiverSpot && validRiverElev) {
-        var riverInt = 1 - abs(riverNoise - 0.5) / 0.025;
+        var riverInt = 1 - abs(riverNoise - 0.5) / 0.02;
         alphaChannel = 245 + floor(riverInt * 4);
       }
       
-      var lmNoise = noise(gx * 0.07 + 4000, gy * 0.07 + 4000);
-      var lmNoise2 = noise(gx * 0.14 + 4500, gy * 0.14 + 4500);
-      var combinedLm = lmNoise * 0.6 + lmNoise2 * 0.4;
+      var lmNoise = noise(gx * 0.1 + 4000, gy * 0.1 + 4000);
+      var lmNoise2 = noise(gx * 0.2 + 4500, gy * 0.2 + 4500);
+      var combinedLm = lmNoise * 0.5 + lmNoise2 * 0.5;
       
-      var validLmTerrain = !isUnderwater && shapedElev < 0.75 && !onPath && alphaChannel === 255;
+      var validLmTerrain = !isUnderwater && rawElev < 0.8 && !onPath && alphaChannel === 255;
       if (validLmTerrain && combinedLm < landmarkDensity) {
         var typeNoise = noise(gx * 0.25 + 6000, gy * 0.25 + 6000);
         var lmType = floor(typeNoise * 5);
