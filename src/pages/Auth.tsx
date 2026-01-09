@@ -103,7 +103,7 @@ export default function Auth() {
           }
         } else {
           toast({
-            title: 'Welcome to World A!',
+            title: 'Welcome to Frontierra!',
             description: 'Your account has been created'
           });
           navigate('/', { replace: true });
@@ -129,11 +129,11 @@ export default function Auth() {
         <div className="px-6 py-4 flex items-center gap-3">
           <Globe className="w-6 h-6 text-primary" />
           <div>
-            <h1 className="font-display text-lg font-bold text-foreground">
-              World A
+            <h1 className="font-display text-lg font-bold text-foreground glow-text">
+              Frontierra
             </h1>
             <p className="text-xs text-muted-foreground">
-              Deterministic Shared Continent
+              Claim Your Land
             </p>
           </div>
         </div>
@@ -185,8 +185,8 @@ export default function Auth() {
                     setEmail(e.target.value);
                     if (errors.email) setErrors(prev => ({ ...prev, email: undefined }));
                   }}
-                  placeholder="explorer@world-a.com"
-                  className={`bg-secondary border-border ${errors.email ? 'border-destructive' : ''}`}
+                   placeholder="explorer@frontierra.world"
+                   className={`bg-secondary border-border ${errors.email ? 'border-destructive' : ''}`}
                   disabled={isSubmitting}
                 />
                 {errors.email && (
@@ -227,9 +227,9 @@ export default function Auth() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <>
-                    {mode === 'login' ? 'Enter World A' : 'Claim Your Land'}
-                    <ArrowRight className="w-4 h-4" />
-                  </>
+                    {mode === 'login' ? 'Enter Frontierra' : 'Claim Your Land'}
+                     <ArrowRight className="w-4 h-4" />
+                   </>
                 )}
               </Button>
             </form>
