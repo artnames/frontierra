@@ -275,44 +275,56 @@ function parseRGBAPixels(
 }
 
 // Classify tile type from RGB values
+// FUZZY MATCHING: P5.js anti-aliasing can shift RGB values slightly
+// Use wider ranges and distance-based matching for robustness
 function classifyTileFromRGB(r: number, g: number, b: number): TileType {
-  // Object: bright yellow (255, 220, 60)
-  if (r > 240 && g > 200 && b < 100) {
+  // Object: bright yellow (255, 220, 60) - tight match for landmarks
+  if (r > 230 && g > 180 && b < 120) {
     return TileType.OBJECT;
   }
   
-  // Bridge: dark brown (120, 80, 50)
-  if (r > 100 && r < 140 && g > 60 && g < 100 && b > 30 && b < 70) {
+  // Bridge: dark brown (120, 80, 50) - FUZZY: allow ±25 variance
+  // Check if color is close to target brown
+  const bridgeDist = Math.abs(r - 120) + Math.abs(g - 80) + Math.abs(b - 50);
+  if (bridgeDist < 75 && r > 90 && r < 150 && g > 50 && g < 110 && b > 20 && b < 80) {
     return TileType.BRIDGE;
   }
   
-  // Path: light brown (180, 150, 100)
-  if (r > 160 && r < 200 && g > 130 && g < 170 && b > 80 && b < 120) {
+  // Path: light brown (180, 150, 100) - FUZZY: allow ±30 variance for anti-aliasing
+  const pathDist = Math.abs(r - 180) + Math.abs(g - 150) + Math.abs(b - 100);
+  if (pathDist < 90 && r > 145 && r < 215 && g > 115 && g < 185 && b > 65 && b < 135) {
     return TileType.PATH;
   }
   
-  // River: cyan-ish (70, 160, 180)
-  if (r < 100 && g > 130 && b > 150) {
+  // River: cyan-ish (70, 160, 180) - FUZZY: wider range
+  const riverDist = Math.abs(r - 70) + Math.abs(g - 160) + Math.abs(b - 180);
+  if (riverDist < 100 && r < 120 && g > 110 && b > 130) {
     return TileType.RIVER;
   }
   
-  // Water: blue tones (low R, high B)
-  if (r < 60 && b > 100) {
+  // Snow cap: very bright, near white (240, 245, 250)
+  if (r > 220 && g > 220 && b > 220) {
+    return TileType.MOUNTAIN; // Snow caps are mountain tiles
+  }
+  
+  // Water: blue tones (low R, high B) - FUZZY: wider range
+  if (r < 80 && b > 80 && b > g * 0.8) {
     return TileType.WATER;
   }
   
-  // Forest: green tones (low R, high G, low B)
-  if (r < 90 && g > 80 && b < 80) {
+  // Forest: green tones (low R, high G, lower B) - FUZZY
+  if (r < 110 && g > 70 && g > r && g > b * 0.9 && b < 100) {
     return TileType.FOREST;
   }
   
-  // Mountain: gray tones (R~G~B, all > 100)
-  if (r > 100 && g > 90 && b > 85 && Math.abs(r - g) < 30 && Math.abs(g - b) < 30) {
+  // Mountain: gray tones (R~G~B, all > 90) - check for grayness
+  const grayness = Math.abs(r - g) + Math.abs(g - b) + Math.abs(r - b);
+  if (r > 90 && g > 85 && b > 80 && grayness < 60) {
     return TileType.MOUNTAIN;
   }
   
-  // Ground: tan/earthy (high R, medium G, low B)
-  if (r > 120 && g > 100 && b < 130) {
+  // Ground: tan/earthy (high R, medium G, lower B) - FUZZY
+  if (r > 100 && g > 80 && r > b && g > b * 0.7) {
     return TileType.GROUND;
   }
   

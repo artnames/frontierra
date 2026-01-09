@@ -4,6 +4,7 @@
 
 import { NexArtWorldGrid, TileType, GridCell, generateNexArtWorld, verifyNexArtWorld } from './nexartWorld';
 import { WorldParams } from './worldGenerator';
+import { WORLD_HEIGHT_SCALE, getWaterLevel } from './worldConstants';
 
 // ============================================
 // WORLD DATA INTERFACES (3D Projection of NexArt)
@@ -98,10 +99,9 @@ function applyElevationCurve(rawElevation: number): number {
 }
 
 function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
-  // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
-  const waterLevel = (grid.vars[4] ?? 50) / 100 * 0.50 + 0.15;
-  // Increased height scale - safe because low elevations are compressed
-  const heightScale = 35;
+  // Use shared constants for synchronized scales
+  const waterLevel = getWaterLevel(grid.vars);
+  const heightScale = WORLD_HEIGHT_SCALE;
   
   // Convert cells to terrain - ALL data comes from NexArt pixels
   // RGB = Tile Type (categorical), Alpha = Elevation (continuous 0-1)
@@ -251,8 +251,8 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
     return 0;
   }
   
-  // Match the increased height scale from nexartGridToWorldData
-  const heightScale = 35;
+  // Use shared height scale constant
+  const heightScale = WORLD_HEIGHT_SCALE;
   const gridX = Math.floor(worldX);
   const gridY = Math.floor(worldY);
   
@@ -260,22 +260,28 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
     return 0;
   }
   
-  const cell = world.terrain[gridY]?.[gridX];
+  // COORDINATE FIX: Flip Y-axis to match P5.js [y][x] grid with Three.js PlaneGeometry
+  // P5.js draws from top-left, Three.js PlaneGeometry maps from bottom-left
+  const flippedY = world.gridSize - 1 - gridY;
+  
+  const cell = world.terrain[flippedY]?.[gridX];
   if (cell?.type === 'bridge') {
-    // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
-    const waterLevel = (world.vars[4] ?? 50) / 100 * 0.50 + 0.15;
+    const waterLevel = getWaterLevel(world.vars);
     return waterLevel * heightScale + 0.5;
   }
   
   // Bilinear interpolation of ALREADY CURVED elevation
   // (terrain cells store the shaped elevation from nexartGridToWorldData)
+  // Use flipped Y for correct coordinate mapping
   const fx = worldX - gridX;
   const fy = worldY - gridY;
   
-  const e00 = world.terrain[gridY][gridX].elevation;
-  const e10 = world.terrain[gridY][gridX + 1].elevation;
-  const e01 = world.terrain[gridY + 1][gridX].elevation;
-  const e11 = world.terrain[gridY + 1][gridX + 1].elevation;
+  const flippedY1 = Math.max(0, flippedY - 1);
+  
+  const e00 = world.terrain[flippedY]?.[gridX]?.elevation ?? 0;
+  const e10 = world.terrain[flippedY]?.[gridX + 1]?.elevation ?? 0;
+  const e01 = world.terrain[flippedY1]?.[gridX]?.elevation ?? 0;
+  const e11 = world.terrain[flippedY1]?.[gridX + 1]?.elevation ?? 0;
   
   const e0 = e00 * (1 - fx) + e10 * fx;
   const e1 = e01 * (1 - fx) + e11 * fx;
