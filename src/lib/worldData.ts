@@ -64,10 +64,44 @@ function tileTypeToString(type: TileType): TerrainCell['type'] {
   }
 }
 
+// ============================================
+// PERCEPTUAL ELEVATION CURVE
+// Transforms linear Alpha (0-1) into perceptually-shaped elevation
+// Deterministic, preserves ordering, no external data
+// ============================================
+
+function applyElevationCurve(rawElevation: number): number {
+  // Non-linear curve that:
+  // - Compresses low elevations (wide flat plains)
+  // - Smooth ramps at mid elevations (rolling hills)
+  // - Amplifies high elevations (dramatic peaks)
+  
+  // Use a piecewise curve for natural geological feel
+  const e = rawElevation;
+  
+  if (e < 0.3) {
+    // Low elevation: compress significantly for flat plains
+    // Maps 0-0.3 → 0-0.15 (half the range)
+    return e * 0.5;
+  } else if (e < 0.6) {
+    // Mid elevation: gentle rolling hills
+    // Maps 0.3-0.6 → 0.15-0.35 (smooth transition)
+    const t = (e - 0.3) / 0.3;
+    return 0.15 + t * t * 0.2;
+  } else {
+    // High elevation: exponential amplification for dramatic peaks
+    // Maps 0.6-1.0 → 0.35-1.0 (expanded range)
+    const t = (e - 0.6) / 0.4;
+    // Smooth exponential curve for mountain slopes
+    return 0.35 + Math.pow(t, 1.5) * 0.65;
+  }
+}
+
 function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
   // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
   const waterLevel = (grid.vars[4] ?? 50) / 100 * 0.50 + 0.15;
-  const heightScale = 25; // Increased for more dramatic terrain
+  // Increased height scale - safe because low elevations are compressed
+  const heightScale = 35;
   
   // Convert cells to terrain - ALL data comes from NexArt pixels
   // RGB = Tile Type (categorical), Alpha = Elevation (continuous 0-1)
@@ -75,6 +109,9 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
     row.map((cell: GridCell) => {
       // Direct elevation from Alpha channel (continuous 0-1)
       const rawElevation = cell.elevation;
+      
+      // Apply perceptual curve for more natural terrain feel
+      const shapedElevation = applyElevationCurve(rawElevation);
       
       // Determine type from RGB classification first, then elevation
       let type: TerrainCell['type'];
@@ -101,7 +138,7 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
       return {
         x: cell.x,
         y: cell.y,
-        elevation: rawElevation,
+        elevation: shapedElevation, // Use curved elevation
         moisture: cell.g / 255, // Derive from green channel
         type,
         hasRiver: cell.isRiver,
@@ -111,9 +148,10 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
     })
   );
   
-  // Calculate object elevation from continuous terrain
+  // Calculate object elevation from curved terrain
   const objCell = grid.cells[grid.plantedObjectY]?.[grid.plantedObjectX];
-  const objElevation = (objCell?.elevation ?? 0.3) * heightScale;
+  const objRawElev = objCell?.elevation ?? 0.3;
+  const objElevation = applyElevationCurve(objRawElev) * heightScale;
   
   // Calculate spawn rotation
   const toCenterX = grid.gridSize / 2 - grid.spawnX;
@@ -121,7 +159,8 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
   const rotationY = Math.atan2(toCenterX, toCenterY);
   
   const spawnCell = grid.cells[grid.spawnY]?.[grid.spawnX];
-  const spawnElevation = (spawnCell?.elevation ?? 0.3) * heightScale;
+  const spawnRawElev = spawnCell?.elevation ?? 0.3;
+  const spawnElevation = applyElevationCurve(spawnRawElev) * heightScale;
   
   const verification = verifyNexArtWorld(grid);
   
@@ -212,7 +251,8 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
     return 0;
   }
   
-  const heightScale = 25;
+  // Match the increased height scale from nexartGridToWorldData
+  const heightScale = 35;
   const gridX = Math.floor(worldX);
   const gridY = Math.floor(worldY);
   
@@ -227,7 +267,8 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
     return waterLevel * heightScale + 0.5;
   }
   
-  // Bilinear interpolation of elevation
+  // Bilinear interpolation of ALREADY CURVED elevation
+  // (terrain cells store the shaped elevation from nexartGridToWorldData)
   const fx = worldX - gridX;
   const fy = worldY - gridY;
   

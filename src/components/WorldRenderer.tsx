@@ -17,8 +17,8 @@ interface TerrainMeshProps {
 export function TerrainMesh({ world }: TerrainMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   
-  // Height scale for converting 0-1 elevation (from Alpha channel) to world units
-  const heightScale = 25;
+  // Height scale matches worldData.ts (increased for dramatic terrain)
+  const heightScale = 35;
   
   const { geometry } = useMemo(() => {
     const size = world.gridSize;
@@ -35,10 +35,10 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
       
       const cell = world.terrain[y]?.[x];
       if (cell) {
-        // Height DIRECTLY from Alpha channel (continuous 0-1)
+        // Height from ALREADY CURVED elevation (stored in terrain cell)
         positions.setY(i, cell.elevation * heightScale);
         
-        // Color derived from tile type (RGB categorical) with elevation-based brightness
+        // Color derived from tile type (RGB categorical) with enhanced shading
         const { r, g, b } = getTileColor(cell.type, cell.elevation, cell.moisture);
         
         colors[i * 3] = r;
@@ -55,81 +55,105 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
   
   return (
     <mesh ref={meshRef} geometry={geometry} position={[world.gridSize / 2, 0, world.gridSize / 2]}>
-      <meshLambertMaterial vertexColors side={THREE.DoubleSide} />
+      <meshStandardMaterial vertexColors side={THREE.DoubleSide} roughness={0.85} metalness={0.05} />
     </mesh>
   );
 }
 
-// Get tile color from categorical type (RGB) with elevation brightness modulation
+// Get tile color from categorical type (RGB) with perceptual shading
+// Uses curved elevation for natural light distribution
 // Color is based on NexArt tile type, not recalculated from elevation
 function getTileColor(
   type: TerrainCell['type'], 
-  elevation: number,
+  elevation: number, // Already curved elevation from worldData
   moisture: number
 ): { r: number; g: number; b: number } {
-  // Brightness based on elevation (from Alpha channel)
-  const brightness = 0.8 + elevation * 0.4;
+  // Enhanced brightness curve - high elevations catch more light
+  // Uses squared elevation for more dramatic high-altitude lighting
+  const baseBrightness = 0.65;
+  const elevationLight = Math.pow(elevation, 0.7) * 0.5;
+  const brightness = baseBrightness + elevationLight;
+  
+  // Ambient occlusion simulation - low areas slightly darker
+  const ao = 0.9 + elevation * 0.1;
   
   switch (type) {
     case 'water':
-      // Blue gradient based on elevation (depth)
-      const depth = elevation;
+      // Water stays dark and flat - minimal elevation influence
+      const depth = Math.max(0, 1 - elevation * 2);
       return {
-        r: (0.12 + depth * 0.08) * brightness,
-        g: (0.24 + depth * 0.16) * brightness,
-        b: (0.45 + depth * 0.10) * brightness
+        r: 0.08 + depth * 0.04,
+        g: 0.18 + depth * 0.06,
+        b: 0.35 + depth * 0.1
       };
       
     case 'forest':
-      // Green with moisture influence
-      const moist = moisture * 0.3;
+      // Darker forests with strong moisture influence
+      // Low-lying forests are darker (canopy shadow effect)
+      const forestDark = 0.7 + elevation * 0.3;
+      const moist = moisture * 0.4;
       return {
-        r: (0.18 + moist * 0.05) * brightness,
-        g: (0.40 + moist * 0.15) * brightness,
-        b: (0.16 + moist * 0.08) * brightness
+        r: (0.12 + moist * 0.02) * forestDark * ao,
+        g: (0.32 + moist * 0.18) * forestDark * ao,
+        b: (0.10 + moist * 0.05) * forestDark * ao
       };
       
     case 'mountain':
-      // Gray/brown rock that lightens with height, snow at peaks
-      const heightFactor = elevation * 0.3;
-      const isSnow = elevation > 0.75;
-      if (isSnow) {
+      // Enhanced mountain shading with dramatic height variation
+      // Low mountains are darker rock, high peaks are bright with snow
+      const isSnow = elevation > 0.65;
+      const isHighSnow = elevation > 0.8;
+      
+      if (isHighSnow) {
+        // Bright snow peaks
         return {
-          r: 0.92 * brightness,
-          g: 0.95 * brightness,
-          b: 0.98 * brightness
+          r: 0.95 * brightness,
+          g: 0.97 * brightness,
+          b: 1.0 * brightness
+        };
+      } else if (isSnow) {
+        // Transitional snow/rock mix
+        const snowMix = (elevation - 0.65) / 0.15;
+        return {
+          r: (0.45 + snowMix * 0.45) * brightness,
+          g: (0.43 + snowMix * 0.50) * brightness,
+          b: (0.42 + snowMix * 0.55) * brightness
         };
       }
+      
+      // Rock with elevation-based shading
+      const rockHeight = elevation * 0.4;
       return {
-        r: (0.40 + heightFactor) * brightness,
-        g: (0.38 + heightFactor) * brightness,
-        b: (0.36 + heightFactor) * brightness
+        r: (0.32 + rockHeight) * brightness * ao,
+        g: (0.30 + rockHeight) * brightness * ao,
+        b: (0.28 + rockHeight) * brightness * ao
       };
       
     case 'path':
-      // Light brown
+      // Paths with subtle elevation lighting
       return {
-        r: 0.65 * brightness,
-        g: 0.55 * brightness,
-        b: 0.40 * brightness
+        r: 0.58 * brightness * ao,
+        g: 0.48 * brightness * ao,
+        b: 0.35 * brightness * ao
       };
       
     case 'bridge':
-      // Dark brown wood
+      // Darker wood tones
       return {
-        r: 0.45 * brightness,
-        g: 0.30 * brightness,
-        b: 0.18 * brightness
+        r: 0.40 * brightness,
+        g: 0.28 * brightness,
+        b: 0.16 * brightness
       };
       
     case 'ground':
     default:
-      // Tan/earthy with moisture variation
-      const groundMoist = moisture * 0.2;
+      // Enhanced ground with moisture and elevation variation
+      // Moisture makes ground greener/darker
+      const groundMoist = moisture * 0.3;
       return {
-        r: (0.55 - groundMoist * 0.1) * brightness,
-        g: (0.48 + groundMoist * 0.08) * brightness,
-        b: (0.32 + groundMoist * 0.05) * brightness
+        r: (0.50 - groundMoist * 0.15) * brightness * ao,
+        g: (0.44 + groundMoist * 0.12) * brightness * ao,
+        b: (0.28 + groundMoist * 0.04) * brightness * ao
       };
   }
 }
@@ -143,7 +167,7 @@ interface BridgesProps {
 }
 
 export function Bridges({ world }: BridgesProps) {
-  const heightScale = 25;
+  const heightScale = 35; // Match updated height scale
   const bridges = useMemo(() => {
     const items: { x: number; z: number; waterLevel: number }[] = [];
     // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
@@ -361,7 +385,7 @@ export function GridOverlay({ world }: GridOverlayProps) {
 // ============================================
 
 export function WaterPlane({ world }: { world: WorldData }) {
-  const heightScale = 25;
+  const heightScale = 35; // Match updated height scale
   // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
   const waterLevel = (world.vars[4] ?? 50) / 100 * 0.50 + 0.15;
   
@@ -372,11 +396,11 @@ export function WaterPlane({ world }: { world: WorldData }) {
     >
       <planeGeometry args={[world.gridSize, world.gridSize]} />
       <meshStandardMaterial 
-        color="#2a5a7a" 
+        color="#1a4a6a" 
         transparent 
-        opacity={0.6}
-        metalness={0.2}
-        roughness={0.3}
+        opacity={0.65}
+        metalness={0.15}
+        roughness={0.25}
       />
     </mesh>
   );
@@ -389,10 +413,10 @@ export function WaterPlane({ world }: { world: WorldData }) {
 export function Atmosphere() {
   return (
     <>
-      <fog attach="fog" args={['#1a2a3a', 30, 120]} />
-      <ambientLight intensity={0.4} />
-      <directionalLight position={[50, 50, 25]} intensity={0.8} castShadow />
-      <hemisphereLight args={['#6688aa', '#445566', 0.4]} />
+      <fog attach="fog" args={['#1a2a3a', 40, 150]} />
+      <ambientLight intensity={0.35} />
+      <directionalLight position={[60, 80, 30]} intensity={1.0} castShadow />
+      <hemisphereLight args={['#88aacc', '#334455', 0.5]} />
     </>
   );
 }
