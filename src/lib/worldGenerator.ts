@@ -151,7 +151,8 @@ function setup() {
     }
   }
   
-  // Generate mountain mask - chains and patches for natural mountain ranges
+  // Generate mountain mask using CLUSTERED PATCHES (not ridges)
+  // Low-frequency noise creates distinct mountain regions with valleys between
   var mountainMask = [];
   for (var my = 0; my < GRID_SIZE; my++) {
     mountainMask[my] = [];
@@ -160,51 +161,53 @@ function setup() {
     }
   }
   
-  // Create mountain chains (elongated ranges) based on density
-  // More chains at high density for ~60% map coverage at 100%
-  var numChains = floor(2 + mountainDensity * 12);
-  for (var mc = 0; mc < numChains; mc++) {
-    var chainStartX = noise(mc * 137 + 9000) * GRID_SIZE;
-    var chainStartY = noise(mc * 251 + 9500) * GRID_SIZE;
-    var chainAngle = noise(mc * 373 + 9100) * TWO_PI;
-    var chainLength = 20 + noise(mc * 491 + 9200) * 45;
-    var chainWidth = 5 + mountainDensity * 12;
-    
-    for (var cs = 0; cs < chainLength; cs++) {
-      var cx = chainStartX + cos(chainAngle) * cs * 1.4;
-      var cy = chainStartY + sin(chainAngle) * cs * 1.4;
+  // FIRST: Create low-frequency region mask that defines WHERE mountains CAN form
+  // This creates distinct island-like clusters with clear valleys between
+  var mountainRegionMask = [];
+  for (var ry = 0; ry < GRID_SIZE; ry++) {
+    mountainRegionMask[ry] = [];
+    for (var rx = 0; rx < GRID_SIZE; rx++) {
+      // Very low frequency for large-scale clustering
+      var region1 = noise(rx * 0.025 + 8000, ry * 0.025);
+      var region2 = noise(rx * 0.05 + 8500, ry * 0.05);
+      var regionVal = region1 * 0.7 + region2 * 0.3;
       
-      // More pronounced wobble for natural mountain ridges
-      var wobble = noise(cs * 0.25 + mc * 50, mc * 0.5) * 8 - 4;
-      cx = cx + cos(chainAngle + HALF_PI) * wobble;
-      cy = cy + sin(chainAngle + HALF_PI) * wobble;
+      // Threshold determines which areas can have mountains
+      // Higher mountainDensity = lower threshold = more areas eligible
+      var regionThreshold = 0.62 - mountainDensity * 0.45;
       
-      // Varying segment size along the chain
-      var segmentRadius = chainWidth * (0.5 + noise(cs * 0.15 + mc * 100, mc) * 0.8);
-      var segmentStrength = 0.55 + noise(cs * 0.12 + mc * 200, mc * 0.3) * 0.45;
-      
-      for (var mcy = 0; mcy < GRID_SIZE; mcy++) {
-        for (var mcx = 0; mcx < GRID_SIZE; mcx++) {
-          var cdx = mcx - cx;
-          var cdy = mcy - cy;
-          var cdist = sqrt(cdx * cdx + cdy * cdy);
-          if (cdist < segmentRadius) {
-            var cfall = 1.0 - (cdist / segmentRadius);
-            cfall = pow(cfall, 1.1);
-            mountainMask[mcy][mcx] = max(mountainMask[mcy][mcx], cfall * segmentStrength);
-          }
-        }
+      if (regionVal > regionThreshold) {
+        // Smooth falloff from center of eligible region
+        var regionStrength = (regionVal - regionThreshold) / (1.0 - regionThreshold);
+        mountainRegionMask[ry][rx] = pow(regionStrength, 0.8);
+      } else {
+        mountainRegionMask[ry][rx] = 0;
       }
     }
   }
   
-  // Add additional circular patches for variety - more patches at high density
-  var numPatches = floor(3 + mountainDensity * 20);
+  // SECOND: Create circular mountain patches ONLY within eligible regions
+  // More patches at high density for ~60% coverage at 100%
+  var numPatches = floor(4 + mountainDensity * 25);
   for (var mp = 0; mp < numPatches; mp++) {
     var patchX = noise(mp * 137 + 10000) * GRID_SIZE;
     var patchY = noise(mp * 251 + 10500) * GRID_SIZE;
-    var patchRadius = 4 + mountainDensity * 14 + noise(mp * 373 + 10800) * 10;
-    var patchStrength = 0.45 + noise(mp * 491 + 10200) * 0.55;
+    
+    // Check if patch center is in an eligible region
+    var patchCenterRegion = 0;
+    var pcx = floor(constrain(patchX, 0, GRID_SIZE - 1));
+    var pcy = floor(constrain(patchY, 0, GRID_SIZE - 1));
+    patchCenterRegion = mountainRegionMask[pcy][pcx];
+    
+    // Skip patches in valleys (non-eligible regions)
+    if (patchCenterRegion < 0.2) {
+      continue;
+    }
+    
+    // Patch size scales with density and region strength
+    var patchRadius = 5 + mountainDensity * 15 + noise(mp * 373 + 10800) * 8;
+    patchRadius = patchRadius * (0.6 + patchCenterRegion * 0.6);
+    var patchStrength = 0.5 + noise(mp * 491 + 10200) * 0.5;
     
     for (var mpy = 0; mpy < GRID_SIZE; mpy++) {
       for (var mpx = 0; mpx < GRID_SIZE; mpx++) {
@@ -212,32 +215,66 @@ function setup() {
         var dy = mpy - patchY;
         var dist = sqrt(dx * dx + dy * dy);
         if (dist < patchRadius) {
+          // Smooth circular falloff
           var falloff = 1.0 - (dist / patchRadius);
-          falloff = pow(falloff, 1.2);
-          mountainMask[mpy][mpx] = max(mountainMask[mpy][mpx], falloff * patchStrength);
+          falloff = pow(falloff, 1.3);
+          
+          // Multiply by region mask to create natural transitions
+          var regionWeight = mountainRegionMask[mpy][mpx];
+          var contribution = falloff * patchStrength * regionWeight;
+          
+          mountainMask[mpy][mpx] = max(mountainMask[mpy][mpx], contribution);
         }
       }
     }
   }
   
-  // Low-frequency noise mask for clustering - creates distinct mountain regions vs valleys
-  // This ensures mountains form in clusters, not uniformly
-  var mountainRegionNoise = [];
-  for (var ry = 0; ry < GRID_SIZE; ry++) {
-    mountainRegionNoise[ry] = [];
-    for (var rx = 0; rx < GRID_SIZE; rx++) {
-      var regionVal = noise(rx * 0.04 + 11000, ry * 0.04);
-      var regionDetail = noise(rx * 0.08 + 11500, ry * 0.08);
-      mountainRegionNoise[ry][rx] = regionVal * 0.7 + regionDetail * 0.3;
+  // THIRD: Add elongated ranges within regions for variety (not continent-spanning)
+  var numRanges = floor(1 + mountainDensity * 4);
+  for (var mr = 0; mr < numRanges; mr++) {
+    var rangeStartX = noise(mr * 571 + 9000) * GRID_SIZE;
+    var rangeStartY = noise(mr * 683 + 9500) * GRID_SIZE;
+    
+    // Check if range starts in eligible region
+    var rsx = floor(constrain(rangeStartX, 0, GRID_SIZE - 1));
+    var rsy = floor(constrain(rangeStartY, 0, GRID_SIZE - 1));
+    if (mountainRegionMask[rsy][rsx] < 0.3) {
+      continue;
     }
-  }
-  
-  // Apply region mask to mountain mask - only keep mountains where region noise is high
-  for (var mry = 0; mry < GRID_SIZE; mry++) {
-    for (var mrx = 0; mrx < GRID_SIZE; mrx++) {
-      var regionThreshold = 0.55 - mountainDensity * 0.35;
-      if (mountainRegionNoise[mry][mrx] < regionThreshold) {
-        mountainMask[mry][mrx] = mountainMask[mry][mrx] * 0.15;
+    
+    var rangeAngle = noise(mr * 797 + 9100) * TWO_PI;
+    var rangeLength = 10 + noise(mr * 911 + 9200) * 20;
+    var rangeWidth = 3 + mountainDensity * 6;
+    
+    for (var rs = 0; rs < rangeLength; rs++) {
+      var rx = rangeStartX + cos(rangeAngle) * rs * 1.2;
+      var ry = rangeStartY + sin(rangeAngle) * rs * 1.2;
+      
+      // Add natural wobble
+      var wobble = noise(rs * 0.2 + mr * 50) * 4 - 2;
+      rx = rx + cos(rangeAngle + HALF_PI) * wobble;
+      ry = ry + sin(rangeAngle + HALF_PI) * wobble;
+      
+      var segRadius = rangeWidth * (0.6 + noise(rs * 0.15 + mr * 100) * 0.6);
+      var segStrength = 0.6 + noise(rs * 0.12 + mr * 200) * 0.4;
+      
+      for (var sry = 0; sry < GRID_SIZE; sry++) {
+        for (var srx = 0; srx < GRID_SIZE; srx++) {
+          var sdx = srx - rx;
+          var sdy = sry - ry;
+          var sdist = sqrt(sdx * sdx + sdy * sdy);
+          if (sdist < segRadius) {
+            var sfall = 1.0 - (sdist / segRadius);
+            sfall = pow(sfall, 1.2);
+            
+            // Only add if within eligible region
+            var segRegion = mountainRegionMask[sry][srx];
+            if (segRegion > 0.15) {
+              var segContrib = sfall * segStrength * segRegion;
+              mountainMask[sry][srx] = max(mountainMask[sry][srx], segContrib);
+            }
+          }
+        }
       }
     }
   }
@@ -268,21 +305,31 @@ function setup() {
       var shaped = baseElevation + mountainElevation;
       shaped = constrain(shaped, 0, 1);
       
-      // Water check - water level is absolute
+      // ====== WATER SEMANTICS FIX ======
+      // Water level is absolute sea level - land NEVER goes below it visually
+      // Water check: only cells truly BELOW sea level are water
       var isWater = shaped < waterLevel;
       
-      // Moisture for forests
+      // If above water, clamp elevation to be at least at water level
+      // This ensures forests/ground are NEVER submerged
+      var displayElevation = shaped;
+      if (!isWater && shaped < waterLevel + 0.02) {
+        // Coastline cells: slight boost to ensure they're visually above water
+        displayElevation = waterLevel + 0.02;
+      }
+      
+      // Moisture for forests - derived from proximity to water
       var moistBase = noise(gx * 0.06 + 3000, gy * 0.06);
       var moistDetail = noise(gx * 0.14 + 3500, gy * 0.14);
       var moisture = moistBase * 0.60 + moistDetail * 0.40;
       if (isWater) {
         moisture = 1.0;
-      } else if (shaped < waterLevel + 0.10) {
-        moisture = moisture + (1 - (shaped - waterLevel) / 0.10) * 0.25;
+      } else if (displayElevation < waterLevel + 0.10) {
+        moisture = moisture + (1 - (displayElevation - waterLevel) / 0.10) * 0.25;
       }
       moisture = constrain(moisture, 0, 1);
       
-      // Forest detection
+      // Forest detection - only on land above water
       var forestNoise = noise(gx * 0.09 + 7000, gy * 0.09);
       var forestNoise2 = noise(gx * 0.18 + 7500, gy * 0.18);
       var forestVal = forestNoise * 0.6 + forestNoise2 * 0.4;
@@ -292,19 +339,24 @@ function setup() {
       var isMountain = mMask > 0.25 && !isWater;
       var isSnowCap = mMask > 0.6 && mountainPeakHeight > 0.45 && mountainShape > 0.5;
       
-      // Path and bridge
+      // Path and bridge detection
       var onPath = pathGrid[gy][gx] > 0.4;
       var isBridge = onPath && isWater;
       var isPathTile = onPath && !isWater;
       
       var isObject = gx === objX && gy === objY;
       
-      // Rivers
+      // Rivers - only on land, near water level, not on paths
       var riverN = noise(gx * 0.045 + 5000, gy * 0.045);
-      var isRiver = abs(riverN - 0.5) < 0.015 && !isWater && shaped < waterLevel + 0.15 && !onPath;
+      var isRiver = abs(riverN - 0.5) < 0.015 && !isWater && displayElevation < waterLevel + 0.15 && !onPath;
       
-      // Alpha = elevation (0-255)
-      var elevation = floor(shaped * 255);
+      // ====== ELEVATION OUTPUT ======
+      // Alpha = elevation (0-255) - use display elevation for proper rendering
+      var elevation = floor(displayElevation * 255);
+      
+      // ====== TILE TYPE PRIORITY (RGB) ======
+      // Order: Object > Bridge > Path > River > Water > SnowCap > Mountain > Forest > Ground
+      // This ensures paths/bridges are NEVER overwritten
       
       var tileR = 0;
       var tileG = 0;
@@ -315,14 +367,17 @@ function setup() {
         tileG = 220;
         tileB = 60;
       } else if (isBridge) {
+        // Bridge: path over water - ALWAYS preserved
         tileR = 120;
         tileG = 80;
         tileB = 50;
       } else if (isPathTile) {
+        // Path: walkable trail - ALWAYS preserved
         tileR = 180;
         tileG = 150;
         tileB = 100;
       } else if (isRiver) {
+        // River: water channel through land - ALWAYS preserved
         tileR = 70;
         tileG = 160;
         tileB = 180;
@@ -349,8 +404,8 @@ function setup() {
         tileB = floor(40 + fMoist * 20);
       } else {
         var gMoist = moisture * 0.25;
-        tileR = floor(145 + shaped * 20 - gMoist * 20);
-        tileG = floor(125 + shaped * 15 + gMoist * 15);
+        tileR = floor(145 + displayElevation * 20 - gMoist * 20);
+        tileG = floor(125 + displayElevation * 15 + gMoist * 15);
         tileB = floor(85 + gMoist * 20);
       }
       
