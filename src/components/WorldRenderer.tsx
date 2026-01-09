@@ -17,9 +17,8 @@ interface TerrainMeshProps {
 export function TerrainMesh({ world }: TerrainMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   
-  // Height scale for converting 0-1 elevation to world units
+  // Height scale for converting 0-1 elevation (from Alpha channel) to world units
   const heightScale = 15;
-  const waterThreshold = (world.vars[4] ?? 30) / 100 * 0.20 + 0.28;
   
   const { geometry } = useMemo(() => {
     const size = world.gridSize;
@@ -36,12 +35,11 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
       
       const cell = world.terrain[y]?.[x];
       if (cell) {
-        // Height DIRECTLY from continuous elevation (Red channel)
-        // No categorical adjustments - pure heightfield interpretation
+        // Height DIRECTLY from Alpha channel (continuous 0-1)
         positions.setY(i, cell.elevation * heightScale);
         
-        // Color derived from elevation + moisture (continuous gradient)
-        const { r, g, b } = getContinuousTerrainColor(cell.elevation, cell.moisture, waterThreshold);
+        // Color derived from tile type (RGB categorical) with elevation-based brightness
+        const { r, g, b } = getTileColor(cell.type, cell.elevation, cell.moisture);
         
         colors[i * 3] = r;
         colors[i * 3 + 1] = g;
@@ -53,7 +51,7 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
     geometry.computeVertexNormals();
     
     return { geometry };
-  }, [world, heightScale, waterThreshold]);
+  }, [world, heightScale]);
   
   return (
     <mesh ref={meshRef} geometry={geometry} position={[world.gridSize / 2, 0, world.gridSize / 2]}>
@@ -62,69 +60,70 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
   );
 }
 
-// Continuous color gradient based on elevation and moisture
-// No categorical "biome painting" - pure gradient interpretation
-function getContinuousTerrainColor(
-  elevation: number, 
-  moisture: number, 
-  waterThreshold: number
+// Get tile color from categorical type (RGB) with elevation brightness modulation
+// Color is based on NexArt tile type, not recalculated from elevation
+function getTileColor(
+  type: TerrainCell['type'], 
+  elevation: number,
+  moisture: number
 ): { r: number; g: number; b: number } {
+  // Brightness based on elevation (from Alpha channel)
+  const brightness = 0.8 + elevation * 0.4;
   
-  // Water gradient (deep to shallow)
-  if (elevation < waterThreshold) {
-    const depth = elevation / waterThreshold;
-    return {
-      r: 0.08 + depth * 0.12,
-      g: 0.25 + depth * 0.18,
-      b: 0.45 + depth * 0.15
-    };
+  switch (type) {
+    case 'water':
+      // Blue gradient based on elevation (depth)
+      const depth = elevation;
+      return {
+        r: (0.12 + depth * 0.08) * brightness,
+        g: (0.24 + depth * 0.16) * brightness,
+        b: (0.45 + depth * 0.10) * brightness
+      };
+      
+    case 'forest':
+      // Green with moisture influence
+      const moist = moisture * 0.3;
+      return {
+        r: (0.18 + moist * 0.05) * brightness,
+        g: (0.40 + moist * 0.15) * brightness,
+        b: (0.16 + moist * 0.08) * brightness
+      };
+      
+    case 'mountain':
+      // Gray/brown rock that lightens with height
+      const heightFactor = elevation * 0.3;
+      return {
+        r: (0.40 + heightFactor) * brightness,
+        g: (0.38 + heightFactor) * brightness,
+        b: (0.36 + heightFactor) * brightness
+      };
+      
+    case 'path':
+      // Light brown
+      return {
+        r: 0.65 * brightness,
+        g: 0.55 * brightness,
+        b: 0.40 * brightness
+      };
+      
+    case 'bridge':
+      // Dark brown wood
+      return {
+        r: 0.45 * brightness,
+        g: 0.30 * brightness,
+        b: 0.18 * brightness
+      };
+      
+    case 'ground':
+    default:
+      // Tan/earthy with moisture variation
+      const groundMoist = moisture * 0.2;
+      return {
+        r: (0.55 - groundMoist * 0.1) * brightness,
+        g: (0.48 + groundMoist * 0.08) * brightness,
+        b: (0.32 + groundMoist * 0.05) * brightness
+      };
   }
-  
-  // Land: continuous gradient from lowlands to peaks
-  const landFraction = (elevation - waterThreshold) / (1 - waterThreshold);
-  
-  // Coastal/lowland (green-brown based on moisture)
-  if (landFraction < 0.25) {
-    const t = landFraction / 0.25;
-    const moistureInfluence = moisture * 0.4;
-    return {
-      r: 0.28 - moistureInfluence * 0.1 + t * 0.08,
-      g: 0.35 + moistureInfluence * 0.15 + t * 0.05,
-      b: 0.18 + moistureInfluence * 0.05
-    };
-  }
-  
-  // Midlands/hills (transition zone)
-  if (landFraction < 0.55) {
-    const t = (landFraction - 0.25) / 0.30;
-    const moistureInfluence = moisture * 0.3;
-    return {
-      r: 0.36 - moistureInfluence * 0.08 + t * 0.12,
-      g: 0.40 + moistureInfluence * 0.1 - t * 0.05,
-      b: 0.22 + t * 0.08
-    };
-  }
-  
-  // Highlands/mountains (rock and snow gradient)
-  const t = (landFraction - 0.55) / 0.45;
-  const snowLine = 0.75;
-  
-  if (t > snowLine) {
-    // Snow caps
-    const snowT = (t - snowLine) / (1 - snowLine);
-    return {
-      r: 0.65 + snowT * 0.30,
-      g: 0.68 + snowT * 0.27,
-      b: 0.72 + snowT * 0.23
-    };
-  }
-  
-  // Rocky mountain
-  return {
-    r: 0.42 + t * 0.20,
-    g: 0.40 + t * 0.22,
-    b: 0.38 + t * 0.28
-  };
 }
 
 // ============================================
