@@ -27,10 +27,12 @@ function setup() {
   var terrainScale = map(VAR[3], 0, 100, 0.02, 0.08);
   var waterLevel = map(VAR[4], 0, 100, 0.25, 0.55);
   var forestDensity = map(VAR[5], 0, 100, 0.2, 0.9);
-  var mountainHeight = map(VAR[6], 0, 100, 0.6, 1.0);
+  // Reduced mountain height for more natural feel (0.2-0.5 instead of 0.6-1.0)
+  var mountainHeight = map(VAR[6], 0, 100, 0.2, 0.5);
   var pathDensity = map(VAR[7], 0, 100, 0.0, 1.0);
   var roughness = map(VAR[8], 0, 100, 0.3, 0.9);
-  var landmarkDensity = map(VAR[9], 0, 100, 0.02, 0.15);
+  // Increased landmark density range for more visible landmarks
+  var landmarkDensity = map(VAR[9], 0, 100, 0.05, 0.35);
   
   // Object position from VAR
   var objX = floor(map(VAR[1], 0, 100, 4, GRID_SIZE - 4));
@@ -118,11 +120,13 @@ function setup() {
       baseElev += noise(x * terrainScale * 4, y * terrainScale * 4) * 0.25 * roughness;
       baseElev = baseElev / (1.0 + 0.5 * roughness + 0.25 * roughness);
       
-      // Ridged noise for mountain formation
+      // Ridged noise for mountain formation - smoother transitions
       var ridged = 1.0 - abs(noise(x * terrainScale * 1.5 + 500, y * terrainScale * 1.5) - 0.5) * 2;
-      var mountainFactor = pow(max(0, baseElev - 0.5) * 2, 1.5) * mountainHeight;
-      var elevation = baseElev + ridged * mountainFactor * 0.3;
-      elevation = constrain(elevation, 0, 1);
+      // Smoother mountain factor with less aggressive exponent and more gradual blending
+      var mountainFactor = pow(max(0, baseElev - 0.55) * 2, 1.2) * mountainHeight;
+      var elevation = baseElev + ridged * mountainFactor * 0.25;
+      // Smooth the elevation to avoid cliff edges
+      elevation = constrain(elevation, 0, 0.95);
       
       var redChannel = floor(elevation * 255);
       
@@ -145,7 +149,8 @@ function setup() {
       var onPath = isOnPath(x, y);
       var isBridge = onPath && isWater;
       var isPath = onPath && !isWater && elevation < 0.7;
-      var isMountain = elevation > 0.65;
+      // Lower mountain threshold for more gradual peaks
+      var isMountain = elevation > 0.55;
       var isForest = !isWater && !isMountain && !isPath && moisture * forestDensity > 0.3 && noise(x * 0.1 + 2000, y * 0.1) < forestDensity * 0.8;
       
       var blueChannel;
@@ -156,7 +161,7 @@ function setup() {
       } else if (isWater) {
         blueChannel = floor(25 + elevation / waterLevel * 25);
       } else if (isMountain) {
-        blueChannel = floor(155 + (elevation - 0.65) / 0.35 * 45);
+        blueChannel = floor(155 + (elevation - 0.55) / 0.4 * 45);
       } else if (isForest) {
         blueChannel = floor(105 + moisture * 45);
       } else {
@@ -171,10 +176,11 @@ function setup() {
       // 1: Planted object marker
       var alphaChannel = 255;
       
-      // Landmark placement
-      var landmarkNoise = noise(x * 0.15 + 3000, y * 0.15 + 3000);
-      if (!isWater && !isMountain && !onPath && landmarkNoise < landmarkDensity) {
-        var landmarkType = floor(noise(x * 0.3, y * 0.3 + 4000) * 5);
+      // Landmark placement - use higher noise threshold comparison
+      var landmarkNoise = noise(x * 0.12 + 3000, y * 0.12 + 3000);
+      // Compare against threshold: lower noise values get landmarks when density is high
+      if (!isWater && !isMountain && !onPath && landmarkNoise < landmarkDensity * 0.8) {
+        var landmarkType = floor(noise(x * 0.25, y * 0.25 + 4000) * 5);
         alphaChannel = 250 + landmarkType;
       }
       

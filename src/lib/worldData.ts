@@ -68,7 +68,8 @@ function tileTypeToString(type: TileType): TerrainCell['type'] {
 
 function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
   const waterLevel = (grid.vars[4] ?? 30) / 100 * 0.35 + 0.15;
-  const heightMult = (grid.vars[6] ?? 50) / 100 * 1.5 + 0.5;
+  // Reduced height multiplier for more natural mountains (was 0.5-2.0, now 0.3-0.8)
+  const heightMult = (grid.vars[6] ?? 50) / 100 * 0.5 + 0.3;
   
   // Convert cells to terrain - ALL data comes from NexArt pixels
   const terrain: TerrainCell[][] = grid.cells.map(row =>
@@ -131,9 +132,10 @@ function computeWorldElevation(cell: GridCell, waterLevel: number, heightMult: n
   // Elevation comes directly from NexArt Red channel
   const baseElevation = cell.elevation;
   
-  // Apply exponential scaling for mountains
+  // Apply gentler exponential scaling for mountains - less cliff-like
   if (cell.tileType === TileType.MOUNTAIN) {
-    return waterLevel + Math.pow(baseElevation, 1.3) * heightMult;
+    // Smoother curve with lower exponent
+    return waterLevel + Math.pow(baseElevation, 1.15) * heightMult * 0.8;
   }
   
   // Bridges sit just above water
@@ -146,8 +148,8 @@ function computeWorldElevation(cell: GridCell, waterLevel: number, heightMult: n
     return waterLevel * 0.3;
   }
   
-  // Ground/forest/path use linear scaling
-  return waterLevel + (baseElevation - waterLevel) * heightMult * 0.6;
+  // Ground/forest/path use gentler linear scaling for smoother transitions
+  return waterLevel + (baseElevation - waterLevel) * heightMult * 0.5;
 }
 
 // ============================================
