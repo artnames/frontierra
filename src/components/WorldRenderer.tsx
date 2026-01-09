@@ -1,7 +1,14 @@
+// World Renderer - 3D Projection of NexArt Canonical Layout
+// CRITICAL: All rendering is derived from NexArt pixel data.
+// No noise functions, no random, no independent generation.
+
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { WorldData } from '@/lib/worldData';
-import { WorldAction } from '@/lib/worldContract';
+import { WorldData, TerrainCell } from '@/lib/worldData';
+
+// ============================================
+// TERRAIN MESH - Derived from NexArt elevation
+// ============================================
 
 interface TerrainMeshProps {
   world: WorldData;
@@ -10,11 +17,10 @@ interface TerrainMeshProps {
 export function TerrainMesh({ world }: TerrainMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   
-  const { geometry, colors } = useMemo(() => {
+  const { geometry } = useMemo(() => {
     const size = world.gridSize;
     const geometry = new THREE.PlaneGeometry(size, size, size - 1, size - 1);
     
-    // Rotate to be horizontal
     geometry.rotateX(-Math.PI / 2);
     
     const positions = geometry.attributes.position;
@@ -26,44 +32,22 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
       
       const cell = world.terrain[y]?.[x];
       if (cell) {
-        // Set height
+        // Height from NexArt-derived elevation
         positions.setY(i, cell.elevation * 20);
         
-        // Set color based on terrain type
-        let r: number, g: number, b: number;
+        // Color from NexArt-derived type and moisture
+        const { r, g, b } = getTerrainColor(cell);
         
-        switch (cell.type) {
-          case 'water':
-            r = 0.2; g = 0.4; b = 0.6;
-            break;
-          case 'mountain':
-            r = 0.4; g = 0.4; b = 0.45;
-            break;
-          case 'forest':
-            r = 0.15; g = 0.35; b = 0.15;
-            break;
-          case 'path':
-            r = 0.6; g = 0.5; b = 0.35; // Sandy/dirt path color - more visible
-            break;
-          case 'bridge':
-            r = 0.45; g = 0.35; b = 0.25; // Wooden bridge color
-            break;
-          default: // ground
-            r = 0.35; g = 0.3; b = 0.2;
-        }
-        
-        // Add elevation-based variation
-        const elevVar = cell.elevation * 0.15;
-        colors[i * 3] = r + elevVar;
-        colors[i * 3 + 1] = g + elevVar;
-        colors[i * 3 + 2] = b + elevVar * 0.5;
+        colors[i * 3] = r;
+        colors[i * 3 + 1] = g;
+        colors[i * 3 + 2] = b;
       }
     }
     
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.computeVertexNormals();
     
-    return { geometry, colors };
+    return { geometry };
   }, [world]);
   
   return (
@@ -72,6 +56,30 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
     </mesh>
   );
 }
+
+function getTerrainColor(cell: TerrainCell): { r: number; g: number; b: number } {
+  // Use moisture from NexArt Green channel to modulate colors
+  const moistureVar = cell.moisture * 0.15;
+  
+  switch (cell.type) {
+    case 'water':
+      return { r: 0.15 + moistureVar, g: 0.35 + moistureVar, b: 0.55 + moistureVar * 0.5 };
+    case 'mountain':
+      return { r: 0.4 - moistureVar * 0.5, g: 0.4 - moistureVar * 0.5, b: 0.45 };
+    case 'forest':
+      return { r: 0.12, g: 0.32 + moistureVar, b: 0.12 };
+    case 'path':
+      return { r: 0.58, g: 0.48, b: 0.32 };
+    case 'bridge':
+      return { r: 0.42, g: 0.32, b: 0.22 };
+    default: // ground
+      return { r: 0.35 - moistureVar * 0.3, g: 0.30 + moistureVar * 0.2, b: 0.20 };
+  }
+}
+
+// ============================================
+// LANDMARKS - From NexArt Alpha channel
+// ============================================
 
 interface LandmarksProps {
   world: WorldData;
@@ -86,7 +94,7 @@ export function Landmarks({ world }: LandmarksProps) {
         const cell = world.terrain[y][x];
         if (cell.hasLandmark) {
           items.push({
-            x: x,
+            x,
             y: cell.elevation * 20,
             z: y,
             type: cell.landmarkType
@@ -130,7 +138,7 @@ function LandmarkObject({ x, y, z, type }: { x: number; y: number; z: number; ty
         <meshLambertMaterial color="#666666" />
       </mesh>
     );
-  } else {
+  } else if (type === 2) {
     // Bush
     return (
       <mesh position={[x, y + 0.25, z]}>
@@ -138,8 +146,44 @@ function LandmarkObject({ x, y, z, type }: { x: number; y: number; z: number; ty
         <meshLambertMaterial color="#2d5a2d" />
       </mesh>
     );
+  } else if (type === 3) {
+    // Tall tree
+    return (
+      <group position={[x, y, z]}>
+        <mesh position={[0, 0.5, 0]}>
+          <cylinderGeometry args={[0.12, 0.18, 1.0, 6]} />
+          <meshLambertMaterial color="#3a2718" />
+        </mesh>
+        <mesh position={[0, 1.8, 0]}>
+          <coneGeometry args={[0.8, 2.0, 6]} />
+          <meshLambertMaterial color="#0f3f0f" />
+        </mesh>
+      </group>
+    );
+  } else {
+    // Flower patch
+    return (
+      <group position={[x, y + 0.15, z]}>
+        <mesh>
+          <sphereGeometry args={[0.25, 6, 4]} />
+          <meshLambertMaterial color="#3d6a3d" />
+        </mesh>
+        <mesh position={[0.1, 0.15, 0]}>
+          <sphereGeometry args={[0.08, 6, 4]} />
+          <meshLambertMaterial color="#cc6699" />
+        </mesh>
+        <mesh position={[-0.1, 0.12, 0.1]}>
+          <sphereGeometry args={[0.06, 6, 4]} />
+          <meshLambertMaterial color="#cccc66" />
+        </mesh>
+      </group>
+    );
   }
 }
+
+// ============================================
+// BRIDGES - From NexArt Blue channel (bridge biome)
+// ============================================
 
 interface BridgesProps {
   world: WorldData;
@@ -155,7 +199,7 @@ export function Bridges({ world }: BridgesProps) {
         const cell = world.terrain[y][x];
         if (cell.type === 'bridge') {
           items.push({
-            x: x,
+            x,
             z: y,
             waterLevel: waterLevel * 20
           });
@@ -176,16 +220,14 @@ export function Bridges({ world }: BridgesProps) {
 }
 
 function BridgePlank({ x, z, waterLevel }: { x: number; z: number; waterLevel: number }) {
-  const bridgeHeight = waterLevel + 0.3; // Slightly above water
+  const bridgeHeight = waterLevel + 0.5;
   
   return (
     <group position={[x, bridgeHeight, z]}>
-      {/* Simple flat plank - no barriers */}
       <mesh>
         <boxGeometry args={[1.0, 0.15, 1.0]} />
         <meshLambertMaterial color="#6b4423" />
       </mesh>
-      {/* Subtle support beam underneath */}
       <mesh position={[0, -0.2, 0]}>
         <boxGeometry args={[0.15, 0.25, 0.8]} />
         <meshLambertMaterial color="#4a2a10" />
@@ -193,6 +235,10 @@ function BridgePlank({ x, z, waterLevel }: { x: number; z: number; waterLevel: n
     </group>
   );
 }
+
+// ============================================
+// PLANTED OBJECT - From NexArt Alpha = 1
+// ============================================
 
 interface PlantedObjectProps {
   world: WorldData;
@@ -302,7 +348,6 @@ export function PlantedObject({ world, isDiscovered }: PlantedObjectProps) {
   
   return (
     <group position={[x, y, z]}>
-      {/* Base glow */}
       <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[1.5, 32]} />
         <meshBasicMaterial 
@@ -314,13 +359,16 @@ export function PlantedObject({ world, isDiscovered }: PlantedObjectProps) {
       
       <ObjectMesh />
       
-      {/* Discovery light */}
       {isDiscovered && (
         <pointLight position={[0, 3, 0]} color="#5ac4c4" intensity={glowIntensity} distance={15} />
       )}
     </group>
   );
 }
+
+// ============================================
+// GRID OVERLAY
+// ============================================
 
 interface GridOverlayProps {
   world: WorldData;
@@ -330,13 +378,11 @@ export function GridOverlay({ world }: GridOverlayProps) {
   const lines = useMemo(() => {
     const points: THREE.Vector3[] = [];
     const size = world.gridSize;
-    const step = 4; // Grid every 4 units
+    const step = 4;
     
     for (let i = 0; i <= size; i += step) {
-      // X lines
       points.push(new THREE.Vector3(0, 0.1, i));
       points.push(new THREE.Vector3(size, 0.1, i));
-      // Z lines
       points.push(new THREE.Vector3(i, 0.1, 0));
       points.push(new THREE.Vector3(i, 0.1, size));
     }
@@ -345,8 +391,7 @@ export function GridOverlay({ world }: GridOverlayProps) {
   }, [world.gridSize]);
   
   const geometry = useMemo(() => {
-    const geo = new THREE.BufferGeometry().setFromPoints(lines);
-    return geo;
+    return new THREE.BufferGeometry().setFromPoints(lines);
   }, [lines]);
   
   return (
@@ -356,7 +401,10 @@ export function GridOverlay({ world }: GridOverlayProps) {
   );
 }
 
-// Water plane
+// ============================================
+// WATER PLANE
+// ============================================
+
 export function WaterPlane({ world }: { world: WorldData }) {
   const waterLevel = (world.vars[4] ?? 30) / 100 * 0.35 + 0.15;
   
@@ -377,7 +425,10 @@ export function WaterPlane({ world }: { world: WorldData }) {
   );
 }
 
-// Fog/atmosphere
+// ============================================
+// ATMOSPHERE
+// ============================================
+
 export function Atmosphere() {
   return (
     <>

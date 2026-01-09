@@ -1,21 +1,23 @@
-// World Data - Derived from NexArt Canonical Layout
+// World Data - Derived ENTIRELY from NexArt Canonical Layout
 // This module provides the 3D projection interface for NexArt-generated worlds
-// IMPORTANT: World generation MUST go through NexArt - no independent generation
+// CRITICAL: No noise/random functions allowed. All data comes from NexArt pixels.
 
 import { NexArtWorldGrid, TileType, GridCell, generateNexArtWorld, verifyNexArtWorld } from './nexartWorld';
 import { WorldParams } from './worldGenerator';
 
 // ============================================
-// WORLD DATA INTERFACES (3D Projection)
+// WORLD DATA INTERFACES (3D Projection of NexArt)
 // ============================================
 
 export interface TerrainCell {
   x: number;
   y: number;
-  elevation: number;
+  elevation: number;    // From NexArt Red channel
+  moisture: number;     // From NexArt Green channel
   type: 'water' | 'ground' | 'forest' | 'mountain' | 'path' | 'bridge';
   hasLandmark: boolean;
   landmarkType: number;
+  hasRiver: boolean;
   isPath: boolean;
   isBridge: boolean;
 }
@@ -49,6 +51,7 @@ export interface WorldData {
 
 // ============================================
 // CONVERT NEXART GRID TO WORLD DATA
+// No generation here - pure transformation
 // ============================================
 
 function tileTypeToString(type: TileType): TerrainCell['type'] {
@@ -65,32 +68,38 @@ function tileTypeToString(type: TileType): TerrainCell['type'] {
 
 function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
   const waterLevel = (grid.vars[4] ?? 30) / 100 * 0.35 + 0.15;
+  const heightMult = (grid.vars[6] ?? 50) / 100 * 1.5 + 0.5;
   
-  // Convert cells to terrain
+  // Convert cells to terrain - ALL data comes from NexArt pixels
   const terrain: TerrainCell[][] = grid.cells.map(row =>
     row.map((cell: GridCell) => ({
       x: cell.x,
       y: cell.y,
-      elevation: cell.elevation,
+      elevation: computeWorldElevation(cell, waterLevel, heightMult),
+      moisture: cell.moisture,
       type: tileTypeToString(cell.tileType),
       hasLandmark: cell.hasLandmark,
       landmarkType: cell.landmarkType,
+      hasRiver: cell.hasRiver,
       isPath: cell.isPath,
       isBridge: cell.isBridge
     }))
   );
   
-  // Calculate object elevation
+  // Calculate object elevation from NexArt-derived terrain
   const objCell = grid.cells[grid.plantedObjectY]?.[grid.plantedObjectX];
-  const objElevation = objCell?.tileType === TileType.WATER ? waterLevel : (objCell?.elevation ?? 0.3);
+  const objTerrainCell = terrain[grid.plantedObjectY]?.[grid.plantedObjectX];
+  const objElevation = objCell?.tileType === TileType.WATER 
+    ? waterLevel * 20 
+    : (objTerrainCell?.elevation ?? 0.3) * 20;
   
   // Calculate spawn rotation
   const toCenterX = grid.gridSize / 2 - grid.spawnX;
   const toCenterY = grid.gridSize / 2 - grid.spawnY;
   const rotationY = Math.atan2(toCenterX, toCenterY);
   
-  const spawnCell = grid.cells[grid.spawnY]?.[grid.spawnX];
-  const spawnElevation = spawnCell?.elevation ?? 0.3;
+  const spawnTerrainCell = terrain[grid.spawnY]?.[grid.spawnX];
+  const spawnElevation = (spawnTerrainCell?.elevation ?? 0.3) * 20;
   
   const verification = verifyNexArtWorld(grid);
   
@@ -102,13 +111,13 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
     plantedObject: {
       x: grid.plantedObjectX,
       y: grid.plantedObjectY,
-      z: objElevation * 20 + 2,
+      z: objElevation + 2,
       type: grid.plantedObjectType
     },
     spawnPoint: {
       x: grid.spawnX,
       y: grid.spawnY,
-      z: spawnElevation * 20 + 2,
+      z: spawnElevation + 2,
       rotationY
     },
     nexartHash: grid.pixelHash,
@@ -117,21 +126,38 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
   };
 }
 
+// Compute world elevation from NexArt pixel data (no noise!)
+function computeWorldElevation(cell: GridCell, waterLevel: number, heightMult: number): number {
+  // Elevation comes directly from NexArt Red channel
+  const baseElevation = cell.elevation;
+  
+  // Apply exponential scaling for mountains
+  if (cell.tileType === TileType.MOUNTAIN) {
+    return waterLevel + Math.pow(baseElevation, 1.3) * heightMult;
+  }
+  
+  // Bridges sit just above water
+  if (cell.tileType === TileType.BRIDGE) {
+    return waterLevel * 0.3 + 0.08;
+  }
+  
+  // Water is at water level
+  if (cell.tileType === TileType.WATER) {
+    return waterLevel * 0.3;
+  }
+  
+  // Ground/forest/path use linear scaling
+  return waterLevel + (baseElevation - waterLevel) * heightMult * 0.6;
+}
+
 // ============================================
 // PUBLIC API - Async NexArt-based generation
 // ============================================
 
-/**
- * Generate world data from NexArt (ASYNC)
- * This is the ONLY valid way to generate world data
- * 
- * @throws Never - returns invalid world state on failure
- */
 export async function generateWorldDataAsync(seed: number, vars: number[]): Promise<WorldData> {
   const grid = await generateNexArtWorld({ seed, vars });
   
   if (!grid.isValid) {
-    // Return an invalid world state - NO FALLBACK
     return {
       seed,
       vars,
@@ -148,14 +174,8 @@ export async function generateWorldDataAsync(seed: number, vars: number[]): Prom
   return nexartGridToWorldData(grid);
 }
 
-/**
- * Synchronous world generation - FOR LEGACY COMPATIBILITY ONLY
- * Uses cached NexArt result or returns invalid state
- * 
- * @deprecated Use generateWorldDataAsync instead
- */
+// Synchronous version for legacy compatibility
 export function generateWorldData(seed: number, vars: number[]): WorldData {
-  // Check if we have a cached result
   const cacheKey = `nexart_${seed}_${vars.join(',')}`;
   const cached = (window as any).__nexartCache?.[cacheKey];
   
@@ -163,7 +183,6 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
     return cached;
   }
   
-  // Return invalid state - must use async version
   console.warn('generateWorldData called without cached NexArt data. Use generateWorldDataAsync.');
   return {
     seed,
@@ -178,9 +197,6 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
   };
 }
 
-/**
- * Cache world data for synchronous access
- */
 export function cacheWorldData(world: WorldData): void {
   const cacheKey = `nexart_${world.seed}_${world.vars.join(',')}`;
   if (!(window as any).__nexartCache) {
@@ -190,12 +206,9 @@ export function cacheWorldData(world: WorldData): void {
 }
 
 // ============================================
-// WORLD QUERY FUNCTIONS
+// WORLD QUERY FUNCTIONS - Derived from NexArt
 // ============================================
 
-/**
- * Get elevation at any world position (with interpolation)
- */
 export function getElevationAt(world: WorldData, worldX: number, worldY: number): number {
   if (!world.isNexArtVerified || world.terrain.length === 0) {
     return 0;
@@ -208,13 +221,13 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
     return 0;
   }
   
-  // Check if we're on a bridge - return bridge height
   const cell = world.terrain[gridY]?.[gridX];
   if (cell?.type === 'bridge') {
     const waterLevel = (world.vars[4] ?? 30) / 100 * 0.35 + 0.15;
     return waterLevel * 20 + 0.3 * 20;
   }
   
+  // Bilinear interpolation of elevation
   const fx = worldX - gridX;
   const fy = worldY - gridY;
   
@@ -229,9 +242,6 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
   return (e0 * (1 - fy) + e1 * fy) * 20;
 }
 
-/**
- * Check if position is walkable
- */
 export function isWalkable(world: WorldData, worldX: number, worldY: number): boolean {
   if (!world.isNexArtVerified || world.terrain.length === 0) {
     return false;
@@ -248,18 +258,12 @@ export function isWalkable(world: WorldData, worldX: number, worldY: number): bo
   return cell?.type !== 'water';
 }
 
-/**
- * Calculate distance to planted object
- */
 export function distanceToObject(world: WorldData, worldX: number, worldY: number): number {
   const dx = worldX - world.plantedObject.x;
   const dy = worldY - world.plantedObject.y;
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-/**
- * Check if world is valid (NexArt verified)
- */
 export function isWorldValid(world: WorldData): boolean {
   return world.isNexArtVerified && world.terrain.length > 0;
 }
