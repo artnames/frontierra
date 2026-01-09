@@ -151,7 +151,7 @@ function setup() {
     }
   }
   
-  // Generate mountain mask - discrete patches with natural shapes
+  // Generate mountain mask - chains and patches for natural mountain ranges
   var mountainMask = [];
   for (var my = 0; my < GRID_SIZE; my++) {
     mountainMask[my] = [];
@@ -160,13 +160,48 @@ function setup() {
     }
   }
   
-  // Create mountain patches based on density
-  var numMountainPatches = floor(2 + mountainDensity * 12);
-  for (var mp = 0; mp < numMountainPatches; mp++) {
-    var patchX = noise(mp * 137 + 9000) * GRID_SIZE;
-    var patchY = noise(mp * 251 + 9500) * GRID_SIZE;
-    var patchRadius = 4 + noise(mp * 373 + 9800) * 10;
-    var patchStrength = 0.5 + noise(mp * 491 + 9200) * 0.5;
+  // Create mountain chains (elongated ranges) based on density
+  var numChains = floor(1 + mountainDensity * 8);
+  for (var mc = 0; mc < numChains; mc++) {
+    var chainStartX = noise(mc * 137 + 9000) * GRID_SIZE;
+    var chainStartY = noise(mc * 251 + 9500) * GRID_SIZE;
+    var chainAngle = noise(mc * 373 + 9100) * TWO_PI;
+    var chainLength = 15 + noise(mc * 491 + 9200) * 35;
+    var chainWidth = 4 + mountainDensity * 8;
+    
+    for (var cs = 0; cs < chainLength; cs++) {
+      var cx = chainStartX + cos(chainAngle) * cs * 1.5;
+      var cy = chainStartY + sin(chainAngle) * cs * 1.5;
+      
+      var wobble = noise(cs * 0.3 + mc * 50, mc * 0.5) * 6 - 3;
+      cx = cx + cos(chainAngle + HALF_PI) * wobble;
+      cy = cy + sin(chainAngle + HALF_PI) * wobble;
+      
+      var segmentRadius = chainWidth * (0.6 + noise(cs * 0.2 + mc * 100, mc) * 0.6);
+      var segmentStrength = 0.5 + noise(cs * 0.15 + mc * 200, mc * 0.3) * 0.5;
+      
+      for (var mcy = 0; mcy < GRID_SIZE; mcy++) {
+        for (var mcx = 0; mcx < GRID_SIZE; mcx++) {
+          var cdx = mcx - cx;
+          var cdy = mcy - cy;
+          var cdist = sqrt(cdx * cdx + cdy * cdy);
+          if (cdist < segmentRadius) {
+            var cfall = 1.0 - (cdist / segmentRadius);
+            cfall = pow(cfall, 1.2);
+            mountainMask[mcy][mcx] = max(mountainMask[mcy][mcx], cfall * segmentStrength);
+          }
+        }
+      }
+    }
+  }
+  
+  // Add additional circular patches for variety
+  var numPatches = floor(2 + mountainDensity * 15);
+  for (var mp = 0; mp < numPatches; mp++) {
+    var patchX = noise(mp * 137 + 10000) * GRID_SIZE;
+    var patchY = noise(mp * 251 + 10500) * GRID_SIZE;
+    var patchRadius = 3 + mountainDensity * 10 + noise(mp * 373 + 10800) * 8;
+    var patchStrength = 0.4 + noise(mp * 491 + 10200) * 0.6;
     
     for (var mpy = 0; mpy < GRID_SIZE; mpy++) {
       for (var mpx = 0; mpx < GRID_SIZE; mpx++) {
@@ -175,7 +210,7 @@ function setup() {
         var dist = sqrt(dx * dx + dy * dy);
         if (dist < patchRadius) {
           var falloff = 1.0 - (dist / patchRadius);
-          falloff = pow(falloff, 1.5);
+          falloff = pow(falloff, 1.3);
           mountainMask[mpy][mpx] = max(mountainMask[mpy][mpx], falloff * patchStrength);
         }
       }
