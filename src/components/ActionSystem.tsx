@@ -10,6 +10,7 @@ interface ActionSystemProps {
   playerPosition: { x: number; y: number };
   actions: WorldAction[];
   onActionExecute: (action: WorldAction) => void;
+  onActionReset?: () => void;
   disabled?: boolean;
 }
 
@@ -18,6 +19,7 @@ export function ActionSystem({
   playerPosition, 
   actions,
   onActionExecute,
+  onActionReset,
   disabled 
 }: ActionSystemProps) {
   const { toast } = useToast();
@@ -102,7 +104,20 @@ export function ActionSystem({
       {/* Placed action info */}
       {hasPlacedAction && (
         <div className="bg-secondary/50 rounded p-2 text-[9px]">
-          <div className="text-muted-foreground mb-1">IRREVERSIBLE ACTION:</div>
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-muted-foreground">PLACED BEACON:</span>
+            {onActionReset && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onActionReset}
+                disabled={disabled}
+                className="h-5 px-1.5 text-[9px] text-destructive hover:text-destructive"
+              >
+                Reset
+              </Button>
+            )}
+          </div>
           <div className="font-mono space-y-0.5">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Type:</span>

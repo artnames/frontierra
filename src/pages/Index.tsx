@@ -105,6 +105,20 @@ const Index = () => {
     });
   }, [actions, params, setSearchParams]);
   
+  const handleActionReset = useCallback(() => {
+    setActions([]);
+    // Update URL without actions
+    const varsStr = params.vars.join(',');
+    setSearchParams({ 
+      seed: params.seed.toString(), 
+      vars: varsStr
+    });
+    toast({
+      title: 'Beacon Reset',
+      description: 'You can now place a new beacon',
+    });
+  }, [params, setSearchParams, toast]);
+  
   const handleDeterminismBreak = useCallback((breakType: 'math_random' | 'date' | 'none') => {
     const test = runDeterminismTest(world, breakType);
     setDeterministicTest(test);
@@ -286,6 +300,7 @@ const Index = () => {
                   playerPosition={playerPosition}
                   actions={actions}
                   onActionExecute={handleActionExecute}
+                  onActionReset={handleActionReset}
                   disabled={isReplaying}
                 />
               )}
