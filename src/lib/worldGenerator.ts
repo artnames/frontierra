@@ -37,11 +37,11 @@ function setup() {
   if (pathDensityVal > 0.05) {
     for (var p = 0; p < numPaths; p++) {
       var points = [];
-      var isHoriz = noise(p * 100 + seed * 0.01) > 0.4;
-      var px = isHoriz ? 0 : floor(noise(p * 200 + seed * 0.01) * (GRID_SIZE - 10)) + 5;
-      var py = isHoriz ? floor(noise(p * 300 + seed * 0.01) * (GRID_SIZE - 10)) + 5 : 0;
+      var isHoriz = noise(p * 100 + 777) > 0.4;
+      var px = isHoriz ? 0 : floor(noise(p * 200 + 888) * (GRID_SIZE - 10)) + 5;
+      var py = isHoriz ? floor(noise(p * 300 + 999) * (GRID_SIZE - 10)) + 5 : 0;
       var baseAngle = isHoriz ? 0 : PI / 2;
-      var angle = baseAngle + (noise(p * 400 + seed * 0.01) - 0.5) * 0.4;
+      var angle = baseAngle + (noise(p * 400 + 1111) - 0.5) * 0.4;
       var curviness = 0.5 + noise(p * 500 + seed * 0.01) * 0.6;
       
       for (var s = 0; s < GRID_SIZE + 20; s++) {
