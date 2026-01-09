@@ -23,12 +23,13 @@ import { ReplayControls } from '@/components/ReplayControls';
 import { ActionSystem } from '@/components/ActionSystem';
 import { MultiplayerHUD } from '@/components/MultiplayerHUD';
 import { WorldAMap } from '@/components/WorldAMap';
+import { SocialPanel } from '@/components/social/SocialPanel';
 import { useMultiplayerWorld } from '@/hooks/useMultiplayerWorld';
 import { useToast } from '@/hooks/use-toast';
 import { useSearchParams } from 'react-router-dom';
 
 type ViewMode = 'map' | 'firstperson';
-type SidebarTab = 'parameters' | 'contract' | 'actions' | 'replay' | 'worldmap';
+type SidebarTab = 'parameters' | 'contract' | 'actions' | 'replay' | 'worldmap' | 'social';
 type WorldMode = 'solo' | 'multiplayer';
 
 const Index = () => {
@@ -451,9 +452,9 @@ const Index = () => {
         <aside className="fixed top-[52px] right-0 bottom-0 w-80 border-l border-border bg-card/95 backdrop-blur-sm flex flex-col overflow-hidden z-[100] shadow-xl">
             {/* Tab Navigation */}
             <div className="flex border-b border-border bg-secondary/30">
-              {/* Show worldmap tab only in multiplayer mode */}
+              {/* Show worldmap and social tabs only in multiplayer mode */}
               {(worldMode === 'multiplayer' 
-                ? (['worldmap', 'contract', 'actions', 'replay', 'parameters'] as SidebarTab[])
+                ? (['worldmap', 'social', 'contract', 'actions', 'replay', 'parameters'] as SidebarTab[])
                 : (['contract', 'actions', 'replay', 'parameters'] as SidebarTab[])
               ).map(tab => (
                 <button
@@ -464,7 +465,7 @@ const Index = () => {
                       ? 'text-primary border-b-2 border-primary bg-card' 
                       : 'text-muted-foreground hover:text-foreground'}`}
                 >
-                  {tab === 'worldmap' ? 'World A' : tab}
+                  {tab === 'worldmap' ? 'Map' : tab}
                 </button>
               ))}
             </div>
@@ -476,6 +477,13 @@ const Index = () => {
                   currentLand={multiplayer.currentLand}
                   playerId={multiplayer.playerId}
                   onVisitLand={multiplayer.visitLand}
+                />
+              )}
+              
+              {sidebarTab === 'social' && worldMode === 'multiplayer' && (
+                <SocialPanel
+                  playerId={multiplayer.playerId}
+                  currentLand={multiplayer.currentLand}
                 />
               )}
               

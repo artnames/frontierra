@@ -1,5 +1,6 @@
 // Edge Transition System
 // Detects when player crosses land boundaries and triggers world swap
+// Records trails for social presence
 
 import { useState, useCallback, useRef } from 'react';
 import { 
@@ -11,7 +12,7 @@ import {
   calculateEntryPosition
 } from '@/lib/multiplayer/types';
 import { getLandAtPosition } from '@/lib/multiplayer/landRegistry';
-
+import { recordTrail } from '@/lib/multiplayer/socialRegistry';
 interface EdgeTransitionState {
   isTransitioning: boolean;
   currentLand: PlayerLand | null;
@@ -19,6 +20,7 @@ interface EdgeTransitionState {
 }
 
 interface UseEdgeTransitionOptions {
+  playerId?: string | null;
   onTransitionStart?: (crossing: EdgeCrossing) => void;
   onTransitionComplete?: (newLand: PlayerLand | null, entryPosition: { x: number; z: number }) => void;
   onTransitionFailed?: (error: string) => void;
@@ -99,6 +101,17 @@ export function useEdgeTransition(options: UseEdgeTransitionOptions = {}) {
       
       setState(prev => ({ ...prev, pendingCrossing: crossing }));
       options.onTransitionStart?.(crossing);
+      
+      // Record trail for social presence
+      if (options.playerId) {
+        recordTrail(
+          options.playerId,
+          state.currentLand.pos_x,
+          state.currentLand.pos_y,
+          neighborPos.x,
+          neighborPos.y
+        );
+      }
       
       if (neighborLand) {
         // Neighbor exists - transition to their land
