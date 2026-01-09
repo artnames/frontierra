@@ -1,5 +1,5 @@
 import { useCallback, useState, useMemo, useEffect } from 'react';
-import { Eye, Map, Copy, Check, Shuffle, Settings, ChevronLeft, Users, Globe } from 'lucide-react';
+import { Eye, Map, Copy, Check, Shuffle, Settings, ChevronLeft, Users, Globe, Compass, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
@@ -14,7 +14,7 @@ import {
   parseActions,
   ReplayFrame
 } from '@/lib/worldContract';
-import { WorldExplorer } from '@/components/WorldExplorer';
+import { WorldExplorer, InteractionMode } from '@/components/WorldExplorer';
 import { WorldMap2D } from '@/components/WorldMap2D';
 import { WorldContractPanel } from '@/components/WorldContractPanel';
 import { ReplayControls } from '@/components/ReplayControls';
@@ -31,8 +31,9 @@ type WorldMode = 'solo' | 'multiplayer';
 const Index = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('firstperson');
   const [worldMode, setWorldMode] = useState<WorldMode>('solo');
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>('explore');
   const [copied, setCopied] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(false); // Default hidden in explore mode
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('contract');
   const [deterministicTest, setDeterministicTest] = useState<DeterminismTest | null>(null);
   const [isReplaying, setIsReplaying] = useState(false);
@@ -55,6 +56,31 @@ const Index = () => {
   const multiplayer = useMultiplayerWorld({
     autoCreate: true
   });
+  
+  // Check if we're on someone else's land (multiplayer)
+  const isOtherPlayerLand = useMemo(() => {
+    if (worldMode !== 'multiplayer' || !multiplayer.currentLand) return false;
+    return multiplayer.isVisitingOtherLand;
+  }, [worldMode, multiplayer.currentLand, multiplayer.isVisitingOtherLand]);
+  
+  // Force explore mode when on someone else's land
+  const effectiveInteractionMode: InteractionMode = isOtherPlayerLand ? 'explore' : interactionMode;
+  
+  // Handle mode changes
+  const handleInteractionModeChange = useCallback((mode: InteractionMode) => {
+    if (isOtherPlayerLand && mode === 'editor') {
+      toast({
+        title: 'Cannot edit',
+        description: "You can only explore on someone else's land",
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    setInteractionMode(mode);
+    // Show sidebar in editor mode, hide in explore mode
+    setShowSidebar(mode === 'editor');
+  }, [isOtherPlayerLand, toast]);
   
   // Initialize multiplayer land on first load
   useEffect(() => {
@@ -264,18 +290,45 @@ const Index = () => {
                 2D Map
               </Button>
             </div>
+            
+            {/* Interaction Mode Toggle */}
+            <div className="hidden sm:flex items-center gap-1 bg-secondary rounded p-1">
+              <Button
+                variant={effectiveInteractionMode === 'explore' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => handleInteractionModeChange('explore')}
+                className="gap-1.5 h-7 text-xs"
+                disabled={isReplaying}
+              >
+                <Compass className="w-3.5 h-3.5" />
+                Explore
+              </Button>
+              <Button
+                variant={effectiveInteractionMode === 'editor' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => handleInteractionModeChange('editor')}
+                className="gap-1.5 h-7 text-xs"
+                disabled={isReplaying || isOtherPlayerLand}
+                title={isOtherPlayerLand ? "Can't edit on someone else's land" : undefined}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Editor
+              </Button>
+            </div>
           </div>
           
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSidebar(!showSidebar)}
-              className="text-xs gap-1"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{showSidebar ? 'Hide' : 'Show'} Panel</span>
-            </Button>
+            {effectiveInteractionMode === 'editor' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSidebar(!showSidebar)}
+                className="text-xs gap-1"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{showSidebar ? 'Hide' : 'Show'} Panel</span>
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -303,6 +356,8 @@ const Index = () => {
               deterministicTest={deterministicTest}
               isReplaying={isReplaying}
               replayFrame={replayFrame}
+              interactionMode={effectiveInteractionMode}
+              onModeChange={handleInteractionModeChange}
             />
           ) : (
             <div className="w-full h-full flex bg-background">
