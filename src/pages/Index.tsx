@@ -223,7 +223,7 @@ const Index = () => {
   return (
     <div className={`h-screen bg-background flex flex-col overflow-hidden ${isInvalid ? 'border-4 border-destructive' : ''}`}>
       {/* Compact Header */}
-      <header className={`border-b ${isInvalid ? 'border-destructive bg-destructive/10' : 'border-border bg-card/80'} backdrop-blur-sm flex-shrink-0`}>
+      <header className={`relative z-50 border-b ${isInvalid ? 'border-destructive bg-destructive/10' : 'border-border bg-card/80'} backdrop-blur-sm flex-shrink-0`}>
         <div className="px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div>
@@ -331,7 +331,8 @@ const Index = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowSidebar(!showSidebar)}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => setShowSidebar((s) => !s)}
               className="text-xs gap-1"
             >
               <Settings className="w-3.5 h-3.5" />
@@ -351,9 +352,9 @@ const Index = () => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex overflow-hidden relative z-0">
         {/* World View */}
-        <div className="flex-1 relative">
+        <div className="flex-1 relative z-0">
           {viewMode === 'firstperson' ? (
             <WorldExplorer 
               seed={activeParams.seed} 
@@ -399,7 +400,7 @@ const Index = () => {
 
         {/* Control Sidebar */}
         {showSidebar && (
-          <aside className="w-80 border-l border-border bg-card flex flex-col flex-shrink-0 overflow-hidden">
+          <aside className="w-80 border-l border-border bg-card/95 backdrop-blur-sm flex flex-col flex-shrink-0 overflow-hidden relative z-40 shadow-lg">
             {/* Tab Navigation */}
             <div className="flex border-b border-border bg-secondary/30">
               {(['contract', 'actions', 'replay', 'parameters'] as SidebarTab[]).map(tab => (
