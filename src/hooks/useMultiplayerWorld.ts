@@ -21,6 +21,7 @@ interface MultiplayerWorldState {
   playerPosition: { x: number; z: number };
   isLoading: boolean;
   error: string | null;
+  isVisitingOtherLand: boolean; // True when on someone else's land
 }
 
 interface UseMultiplayerWorldOptions {
@@ -35,7 +36,8 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     neighborLands: [],
     playerPosition: { x: LAND_GRID_SIZE / 2, z: LAND_GRID_SIZE / 2 },
     isLoading: true,
-    error: null
+    error: null,
+    isVisitingOtherLand: false
   });
   
   // Generate world from current land's parameters
@@ -157,7 +159,8 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
         currentLand: land,
         neighborLands: neighbors.filter(n => n.player_id !== land.player_id),
         playerPosition: { x: LAND_GRID_SIZE / 2, z: LAND_GRID_SIZE / 2 },
-        isLoading: false
+        isLoading: false,
+        isVisitingOtherLand: land.player_id !== prev.playerId // Check if we're visiting someone else
       }));
     } else {
       setState(prev => ({ ...prev, isLoading: false, error: 'Land not found' }));
@@ -195,6 +198,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     currentLand: state.currentLand,
     neighborLands: state.neighborLands,
     playerPosition: state.playerPosition,
+    isVisitingOtherLand: state.isVisitingOtherLand,
     
     // World data (from NexArt)
     world,

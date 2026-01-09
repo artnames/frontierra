@@ -8,6 +8,7 @@ interface FirstPersonControlsProps {
   onPositionChange?: (x: number, z: number, y: number) => void; // x, z (ground), y (height)
   preservePosition?: boolean;
   enabled?: boolean;
+  allowVerticalMovement?: boolean; // false = ground-locked explore mode
 }
 
 // Store position globally to persist across world regenerations
@@ -20,7 +21,7 @@ const globalCameraState = {
   lastWorldSeed: null as number | null
 };
 
-export function useFirstPersonControls({ world, onPositionChange, preservePosition = true, enabled = true }: FirstPersonControlsProps) {
+export function useFirstPersonControls({ world, onPositionChange, preservePosition = true, enabled = true, allowVerticalMovement = true }: FirstPersonControlsProps) {
   const { camera, gl } = useThree();
   const moveState = useRef({
     forward: false,
@@ -272,20 +273,25 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
       }
     }
 
-    // Vertical movement (fly mode) - accumulate offset
-    if (up) {
-      manualHeightOffset.current += speed;
-    }
-    if (down) {
-      manualHeightOffset.current = Math.max(-1, manualHeightOffset.current - speed);
-      const terrainHeight = getElevationAt(world, position.current.x, position.current.z);
-      position.current.y = Math.max(terrainHeight + 0.5, terrainHeight + 1.8 + manualHeightOffset.current);
-    }
-    
-    // Apply current height with offset
-    if (up || down) {
-      const terrainHeight = getElevationAt(world, position.current.x, position.current.z);
-      position.current.y = terrainHeight + 1.8 + manualHeightOffset.current;
+    // Vertical movement (fly mode) - only if allowed
+    if (allowVerticalMovement) {
+      if (up) {
+        manualHeightOffset.current += speed;
+      }
+      if (down) {
+        manualHeightOffset.current = Math.max(-1, manualHeightOffset.current - speed);
+        const terrainHeight = getElevationAt(world, position.current.x, position.current.z);
+        position.current.y = Math.max(terrainHeight + 0.5, terrainHeight + 1.8 + manualHeightOffset.current);
+      }
+      
+      // Apply current height with offset
+      if (up || down) {
+        const terrainHeight = getElevationAt(world, position.current.x, position.current.z);
+        position.current.y = terrainHeight + 1.8 + manualHeightOffset.current;
+      }
+    } else {
+      // Ground-locked mode - always snap to terrain
+      manualHeightOffset.current = 0;
     }
 
     // Apply position and rotation to camera
@@ -311,4 +317,23 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
 export function resetCameraToSpawn() {
   globalCameraState.initialized = false;
   globalCameraState.manualHeight = null;
+}
+
+// Set camera to editor view (high corner looking down)
+export function setCameraToEditorView(world: WorldData) {
+  const gridSize = world.gridSize;
+  // Position at corner, high up
+  globalCameraState.position = new THREE.Vector3(gridSize * 0.9, 50, gridSize * 0.9);
+  globalCameraState.manualHeight = 48; // High above terrain
+  globalCameraState.yaw = -Math.PI * 0.75; // Looking toward center
+  globalCameraState.pitch = -0.8; // Looking down
+  globalCameraState.initialized = true;
+  globalCameraState.lastWorldSeed = world.seed;
+}
+
+// Set camera to explore view (ground level at spawn)
+export function setCameraToExploreView(world: WorldData) {
+  globalCameraState.initialized = false;
+  globalCameraState.manualHeight = 0;
+  globalCameraState.lastWorldSeed = world.seed;
 }

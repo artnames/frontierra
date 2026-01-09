@@ -3,14 +3,14 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { WorldData, distanceToObject, isWorldValid } from '@/lib/worldData';
+import { WorldData, distanceToObject, isWorldValid, getElevationAt } from '@/lib/worldData';
 import { useNexArtWorld } from '@/hooks/useNexArtWorld';
 import { 
   WorldAction, 
   ReplayFrame,
   DeterminismTest,
 } from '@/lib/worldContract';
-import { useFirstPersonControls } from '@/hooks/useFirstPersonControls';
+import { useFirstPersonControls, setCameraToEditorView, setCameraToExploreView } from '@/hooks/useFirstPersonControls';
 import { 
   TerrainMesh, 
   PlantedObject, 
@@ -24,6 +24,8 @@ import { PlacedBeaconMesh } from '@/components/ActionSystem';
 import * as THREE from 'three';
 import { useThree, useFrame } from '@react-three/fiber';
 
+export type InteractionMode = 'explore' | 'editor';
+
 interface FirstPersonSceneProps {
   world: WorldData;
   actions: WorldAction[];
@@ -31,6 +33,7 @@ interface FirstPersonSceneProps {
   onDiscovery: (discovered: boolean) => void;
   replayFrame?: ReplayFrame | null;
   isReplaying: boolean;
+  interactionMode: InteractionMode;
 }
 
 function FirstPersonScene({ 
@@ -39,7 +42,8 @@ function FirstPersonScene({
   onPositionChange, 
   onDiscovery,
   replayFrame,
-  isReplaying
+  isReplaying,
+  interactionMode
 }: FirstPersonSceneProps) {
   const [isDiscovered, setIsDiscovered] = useState(false);
   
@@ -59,7 +63,8 @@ function FirstPersonScene({
   useFirstPersonControls({ 
     world, 
     onPositionChange: handlePositionChange,
-    enabled: !isReplaying 
+    enabled: !isReplaying,
+    allowVerticalMovement: interactionMode === 'editor' // Explore mode = ground-locked
   });
   
   return (
@@ -104,6 +109,8 @@ interface WorldExplorerProps {
   deterministicTest?: DeterminismTest | null;
   isReplaying?: boolean;
   replayFrame?: ReplayFrame | null;
+  interactionMode?: InteractionMode;
+  onModeChange?: (mode: InteractionMode) => void;
 }
 
 export function WorldExplorer({ 
@@ -114,7 +121,9 @@ export function WorldExplorer({
   onPositionUpdate,
   deterministicTest,
   isReplaying = false,
-  replayFrame
+  replayFrame,
+  interactionMode = 'explore',
+  onModeChange
 }: WorldExplorerProps) {
   const [position, setPosition] = useState({ x: 0, y: 0, z: 0 });
   const [isDiscovered, setIsDiscovered] = useState(false);
@@ -127,6 +136,16 @@ export function WorldExplorer({
     vars,
     debounceMs: 300
   });
+  // Handle mode changes - set camera position accordingly
+  useEffect(() => {
+    if (world) {
+      if (interactionMode === 'editor') {
+        setCameraToEditorView(world);
+      } else {
+        setCameraToExploreView(world);
+      }
+    }
+  }, [interactionMode, world]);
   
   useEffect(() => {
     if (isDiscovered && !showDiscoveryBanner) {
@@ -224,6 +243,7 @@ export function WorldExplorer({
           onDiscovery={handleDiscovery}
           replayFrame={replayFrame}
           isReplaying={isReplaying}
+          interactionMode={interactionMode}
         />
       </Canvas>
       
@@ -269,7 +289,12 @@ export function WorldExplorer({
           <div className="text-xs text-muted-foreground space-y-1">
             <div><span className="text-primary">WASD</span> — Move</div>
             <div><span className="text-primary">Mouse drag</span> — Look</div>
-            <div><span className="text-primary">Space/Shift</span> — Up/Down</div>
+            {interactionMode === 'editor' && (
+              <div><span className="text-primary">Space/Shift</span> — Up/Down</div>
+            )}
+            <div className="mt-2 text-[10px] uppercase text-accent">
+              {interactionMode === 'explore' ? '🚶 Explore Mode' : '✏️ Editor Mode'}
+            </div>
           </div>
         </div>
       )}
