@@ -162,7 +162,7 @@ function setup() {
       var lmNoise2 = noise(gx * 0.14 + 4500, gy * 0.14 + 4500);
       var combinedLm = lmNoise * 0.6 + lmNoise2 * 0.4;
       
-      var validLmTerrain = !isUnderwater && shapedElev < 0.75 && !onPath && alphaChannel > 240;
+      var validLmTerrain = !isUnderwater && shapedElev < 0.75 && !onPath && alphaChannel === 255;
       if (validLmTerrain && combinedLm < landmarkDensity) {
         var typeNoise = noise(gx * 0.25 + 6000, gy * 0.25 + 6000);
         var lmType = floor(typeNoise * 5);
