@@ -71,10 +71,10 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
   const heightScale = 15; // World units for full elevation range
   
   // Convert cells to terrain - ALL data comes from NexArt pixels
-  // Elevation is CONTINUOUS from Red channel, not categorical
+  // RGB = Tile Type (categorical), Alpha = Elevation (continuous 0-1)
   const terrain: TerrainCell[][] = grid.cells.map(row =>
     row.map((cell: GridCell) => {
-      // Direct elevation from Red channel (continuous 0-1)
+      // Direct elevation from Alpha channel (continuous 0-1)
       const rawElevation = cell.elevation;
       
       // Determine type from Alpha channel features and Blue channel hints
