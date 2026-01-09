@@ -88,12 +88,11 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
       } else if (rawElevation < waterThreshold) {
         type = 'water';
       } else {
-        // Use Blue channel + moisture to hint at biome
-        // But don't override elevation - it's continuous
-        const landFraction = (rawElevation - waterThreshold) / (1 - waterThreshold);
-        if (landFraction > 0.6) {
+        // Use tile type from RGB classification
+        const tileType = cell.tileType;
+        if (tileType === 3) { // MOUNTAIN
           type = 'mountain';
-        } else if (cell.moisture > 0.5 && landFraction < 0.4) {
+        } else if (tileType === 2) { // FOREST
           type = 'forest';
         } else {
           type = 'ground';
@@ -103,12 +102,12 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
       return {
         x: cell.x,
         y: cell.y,
-        elevation: rawElevation, // Keep as continuous 0-1, scaled in 3D
-        moisture: cell.moisture,
+        elevation: rawElevation,
+        moisture: cell.g / 255, // Derive from green channel
         type,
         hasLandmark: cell.hasLandmark,
-        landmarkType: cell.landmarkType,
-        hasRiver: cell.hasRiver,
+        landmarkType: 0,
+        hasRiver: cell.isRiver,
         isPath: cell.isPath,
         isBridge: cell.isBridge
       };

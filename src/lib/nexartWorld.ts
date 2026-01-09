@@ -5,11 +5,20 @@
 import { WORLD_LAYOUT_SOURCE, WorldParams } from './worldGenerator';
 
 // ============================================
-// RGBA CHANNEL ENCODING (from NexArt pixels)
-// Red   = Elevation (0-255)
-// Green = Moisture/Vegetation (0-255)  
-// Blue  = Biome/Material classification
-// Alpha = Feature mask (landmarks, rivers, objects)
+// NEW RGBA CHANNEL ENCODING (from NexArt pixels)
+// RGB   = Tile Type (categorical color)
+// Alpha = Elevation (0-255, continuous)
+//
+// Tile Colors for classification:
+//   Water:    R<50, B>100
+//   Ground:   R>130, G>110, B<110
+//   Forest:   R<80, G>80, B<70
+//   Mountain: R>100, G>90, B>85 (and high alpha)
+//   Path:     R>160, G>130, B<120
+//   Bridge:   R~120, G~80, B~50
+//   Landmark: R>200, G<100
+//   River:    R<90, G>140, B>160
+//   Object:   R=255, G>200
 // ============================================
 
 export enum TileType {
@@ -19,18 +28,11 @@ export enum TileType {
   MOUNTAIN = 3,
   PATH = 4,
   BRIDGE = 5,
-  VOID = 6
+  LANDMARK = 6,
+  RIVER = 7,
+  OBJECT = 8,
+  VOID = 9
 }
-
-// Blue channel ranges for biome classification
-const BIOME_RANGES = {
-  WATER: { min: 0, max: 50 },
-  GROUND: { min: 51, max: 100 },
-  FOREST: { min: 101, max: 150 },
-  MOUNTAIN: { min: 151, max: 200 },
-  PATH: { min: 201, max: 230 },
-  BRIDGE: { min: 231, max: 255 }
-};
 
 // ============================================
 // WORLD GRID - Extracted from NexArt pixels
@@ -40,15 +42,15 @@ export interface GridCell {
   x: number;
   y: number;
   tileType: TileType;
-  elevation: number;        // From Red channel (0-1)
-  moisture: number;         // From Green channel (0-1)
-  biomeValue: number;       // From Blue channel (0-255)
-  hasLandmark: boolean;     // From Alpha (250-254)
-  landmarkType: number;     // Landmark variant (0-4)
-  hasRiver: boolean;        // From Alpha (245-249)
-  isPlantedObject: boolean; // From Alpha (1)
+  elevation: number;        // From Alpha channel (0-1)
+  r: number;                // Raw R value
+  g: number;                // Raw G value  
+  b: number;                // Raw B value
+  hasLandmark: boolean;
   isPath: boolean;
   isBridge: boolean;
+  isRiver: boolean;
+  isObject: boolean;
 }
 
 export interface NexArtWorldGrid {
@@ -189,6 +191,7 @@ function computePixelHash(pixels: Uint8ClampedArray): string {
 
 // ============================================
 // RGBA PIXEL PARSING - Derives ALL world data
+// NEW: RGB = Tile Type, Alpha = Elevation
 // ============================================
 
 function parseRGBAPixels(
@@ -202,60 +205,31 @@ function parseRGBAPixels(
   let plantedObjectY = Math.floor(gridSize / 2);
   
   const objType = Math.floor((vars[0] ?? 50) / 100 * 5);
-  const waterThreshold = (vars[4] ?? 30) / 100 * 0.20 + 0.28;
   
   for (let y = 0; y < gridSize; y++) {
     cells[y] = [];
     for (let x = 0; x < gridSize; x++) {
       const i = (y * gridSize + x) * 4;
-      const r = pixels[i];     // Elevation (continuous)
-      const g = pixels[i + 1]; // Moisture (continuous)
-      const b = pixels[i + 2]; // Biome hint (continuous)
-      const a = pixels[i + 3]; // Feature mask
+      const r = pixels[i];
+      const g = pixels[i + 1];
+      const b = pixels[i + 2];
+      const a = pixels[i + 3]; // Elevation (0-255)
       
-      // Derive CONTINUOUS elevation from red channel
-      const elevation = r / 255;
+      // Elevation from Alpha channel (continuous)
+      const elevation = a / 255;
       
-      // Derive CONTINUOUS moisture from green channel
-      const moisture = g / 255;
+      // Classify tile type from RGB color
+      const tileType = classifyTileFromRGB(r, g, b);
       
-      // Parse Alpha channel for features (new encoding)
-      // 255: No feature
-      // 250-254: Landmark types (0-4)
-      // 245-249: River
-      // 230-239: Path
-      // 220-229: Bridge
-      // 1: Planted object
-      const hasLandmark = a >= 250 && a <= 254;
-      const landmarkType = hasLandmark ? (a - 250) : 0;
-      const hasRiver = a >= 245 && a <= 249;
-      const isPath = a >= 230 && a <= 239;
-      const isBridge = a >= 220 && a <= 229;
-      const isPlantedObject = a === 1;
+      const isObject = tileType === TileType.OBJECT;
+      const hasLandmark = tileType === TileType.LANDMARK;
+      const isPath = tileType === TileType.PATH;
+      const isBridge = tileType === TileType.BRIDGE;
+      const isRiver = tileType === TileType.RIVER;
       
-      if (isPlantedObject) {
+      if (isObject) {
         plantedObjectX = x;
         plantedObjectY = y;
-      }
-      
-      // Determine tile type from Alpha features + elevation threshold
-      let tileType: TileType;
-      if (isBridge) {
-        tileType = TileType.BRIDGE;
-      } else if (isPath) {
-        tileType = TileType.PATH;
-      } else if (elevation < waterThreshold) {
-        tileType = TileType.WATER;
-      } else {
-        // Soft classification based on elevation + moisture
-        const landFraction = (elevation - waterThreshold) / (1 - waterThreshold);
-        if (landFraction > 0.6) {
-          tileType = TileType.MOUNTAIN;
-        } else if (moisture > 0.5 && landFraction < 0.4) {
-          tileType = TileType.FOREST;
-        } else {
-          tileType = TileType.GROUND;
-        }
       }
       
       cells[y][x] = {
@@ -263,14 +237,14 @@ function parseRGBAPixels(
         y,
         tileType,
         elevation,
-        moisture,
-        biomeValue: b,
+        r,
+        g,
+        b,
         hasLandmark,
-        landmarkType,
-        hasRiver,
-        isPlantedObject,
         isPath,
-        isBridge
+        isBridge,
+        isRiver,
+        isObject
       };
     }
   }
@@ -283,9 +257,9 @@ function parseRGBAPixels(
   spawnX = Math.max(2, Math.min(gridSize - 3, spawnX));
   spawnY = Math.max(2, Math.min(gridSize - 3, spawnY));
   
-  // Ensure spawn is not on water (using elevation threshold)
+  // Ensure spawn is not on water
   let attempts = 0;
-  while (cells[spawnY]?.[spawnX]?.elevation < waterThreshold && attempts < 100) {
+  while (cells[spawnY]?.[spawnX]?.tileType === TileType.WATER && attempts < 100) {
     spawnX = (spawnX + 1) % gridSize;
     if (spawnX === 0) spawnY = (spawnY + 1) % gridSize;
     attempts++;
@@ -304,13 +278,55 @@ function parseRGBAPixels(
   };
 }
 
-function classifyBiomeFromBlue(blue: number): TileType {
-  if (blue <= BIOME_RANGES.WATER.max) return TileType.WATER;
-  if (blue <= BIOME_RANGES.GROUND.max) return TileType.GROUND;
-  if (blue <= BIOME_RANGES.FOREST.max) return TileType.FOREST;
-  if (blue <= BIOME_RANGES.MOUNTAIN.max) return TileType.MOUNTAIN;
-  if (blue <= BIOME_RANGES.PATH.max) return TileType.PATH;
-  return TileType.BRIDGE;
+// Classify tile type from RGB values
+function classifyTileFromRGB(r: number, g: number, b: number): TileType {
+  // Object: bright yellow (255, 220, 60)
+  if (r > 240 && g > 200 && b < 100) {
+    return TileType.OBJECT;
+  }
+  
+  // Landmark: red-ish (220, 80, 80)
+  if (r > 180 && g < 120 && b < 120) {
+    return TileType.LANDMARK;
+  }
+  
+  // Bridge: dark brown (120, 80, 50)
+  if (r > 100 && r < 140 && g > 60 && g < 100 && b > 30 && b < 70) {
+    return TileType.BRIDGE;
+  }
+  
+  // Path: light brown (180, 150, 100)
+  if (r > 160 && r < 200 && g > 130 && g < 170 && b > 80 && b < 120) {
+    return TileType.PATH;
+  }
+  
+  // River: cyan-ish (70, 160, 180)
+  if (r < 100 && g > 130 && b > 150) {
+    return TileType.RIVER;
+  }
+  
+  // Water: blue tones (low R, high B)
+  if (r < 60 && b > 100) {
+    return TileType.WATER;
+  }
+  
+  // Forest: green tones (low R, high G, low B)
+  if (r < 90 && g > 80 && b < 80) {
+    return TileType.FOREST;
+  }
+  
+  // Mountain: gray tones (R~G~B, all > 100)
+  if (r > 100 && g > 90 && b > 85 && Math.abs(r - g) < 30 && Math.abs(g - b) < 30) {
+    return TileType.MOUNTAIN;
+  }
+  
+  // Ground: tan/earthy (high R, medium G, low B)
+  if (r > 120 && g > 100 && b < 130) {
+    return TileType.GROUND;
+  }
+  
+  // Default to ground
+  return TileType.GROUND;
 }
 
 function createFailedWorld(seed: number, vars: number[], errorMessage: string): NexArtWorldGrid {
