@@ -1,0 +1,218 @@
+// Land Registry - CRUD for player lands
+// This is the ONLY server-side state for multiplayer
+// All terrain is derived at runtime via NexArt from (seed, vars)
+
+import { supabase } from '@/integrations/supabase/client';
+import { PlayerLand, WorldTopology } from './types';
+
+// Fetch a single land by player ID
+export async function getLandByPlayerId(playerId: string): Promise<PlayerLand | null> {
+  const { data, error } = await supabase
+    .from('player_lands')
+    .select('*')
+    .eq('player_id', playerId)
+    .maybeSingle();
+  
+  if (error) {
+    console.error('[LandRegistry] Error fetching land:', error);
+    return null;
+  }
+  
+  return data;
+}
+
+// Fetch a land by grid position
+export async function getLandAtPosition(x: number, y: number): Promise<PlayerLand | null> {
+  const { data, error } = await supabase
+    .from('player_lands')
+    .select('*')
+    .eq('pos_x', x)
+    .eq('pos_y', y)
+    .maybeSingle();
+  
+  if (error) {
+    console.error('[LandRegistry] Error fetching land at position:', error);
+    return null;
+  }
+  
+  return data;
+}
+
+// Fetch all lands in a bounding box (for loading neighbors)
+export async function getLandsInArea(
+  minX: number, 
+  minY: number, 
+  maxX: number, 
+  maxY: number
+): Promise<PlayerLand[]> {
+  const { data, error } = await supabase
+    .from('player_lands')
+    .select('*')
+    .gte('pos_x', minX)
+    .lte('pos_x', maxX)
+    .gte('pos_y', minY)
+    .lte('pos_y', maxY);
+  
+  if (error) {
+    console.error('[LandRegistry] Error fetching lands in area:', error);
+    return [];
+  }
+  
+  return data ?? [];
+}
+
+// Build world topology from fetched lands
+export function buildTopology(lands: PlayerLand[]): WorldTopology {
+  const landMap = new Map<string, PlayerLand>();
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  
+  for (const land of lands) {
+    const key = `${land.pos_x},${land.pos_y}`;
+    landMap.set(key, land);
+    minX = Math.min(minX, land.pos_x);
+    minY = Math.min(minY, land.pos_y);
+    maxX = Math.max(maxX, land.pos_x);
+    maxY = Math.max(maxY, land.pos_y);
+  }
+  
+  return {
+    lands: landMap,
+    gridWidth: lands.length > 0 ? maxX - minX + 1 : 0,
+    gridHeight: lands.length > 0 ? maxY - minY + 1 : 0
+  };
+}
+
+// Create a new land for a player
+export async function createLand(
+  seed: number,
+  vars: number[],
+  posX: number = 0,
+  posY: number = 0
+): Promise<PlayerLand | null> {
+  // Ensure vars is exactly 10 elements, clamped 0-100
+  const normalizedVars = Array(10).fill(0).map((_, i) => 
+    Math.max(0, Math.min(100, Math.round(vars[i] ?? 50)))
+  );
+  
+  const { data, error } = await supabase
+    .from('player_lands')
+    .insert({
+      seed: Math.floor(seed),
+      vars: normalizedVars,
+      pos_x: posX,
+      pos_y: posY
+    })
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('[LandRegistry] Error creating land:', error);
+    return null;
+  }
+  
+  return data;
+}
+
+// Update an existing land's parameters
+export async function updateLand(
+  playerId: string,
+  updates: Partial<Pick<PlayerLand, 'seed' | 'vars' | 'pos_x' | 'pos_y'>>
+): Promise<PlayerLand | null> {
+  const updateData: Record<string, unknown> = {};
+  
+  if (updates.seed !== undefined) {
+    updateData.seed = Math.floor(updates.seed);
+  }
+  if (updates.vars !== undefined) {
+    updateData.vars = Array(10).fill(0).map((_, i) => 
+      Math.max(0, Math.min(100, Math.round(updates.vars![i] ?? 50)))
+    );
+  }
+  if (updates.pos_x !== undefined) {
+    updateData.pos_x = updates.pos_x;
+  }
+  if (updates.pos_y !== undefined) {
+    updateData.pos_y = updates.pos_y;
+  }
+  
+  const { data, error } = await supabase
+    .from('player_lands')
+    .update(updateData)
+    .eq('player_id', playerId)
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('[LandRegistry] Error updating land:', error);
+    return null;
+  }
+  
+  return data;
+}
+
+// Find an unoccupied grid position for a new land
+export async function findAvailablePosition(): Promise<{ x: number; y: number }> {
+  // Fetch all existing lands to find gaps
+  const { data: lands } = await supabase
+    .from('player_lands')
+    .select('pos_x, pos_y');
+  
+  if (!lands || lands.length === 0) {
+    return { x: 0, y: 0 };  // First land at origin
+  }
+  
+  const occupied = new Set(lands.map(l => `${l.pos_x},${l.pos_y}`));
+  
+  // Spiral outward from origin to find first available slot
+  let x = 0, y = 0, dx = 1, dy = 0;
+  let segmentLength = 1, segmentPassed = 0;
+  
+  for (let i = 0; i < 100; i++) {
+    if (!occupied.has(`${x},${y}`)) {
+      return { x, y };
+    }
+    
+    x += dx;
+    y += dy;
+    segmentPassed++;
+    
+    if (segmentPassed === segmentLength) {
+      segmentPassed = 0;
+      const temp = dx;
+      dx = -dy;
+      dy = temp;
+      
+      if (dy === 0) {
+        segmentLength++;
+      }
+    }
+  }
+  
+  return { x, y };
+}
+
+// Subscribe to land changes (for real-time multiplayer)
+export function subscribeLandChanges(
+  onLandUpdated: (land: PlayerLand) => void
+): () => void {
+  const channel = supabase
+    .channel('land-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'player_lands'
+      },
+      (payload) => {
+        if (payload.new) {
+          onLandUpdated(payload.new as PlayerLand);
+        }
+      }
+    )
+    .subscribe();
+  
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
