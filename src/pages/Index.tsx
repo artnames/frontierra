@@ -534,18 +534,34 @@ const Index = () => {
                     <div className="flex gap-1.5">
                       <Input
                         type="number"
-                        value={params.seed}
-                        onChange={handleSeedInput}
+                        value={activeParams.seed}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value, 10);
+                          if (!isNaN(value)) {
+                            if (worldMode === 'multiplayer' && multiplayer.currentLand && !multiplayer.isVisitingOtherLand) {
+                              multiplayer.updateLandParams({ seed: Math.max(0, value) });
+                            } else {
+                              setSeed(Math.max(0, value));
+                            }
+                          }
+                        }}
                         className="bg-secondary border-border font-mono text-sm h-8"
-                        disabled={isReplaying}
+                        disabled={isReplaying || (worldMode === 'multiplayer' && multiplayer.isVisitingOtherLand)}
                       />
                       <Button
                         variant="outline"
                         size="icon"
-                        onClick={randomizeSeed}
+                        onClick={() => {
+                          const newSeed = Math.floor(Math.random() * 100000);
+                          if (worldMode === 'multiplayer' && multiplayer.currentLand && !multiplayer.isVisitingOtherLand) {
+                            multiplayer.updateLandParams({ seed: newSeed });
+                          } else {
+                            randomizeSeed();
+                          }
+                        }}
                         className="shrink-0 h-8 w-8"
                         title="Randomize seed"
-                        disabled={isReplaying}
+                        disabled={isReplaying || (worldMode === 'multiplayer' && multiplayer.isVisitingOtherLand)}
                       >
                         <Shuffle className="w-3.5 h-3.5" />
                       </Button>
@@ -556,7 +572,7 @@ const Index = () => {
                   <div className="space-y-3">
                     <div className="data-label text-[10px]">Variables [0-9]</div>
                     
-                    {params.vars.map((value, index) => (
+                    {activeParams.vars.map((value, index) => (
                       <div key={index} className="space-y-1">
                         <div className="flex justify-between items-center text-[10px]">
                           <span className="text-muted-foreground">
@@ -566,24 +582,40 @@ const Index = () => {
                         </div>
                         <Slider
                           value={[value]}
-                          onValueChange={([v]) => setVar(index, v)}
+                          onValueChange={([v]) => {
+                            if (worldMode === 'multiplayer' && multiplayer.currentLand && !multiplayer.isVisitingOtherLand) {
+                              const newVars = [...activeParams.vars];
+                              newVars[index] = v;
+                              multiplayer.updateLandParams({ vars: newVars });
+                            } else {
+                              setVar(index, v);
+                            }
+                          }}
                           min={0}
                           max={100}
                           step={1}
                           className="w-full"
-                          disabled={isReplaying}
+                          disabled={isReplaying || (worldMode === 'multiplayer' && multiplayer.isVisitingOtherLand)}
                         />
                       </div>
                     ))}
                   </div>
                   
-                  <Button 
-                    onClick={handleGenerate}
-                    className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-display text-sm"
-                    disabled={isReplaying}
-                  >
-                    Generate World
-                  </Button>
+                  {worldMode !== 'multiplayer' && (
+                    <Button 
+                      onClick={handleGenerate}
+                      className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-display text-sm"
+                      disabled={isReplaying}
+                    >
+                      Generate World
+                    </Button>
+                  )}
+                  
+                  {worldMode === 'multiplayer' && multiplayer.isVisitingOtherLand && (
+                    <p className="text-xs text-muted-foreground text-center py-2">
+                      You can only edit your own land
+                    </p>
+                  )}
                 </div>
               )}
             </div>
