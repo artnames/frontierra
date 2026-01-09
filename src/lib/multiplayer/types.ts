@@ -1,11 +1,14 @@
 // Deterministic Multiplayer World Types
 // Only stores world parameters - all terrain is derived at runtime via NexArt
+// World A: 10×10 grid (100 lands) with shared macro geography
+
+import { WorldContext, WORLD_GRID_WIDTH, WORLD_GRID_HEIGHT } from '@/lib/worldContext';
 
 export interface PlayerLand {
   player_id: string;
   seed: number;
   vars: number[];  // Always 10 elements, 0-100
-  pos_x: number;   // Grid position in world topology
+  pos_x: number;   // Grid position in world topology (0-9 for World A)
   pos_y: number;
   created_at?: string;
   updated_at?: string;
@@ -13,9 +16,13 @@ export interface PlayerLand {
 
 export interface WorldTopology {
   lands: Map<string, PlayerLand>;  // Key: "x,y" grid position
-  gridWidth: number;
-  gridHeight: number;
+  gridWidth: number;   // Always 10 for World A
+  gridHeight: number;  // Always 10 for World A
 }
+
+// World A constants
+export const WORLD_A_GRID_WIDTH = WORLD_GRID_WIDTH;   // 10
+export const WORLD_A_GRID_HEIGHT = WORLD_GRID_HEIGHT; // 10
 
 export type EdgeDirection = 'north' | 'south' | 'east' | 'west';
 

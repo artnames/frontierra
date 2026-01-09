@@ -2,7 +2,13 @@
 // The 2D layout from NexArt is the ONLY source of world truth
 // 3D rendering is a projection of this layout, never independent generation
 
-import { WORLD_LAYOUT_SOURCE, WorldParams } from './worldGenerator';
+import { WORLD_LAYOUT_SOURCE, WORLD_A_LAYOUT_SOURCE, WorldParams } from './worldGenerator';
+import { 
+  WorldContext, 
+  getWorldSeed, 
+  WORLD_A_ID,
+  WORLD_GRID_WIDTH
+} from './worldContext';
 
 // ============================================
 // NEW RGBA CHANNEL ENCODING (from NexArt pixels)
@@ -64,6 +70,8 @@ export interface NexArtWorldGrid {
   pixelHash: string;
   isValid: boolean;
   errorMessage?: string;
+  // World A context (if generated with world coordinates)
+  worldContext?: WorldContext;
 }
 
 // ============================================
@@ -80,13 +88,15 @@ export function normalizeNexArtInput(params: {
   seed?: unknown;
   vars?: unknown;
   mode?: unknown;
-}): NormalizedNexArtInput {
+  worldContext?: WorldContext;
+}): NormalizedNexArtInput & { worldContext?: WorldContext } {
   return {
     seed: Number(params.seed) || 0,
     vars: Array.isArray(params.vars)
       ? params.vars.map(v => Number(v) || 0).slice(0, 10)
       : new Array(10).fill(0),
-    mode: params.mode === 'loop' ? 'loop' : 'static'
+    mode: params.mode === 'loop' ? 'loop' : 'static',
+    worldContext: params.worldContext
   };
 }
 
@@ -99,11 +109,29 @@ const NEXART_TIMEOUT_MS = 15000;
 export async function generateNexArtWorld(params: WorldParams): Promise<NexArtWorldGrid> {
   const GRID_SIZE = 64;
   
+  // Build world context if provided
+  const worldContext: WorldContext | undefined = params.worldContext ? {
+    worldId: WORLD_A_ID,
+    worldX: params.worldContext.worldX,
+    worldY: params.worldContext.worldY
+  } : undefined;
+  
   const input = normalizeNexArtInput({
     seed: params.seed,
     vars: params.vars,
-    mode: 'static'
+    mode: 'static',
+    worldContext
   });
+  
+  // Determine which source to use - World A or solo mode
+  const isWorldA = !!input.worldContext;
+  const source = isWorldA ? WORLD_A_LAYOUT_SOURCE : WORLD_LAYOUT_SOURCE;
+  
+  // Compute the combined seed for World A (includes world position)
+  let executionSeed = input.seed;
+  if (input.worldContext) {
+    executionSeed = getWorldSeed(input.worldContext, input.seed);
+  }
   
   try {
     const { executeCodeMode } = await import('@nexart/codemode-sdk');
@@ -112,14 +140,30 @@ export async function generateNexArtWorld(params: WorldParams): Promise<NexArtWo
       setTimeout(() => reject(new Error('NexArt execution timeout')), NEXART_TIMEOUT_MS);
     });
     
-    const executionPromise = executeCodeMode({
-      source: WORLD_LAYOUT_SOURCE,
+    // Build execution options with optional globals for World A
+    const execOptions: Parameters<typeof executeCodeMode>[0] = {
+      source,
       width: GRID_SIZE,
       height: GRID_SIZE,
-      seed: input.seed,
+      seed: executionSeed,
       vars: input.vars,
       mode: input.mode,
-    });
+    };
+    
+    // Note: World coordinates are embedded in the source via string replacement
+    // since executeCodeMode may not support globals directly
+    let finalSource = source;
+    if (input.worldContext) {
+      // Inject WORLD_X and WORLD_Y as literal values at the start of the sketch
+      const injection = `var WORLD_X = ${input.worldContext.worldX}; var WORLD_Y = ${input.worldContext.worldY};`;
+      finalSource = source.replace(
+        'function setup() {',
+        `function setup() { ${injection}`
+      );
+      execOptions.source = finalSource;
+    }
+    
+    const executionPromise = executeCodeMode(execOptions);
     
     const result = await Promise.race([executionPromise, timeoutPromise]);
     
@@ -134,7 +178,8 @@ export async function generateNexArtWorld(params: WorldParams): Promise<NexArtWo
     return {
       ...grid,
       pixelHash,
-      isValid: true
+      isValid: true,
+      worldContext: input.worldContext
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
