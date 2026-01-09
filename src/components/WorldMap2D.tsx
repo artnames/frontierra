@@ -1,8 +1,8 @@
 // 2D World Map - Direct visualization of NexArt RGBA channels
-// Shows the canonical pixel data with color-coded legend
+// NEW ENCODING: RGB = Tile Type, Alpha = Elevation
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { Copy, Check, Share2 } from 'lucide-react';
+import { Check, Share2 } from 'lucide-react';
 import { WorldParams, WORLD_LAYOUT_SOURCE } from '@/lib/worldGenerator';
 import { normalizeNexArtInput } from '@/lib/nexartWorld';
 import { Button } from '@/components/ui/button';
@@ -15,26 +15,17 @@ interface WorldMap2DProps {
 
 const NEXART_TIMEOUT_MS = 10000;
 
-// Legend for continuous elevation (Blue channel now shows gradient, not categories)
-const ELEVATION_LEGEND = [
-  { label: 'Deep Water', color: '#1a3a5a', range: '0–30%' },
-  { label: 'Shallow Water', color: '#2a5a7a', range: '30–48%' },
-  { label: 'Lowlands', color: '#4a6a3a', range: '48–60%' },
-  { label: 'Hills', color: '#6a7a4a', range: '60–75%' },
-  { label: 'Mountains', color: '#7a7a7a', range: '75–90%' },
-  { label: 'Peaks', color: '#a0a5aa', range: '90–100%' },
-];
-
-const FEATURE_LEGEND = [
-  { label: 'Path', color: '#a08050', desc: 'Alpha 230–239' },
-  { label: 'Bridge', color: '#6b4423', desc: 'Alpha 220–229' },
-  { label: 'Ruins', color: '#7a7068', desc: 'Alpha 250' },
-  { label: 'Crystal', color: '#66aaff', desc: 'Alpha 251' },
-  { label: 'Ancient Tree', color: '#4a8a4a', desc: 'Alpha 252' },
-  { label: 'Stone Circle', color: '#8a8a8a', desc: 'Alpha 253' },
-  { label: 'Obelisk', color: '#c4a860', desc: 'Alpha 254' },
-  { label: 'River', color: '#4ecdc4', desc: 'Alpha 245–249' },
-  { label: 'Object', color: '#ffd93d', desc: 'Alpha = 1' },
+// Tile type legend (matches RGB colors in NexArt)
+const TILE_LEGEND = [
+  { label: 'Water', color: '#1e4878', desc: 'Low elevation' },
+  { label: 'Ground', color: '#9a8a64', desc: 'Base terrain' },
+  { label: 'Forest', color: '#3c6432', desc: 'Vegetated areas' },
+  { label: 'Mountain', color: '#8a8278', desc: 'High elevation' },
+  { label: 'Path', color: '#b4966e', desc: 'Walkable routes' },
+  { label: 'Bridge', color: '#785032', desc: 'Over water' },
+  { label: 'Landmark', color: '#dc5050', desc: 'Points of interest' },
+  { label: 'River', color: '#46a0b4', desc: 'Flowing water' },
+  { label: 'Object', color: '#ffdc3c', desc: 'Placed items' },
 ];
 
 export function WorldMap2D({ params, getShareUrl }: WorldMap2DProps) {
@@ -147,83 +138,24 @@ export function WorldMap2D({ params, getShareUrl }: WorldMap2DProps) {
     return () => { cancelled = true; };
   }, [genKey, input, lastGenerated]);
 
-  // Color visualization - interprets RGBA encoding for display
-  // Primary: Elevation (R) determines base color, Biome (B) adds context
+  // Visualization: RGB is already tile color, just apply elevation shading
   function visualizePixelData(imageData: ImageData): ImageData {
     const data = imageData.data;
     const output = new ImageData(64, 64);
     const out = output.data;
 
     for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];     // Elevation (0-255)
-      const g = data[i + 1]; // Moisture (0-255)
-      const b = data[i + 2]; // Biome hint (0-255)
-      const a = data[i + 3]; // Features
+      const r = data[i];     // Tile color R
+      const g = data[i + 1]; // Tile color G
+      const b = data[i + 2]; // Tile color B
+      const a = data[i + 3]; // Elevation (0-255)
 
-      let outR: number, outG: number, outB: number;
-
-      const elev = r / 255;
-      const moist = g / 255;
-
-      // Primary coloring based on elevation and biome
-      if (b <= 60) {
-        // Water - deeper = darker blue
-        outR = 20 + elev * 40;
-        outG = 50 + elev * 60;
-        outB = 100 + elev * 50;
-      } else if (b <= 100) {
-        // Low ground - sandy/earthy
-        outR = 120 + elev * 50 - moist * 30;
-        outG = 100 + elev * 40 + moist * 30;
-        outB = 60 + moist * 30;
-      } else if (b <= 160) {
-        // Forest/vegetation - green tones based on moisture
-        outR = 30 + moist * 40;
-        outG = 80 + moist * 60 + elev * 20;
-        outB = 30 + moist * 30;
-      } else if (b <= 220) {
-        // Hills/mountains - gray/brown based on elevation
-        outR = 100 + elev * 80;
-        outG = 90 + elev * 70;
-        outB = 80 + elev * 60;
-      } else {
-        // High peaks - light gray/white
-        outR = 160 + elev * 60;
-        outG = 160 + elev * 60;
-        outB = 170 + elev * 50;
-      }
-
-      // Features from Alpha channel - these override terrain color
-      if (a >= 230 && a <= 239) {
-        // Path - tan/brown
-        outR = 160;
-        outG = 130;
-        outB = 80;
-      } else if (a >= 220 && a <= 229) {
-        // Bridge - dark brown
-        outR = 110;
-        outG = 75;
-        outB = 40;
-      } else if (a >= 250 && a <= 254) {
-        // Landmark - bright red marker
-        outR = 255;
-        outG = 80;
-        outB = 80;
-      } else if (a >= 245 && a <= 249) {
-        // River - cyan
-        outR = 60;
-        outG = 180;
-        outB = 200;
-      } else if (a === 1) {
-        // Planted object - bright yellow marker
-        outR = 255;
-        outG = 220;
-        outB = 50;
-      }
-
-      out[i] = Math.min(255, Math.max(0, Math.round(outR)));
-      out[i + 1] = Math.min(255, Math.max(0, Math.round(outG)));
-      out[i + 2] = Math.min(255, Math.max(0, Math.round(outB)));
+      // Apply subtle elevation-based brightness adjustment
+      const elevFactor = 0.7 + (a / 255) * 0.4;
+      
+      out[i] = Math.min(255, Math.round(r * elevFactor));
+      out[i + 1] = Math.min(255, Math.round(g * elevFactor));
+      out[i + 2] = Math.min(255, Math.round(b * elevFactor));
       out[i + 3] = 255;
     }
 
@@ -312,35 +244,17 @@ export function WorldMap2D({ params, getShareUrl }: WorldMap2DProps) {
           </div>
         )}
         
-        {/* Elevation Legend */}
+        {/* Tile Type Legend */}
         <div className="space-y-2">
-          <div className="data-label">Elevation (Red Channel)</div>
+          <div className="data-label">Tile Types (RGB)</div>
           <div className="grid grid-cols-2 gap-1.5">
-            {ELEVATION_LEGEND.map((item) => (
+            {TILE_LEGEND.map((item) => (
               <div key={item.label} className="flex items-center gap-2 text-xs">
                 <div 
                   className="w-3 h-3 rounded-sm border border-border flex-shrink-0" 
                   style={{ backgroundColor: item.color }}
                 />
                 <span className="text-foreground">{item.label}</span>
-                <span className="text-muted-foreground ml-auto">{item.range}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        
-        {/* Feature Legend */}
-        <div className="space-y-2">
-          <div className="data-label">Features (Alpha Channel)</div>
-          <div className="space-y-1.5">
-            {FEATURE_LEGEND.map((item) => (
-              <div key={item.label} className="flex items-center gap-2 text-xs">
-                <div 
-                  className="w-3 h-3 rounded-full border border-border flex-shrink-0" 
-                  style={{ backgroundColor: item.color }}
-                />
-                <span className="text-foreground">{item.label}</span>
-                <span className="text-muted-foreground ml-auto">{item.desc}</span>
               </div>
             ))}
           </div>
@@ -350,10 +264,8 @@ export function WorldMap2D({ params, getShareUrl }: WorldMap2DProps) {
         <div className="space-y-2">
           <div className="data-label">RGBA Encoding</div>
           <div className="text-xs space-y-1 text-muted-foreground">
-            <div><span className="text-red-400">R</span> = Elevation (0–255)</div>
-            <div><span className="text-green-400">G</span> = Moisture (0–255)</div>
-            <div><span className="text-blue-400">B</span> = Biome Class</div>
-            <div><span className="text-purple-400">A</span> = Feature Mask</div>
+            <div><span className="text-red-400">RGB</span> = Tile Type (categorical)</div>
+            <div><span className="text-purple-400">Alpha</span> = Elevation (0–255)</div>
           </div>
         </div>
       </div>
