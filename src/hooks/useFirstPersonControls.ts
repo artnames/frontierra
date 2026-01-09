@@ -242,8 +242,9 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
       direction.normalize();
       
       // Rotate direction by yaw (horizontal rotation only)
-      const moveX = direction.x * Math.cos(yaw) - direction.z * Math.sin(yaw);
-      const moveZ = direction.x * Math.sin(yaw) + direction.z * Math.cos(yaw);
+      // (Three.js Y-axis rotation: x' = x*cos + z*sin, z' = -x*sin + z*cos)
+      const moveX = direction.x * Math.cos(yaw) + direction.z * Math.sin(yaw);
+      const moveZ = -direction.x * Math.sin(yaw) + direction.z * Math.cos(yaw);
       
       // New position on ground plane
       const newX = position.current.x + moveX * speed;
