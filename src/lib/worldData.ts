@@ -65,8 +65,9 @@ function tileTypeToString(type: TileType): TerrainCell['type'] {
 }
 
 function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
-  const waterThreshold = (grid.vars[4] ?? 30) / 100 * 0.20 + 0.28;
-  const heightScale = 15; // World units for full elevation range
+  // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
+  const waterLevel = (grid.vars[4] ?? 50) / 100 * 0.50 + 0.15;
+  const heightScale = 25; // Increased for more dramatic terrain
   
   // Convert cells to terrain - ALL data comes from NexArt pixels
   // RGB = Tile Type (categorical), Alpha = Elevation (continuous 0-1)
@@ -75,15 +76,15 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
       // Direct elevation from Alpha channel (continuous 0-1)
       const rawElevation = cell.elevation;
       
-      // Determine type from Alpha channel features and Blue channel hints
+      // Determine type from RGB classification first, then elevation
       let type: TerrainCell['type'];
       
-      // Check Alpha for path/bridge
+      // Check for path/bridge from RGB
       if (cell.isBridge) {
         type = 'bridge';
       } else if (cell.isPath) {
         type = 'path';
-      } else if (rawElevation < waterThreshold) {
+      } else if (cell.tileType === 0 || rawElevation < waterLevel) { // WATER
         type = 'water';
       } else {
         // Use tile type from RGB classification
@@ -211,6 +212,7 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
     return 0;
   }
   
+  const heightScale = 25;
   const gridX = Math.floor(worldX);
   const gridY = Math.floor(worldY);
   
@@ -220,8 +222,9 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
   
   const cell = world.terrain[gridY]?.[gridX];
   if (cell?.type === 'bridge') {
-    const waterLevel = (world.vars[4] ?? 30) / 100 * 0.35 + 0.15;
-    return waterLevel * 20 + 0.3 * 20;
+    // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
+    const waterLevel = (world.vars[4] ?? 50) / 100 * 0.50 + 0.15;
+    return waterLevel * heightScale + 0.5;
   }
   
   // Bilinear interpolation of elevation
@@ -236,7 +239,7 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
   const e0 = e00 * (1 - fx) + e10 * fx;
   const e1 = e01 * (1 - fx) + e11 * fx;
   
-  return (e0 * (1 - fy) + e1 * fy) * 20;
+  return (e0 * (1 - fy) + e1 * fy) * heightScale;
 }
 
 export function isWalkable(world: WorldData, worldX: number, worldY: number): boolean {

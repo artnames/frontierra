@@ -28,17 +28,30 @@ function setup() {
   
   var GRID_SIZE = 64;
   
+  // VAR mappings:
+  // VAR[3] = Continent Scale (terrain frequency)
+  // VAR[4] = Water Level (0=very low, 50=normal, 100=very high)
+  // VAR[5] = Forest Density
+  // VAR[6] = Mountain Height (peak elevation from base floor)
+  // VAR[7] = Path Density
+  // VAR[8] = Terrain Roughness
+  // VAR[9] = Mountain Density (number of mountain patches)
+  
   var continentScale = map(VAR[3], 0, 100, 0.025, 0.08);
-  var waterThreshold = map(VAR[4], 0, 100, 0.25, 0.50);
+  var waterLevel = map(VAR[4], 0, 100, 0.15, 0.65);
   var forestDensity = map(VAR[5], 0, 100, 0.15, 0.80);
-  var mountainHeight = map(VAR[6], 0, 100, 1.0, 4.0);
+  var mountainPeakHeight = map(VAR[6], 0, 100, 0.15, 0.70);
   var pathDensityVal = map(VAR[7], 0, 100, 0.0, 1.0);
   var terrainRoughness = map(VAR[8], 0, 100, 0.25, 0.80);
-  var mountainDensity = map(VAR[9], 0, 100, 0.10, 0.70);
+  var mountainDensity = map(VAR[9], 0, 100, 0.05, 0.50);
   
   var objX = floor(map(VAR[1], 0, 100, 4, GRID_SIZE - 4));
   var objY = floor(map(VAR[2], 0, 100, 4, GRID_SIZE - 4));
   
+  // Fixed base floor level - never changes
+  var BASE_FLOOR = 0.30;
+  
+  // Path generation grid
   var pathGrid = [];
   for (var py = 0; py < GRID_SIZE; py++) {
     pathGrid[py] = [];
@@ -47,93 +60,123 @@ function setup() {
     }
   }
   
-  var numPaths = floor(2 + pathDensityVal * 5);
-  var pathWidth = 1.2;
-  var flowScale = 0.05 + pathDensityVal * 0.03;
+  // Path generation - minimum 2 paths always
+  var numPaths = floor(2 + pathDensityVal * 6);
+  var flowScale = 0.04 + pathDensityVal * 0.04;
   
-  if (pathDensityVal > 0.02) {
-    for (var p = 0; p < numPaths; p++) {
-      var startEdge = floor(noise(p * 111 + 500) * 4);
-      var edgePos = noise(p * 222 + 600) * 0.6 + 0.2;
-      var cx = 0;
-      var cy = 0;
-      
-      if (startEdge === 0) {
-        cx = 0;
-        cy = floor(edgePos * GRID_SIZE);
-      } else if (startEdge === 1) {
-        cx = GRID_SIZE - 1;
-        cy = floor(edgePos * GRID_SIZE);
-      } else if (startEdge === 2) {
-        cx = floor(edgePos * GRID_SIZE);
-        cy = 0;
-      } else {
-        cx = floor(edgePos * GRID_SIZE);
-        cy = GRID_SIZE - 1;
+  for (var p = 0; p < numPaths; p++) {
+    var startEdge = floor(noise(p * 111 + 500) * 4);
+    var edgePos = noise(p * 222 + 600) * 0.6 + 0.2;
+    var cx = 0;
+    var cy = 0;
+    
+    if (startEdge === 0) {
+      cx = 0;
+      cy = floor(edgePos * GRID_SIZE);
+    } else if (startEdge === 1) {
+      cx = GRID_SIZE - 1;
+      cy = floor(edgePos * GRID_SIZE);
+    } else if (startEdge === 2) {
+      cx = floor(edgePos * GRID_SIZE);
+      cy = 0;
+    } else {
+      cx = floor(edgePos * GRID_SIZE);
+      cy = GRID_SIZE - 1;
+    }
+    
+    var prevAngle = 0;
+    var targetX = GRID_SIZE * 0.5 + (noise(p * 333) - 0.5) * GRID_SIZE * 0.5;
+    var targetY = GRID_SIZE * 0.5 + (noise(p * 444) - 0.5) * GRID_SIZE * 0.5;
+    
+    for (var step = 0; step < GRID_SIZE * 2.5; step++) {
+      if (cx < 0 || cx >= GRID_SIZE || cy < 0 || cy >= GRID_SIZE) {
+        break;
       }
       
-      var prevAngle = 0;
-      var targetX = GRID_SIZE * 0.5 + (noise(p * 333) - 0.5) * GRID_SIZE * 0.5;
-      var targetY = GRID_SIZE * 0.5 + (noise(p * 444) - 0.5) * GRID_SIZE * 0.5;
+      var gxp = floor(cx);
+      var gyp = floor(cy);
+      if (gxp >= 0 && gxp < GRID_SIZE && gyp >= 0 && gyp < GRID_SIZE) {
+        pathGrid[gyp][gxp] = 1;
+        if (gxp > 0) pathGrid[gyp][gxp - 1] = max(pathGrid[gyp][gxp - 1], 0.5);
+        if (gxp < GRID_SIZE - 1) pathGrid[gyp][gxp + 1] = max(pathGrid[gyp][gxp + 1], 0.5);
+        if (gyp > 0) pathGrid[gyp - 1][gxp] = max(pathGrid[gyp - 1][gxp], 0.5);
+        if (gyp < GRID_SIZE - 1) pathGrid[gyp + 1][gxp] = max(pathGrid[gyp + 1][gxp], 0.5);
+      }
       
-      for (var step = 0; step < GRID_SIZE * 2.5; step++) {
-        if (cx < 0 || cx >= GRID_SIZE || cy < 0 || cy >= GRID_SIZE) {
-          break;
-        }
-        
-        var gx = floor(cx);
-        var gy = floor(cy);
-        if (gx >= 0 && gx < GRID_SIZE && gy >= 0 && gy < GRID_SIZE) {
-          pathGrid[gy][gx] = 1;
-          if (gx > 0) pathGrid[gy][gx - 1] = max(pathGrid[gy][gx - 1], 0.5);
-          if (gx < GRID_SIZE - 1) pathGrid[gy][gx + 1] = max(pathGrid[gy][gx + 1], 0.5);
-          if (gy > 0) pathGrid[gy - 1][gx] = max(pathGrid[gy - 1][gx], 0.5);
-          if (gy < GRID_SIZE - 1) pathGrid[gy + 1][gx] = max(pathGrid[gy + 1][gx], 0.5);
-        }
-        
-        var n1 = noise(cx * flowScale, cy * flowScale);
-        var n2 = noise(cx * flowScale * 2.5 + 100, cy * flowScale * 2.5);
-        var n3 = noise(cx * flowScale * 0.4 + 200, cy * flowScale * 0.4);
-        var flowAngle = (n1 * 0.45 + n2 * 0.35 + n3 * 0.20) * TWO_PI * 2.5;
-        
-        var toTarget = atan2(targetY - cy, targetX - cx);
-        var blend = 0.35 + pathDensityVal * 0.15;
-        var angle = flowAngle * blend + toTarget * (1 - blend);
-        angle = prevAngle * 0.55 + angle * 0.45;
-        prevAngle = angle;
-        
-        var stepLen = 0.6 + noise(cx * 0.15, cy * 0.15) * 0.25;
-        cx = cx + cos(angle) * stepLen;
-        cy = cy + sin(angle) * stepLen;
-        
-        if (pathDensityVal > 0.40 && step > 10 && step % 15 === 0) {
-          if (noise(cx * 0.5 + p * 50, cy * 0.5) < 0.20) {
-            var bx = cx;
-            var by = cy;
-            var bAngle = angle + (noise(bx, by) > 0.5 ? PI * 0.35 : -PI * 0.35);
-            var bPrev = bAngle;
+      var n1 = noise(cx * flowScale, cy * flowScale);
+      var n2 = noise(cx * flowScale * 2.5 + 100, cy * flowScale * 2.5);
+      var n3 = noise(cx * flowScale * 0.4 + 200, cy * flowScale * 0.4);
+      var flowAngle = (n1 * 0.45 + n2 * 0.35 + n3 * 0.20) * TWO_PI * 2.5;
+      
+      var toTarget = atan2(targetY - cy, targetX - cx);
+      var blend = 0.35 + pathDensityVal * 0.15;
+      var angle = flowAngle * blend + toTarget * (1 - blend);
+      angle = prevAngle * 0.55 + angle * 0.45;
+      prevAngle = angle;
+      
+      var stepLen = 0.6 + noise(cx * 0.15, cy * 0.15) * 0.25;
+      cx = cx + cos(angle) * stepLen;
+      cy = cy + sin(angle) * stepLen;
+      
+      // Branching paths
+      if (pathDensityVal > 0.30 && step > 10 && step % 12 === 0) {
+        if (noise(cx * 0.5 + p * 50, cy * 0.5) < 0.25) {
+          var bx = cx;
+          var by = cy;
+          var bAngle = angle + (noise(bx, by) > 0.5 ? PI * 0.35 : -PI * 0.35);
+          var bPrev = bAngle;
+          
+          for (var bs = 0; bs < 12 + floor(noise(bx + p, by) * 15); bs++) {
+            var bgx = floor(bx);
+            var bgy = floor(by);
+            if (bgx >= 0 && bgx < GRID_SIZE && bgy >= 0 && bgy < GRID_SIZE) {
+              pathGrid[bgy][bgx] = max(pathGrid[bgy][bgx], 0.8);
+            }
             
-            for (var bs = 0; bs < 10 + floor(noise(bx + p, by) * 12); bs++) {
-              var bgx = floor(bx);
-              var bgy = floor(by);
-              if (bgx >= 0 && bgx < GRID_SIZE && bgy >= 0 && bgy < GRID_SIZE) {
-                pathGrid[bgy][bgx] = max(pathGrid[bgy][bgx], 0.8);
-              }
-              
-              var bn1 = noise(bx * flowScale * 1.8, by * flowScale * 1.8 + 300);
-              var bn2 = noise(bx * flowScale * 3.5 + 400, by * flowScale * 3.5);
-              var bFlow = (bn1 * 0.55 + bn2 * 0.45) * TWO_PI * 2;
-              bAngle = bPrev * 0.65 + bFlow * 0.35;
-              bPrev = bAngle;
-              
-              bx = bx + cos(bAngle) * 0.55;
-              by = by + sin(bAngle) * 0.55;
-              
-              if (bx < 0 || bx >= GRID_SIZE || by < 0 || by >= GRID_SIZE) {
-                break;
-              }
+            var bn1 = noise(bx * flowScale * 1.8, by * flowScale * 1.8 + 300);
+            var bn2 = noise(bx * flowScale * 3.5 + 400, by * flowScale * 3.5);
+            var bFlow = (bn1 * 0.55 + bn2 * 0.45) * TWO_PI * 2;
+            bAngle = bPrev * 0.65 + bFlow * 0.35;
+            bPrev = bAngle;
+            
+            bx = bx + cos(bAngle) * 0.55;
+            by = by + sin(bAngle) * 0.55;
+            
+            if (bx < 0 || bx >= GRID_SIZE || by < 0 || by >= GRID_SIZE) {
+              break;
             }
           }
+        }
+      }
+    }
+  }
+  
+  // Generate mountain mask - discrete patches with natural shapes
+  var mountainMask = [];
+  for (var my = 0; my < GRID_SIZE; my++) {
+    mountainMask[my] = [];
+    for (var mx = 0; mx < GRID_SIZE; mx++) {
+      mountainMask[my][mx] = 0;
+    }
+  }
+  
+  // Create mountain patches based on density
+  var numMountainPatches = floor(2 + mountainDensity * 12);
+  for (var mp = 0; mp < numMountainPatches; mp++) {
+    var patchX = noise(mp * 137 + 9000) * GRID_SIZE;
+    var patchY = noise(mp * 251 + 9500) * GRID_SIZE;
+    var patchRadius = 4 + noise(mp * 373 + 9800) * 10;
+    var patchStrength = 0.5 + noise(mp * 491 + 9200) * 0.5;
+    
+    for (var mpy = 0; mpy < GRID_SIZE; mpy++) {
+      for (var mpx = 0; mpx < GRID_SIZE; mpx++) {
+        var dx = mpx - patchX;
+        var dy = mpy - patchY;
+        var dist = sqrt(dx * dx + dy * dy);
+        if (dist < patchRadius) {
+          var falloff = 1.0 - (dist / patchRadius);
+          falloff = pow(falloff, 1.5);
+          mountainMask[mpy][mpx] = max(mountainMask[mpy][mpx], falloff * patchStrength);
         }
       }
     }
@@ -142,62 +185,66 @@ function setup() {
   for (var gy = 0; gy < GRID_SIZE; gy++) {
     for (var gx = 0; gx < GRID_SIZE; gx++) {
       
+      // Base terrain - consistent floor with gentle variation
       var continental = noise(gx * continentScale, gy * continentScale);
-      var hills = noise(gx * continentScale * 2.8 + 500, gy * continentScale * 2.8);
-      var detail = noise(gx * continentScale * 6.0 + 1000, gy * continentScale * 6.0);
-      var ridgeN = noise(gx * continentScale * 4.0 + 2000, gy * continentScale * 4.0);
-      var ridged = 1.0 - abs(ridgeN - 0.5) * 2.0;
-      ridged = pow(ridged, 1.8);
+      var hills = noise(gx * continentScale * 2.5 + 500, gy * continentScale * 2.5);
+      var detail = noise(gx * continentScale * 5.0 + 1000, gy * continentScale * 5.0);
       
-      var baseElev = continental * 0.50;
-      baseElev = baseElev + hills * terrainRoughness * 0.28;
-      baseElev = baseElev + detail * terrainRoughness * 0.15;
-      baseElev = baseElev + ridged * 0.12 * mountainHeight * 0.5;
+      // Floor elevation with gentle hills (never goes below BASE_FLOOR)
+      var floorVariation = hills * terrainRoughness * 0.08 + detail * terrainRoughness * 0.04;
+      var baseElevation = BASE_FLOOR + continental * 0.15 + floorVariation;
       
-      var shaped = pow(baseElev, 0.6 + (mountainHeight - 1.0) * 0.12);
-      shaped = shaped * (0.5 + mountainHeight * 0.3);
+      // Mountain elevation - added ON TOP of floor
+      var mMask = mountainMask[gy][gx];
+      var mountainNoise = noise(gx * 0.12 + 8000, gy * 0.12);
+      var mountainDetail = noise(gx * 0.25 + 8500, gy * 0.25);
+      var mountainShape = mountainNoise * 0.7 + mountainDetail * 0.3;
+      
+      // Natural mountain profile - steep near peak, gradual at base
+      var peakFactor = pow(mMask, 0.7) * pow(mountainShape, 0.5);
+      var mountainElevation = peakFactor * mountainPeakHeight;
+      
+      // Combined elevation
+      var shaped = baseElevation + mountainElevation;
       shaped = constrain(shaped, 0, 1);
       
-      var mountainNoise = noise(gx * 0.07 + 8000, gy * 0.07);
-      var mountainNoise2 = noise(gx * 0.15 + 8500, gy * 0.15);
-      var mountainVal = mountainNoise * 0.6 + mountainNoise2 * 0.4;
-      var isMountainCandidate = mountainVal < mountainDensity && shaped > 0.35;
+      // Water check - water level is absolute
+      var isWater = shaped < waterLevel;
       
-      if (isMountainCandidate) {
-        var mountainBoost = pow(mountainVal / mountainDensity, 0.5) * mountainHeight * 0.35;
-        shaped = shaped + mountainBoost;
-        shaped = constrain(shaped, 0, 1);
-      }
-      
-      var elevation = floor(shaped * 255);
-      
-      var isWater = shaped < waterThreshold;
-      
+      // Moisture for forests
       var moistBase = noise(gx * 0.06 + 3000, gy * 0.06);
       var moistDetail = noise(gx * 0.14 + 3500, gy * 0.14);
       var moisture = moistBase * 0.60 + moistDetail * 0.40;
       if (isWater) {
         moisture = 1.0;
-      } else if (shaped < waterThreshold + 0.12) {
-        moisture = moisture + (1 - (shaped - waterThreshold) / 0.12) * 0.25;
+      } else if (shaped < waterLevel + 0.10) {
+        moisture = moisture + (1 - (shaped - waterLevel) / 0.10) * 0.25;
       }
       moisture = constrain(moisture, 0, 1);
       
+      // Forest detection
       var forestNoise = noise(gx * 0.09 + 7000, gy * 0.09);
       var forestNoise2 = noise(gx * 0.18 + 7500, gy * 0.18);
       var forestVal = forestNoise * 0.6 + forestNoise2 * 0.4;
-      var isForest = forestVal < forestDensity && !isWater && shaped < 0.60 && moisture > 0.30;
+      var isForest = forestVal < forestDensity && !isWater && mMask < 0.3 && moisture > 0.25;
       
-      var isMountain = isMountainCandidate && shaped > 0.45 && !isWater;
+      // Mountain tile detection - where mountain mask is strong
+      var isMountain = mMask > 0.25 && !isWater;
+      var isSnowCap = mMask > 0.6 && mountainPeakHeight > 0.45 && mountainShape > 0.5;
       
+      // Path and bridge
       var onPath = pathGrid[gy][gx] > 0.4;
       var isBridge = onPath && isWater;
       var isPathTile = onPath && !isWater;
       
       var isObject = gx === objX && gy === objY;
       
+      // Rivers
       var riverN = noise(gx * 0.045 + 5000, gy * 0.045);
-      var isRiver = abs(riverN - 0.5) < 0.018 && !isWater && shaped < waterThreshold + 0.18 && !onPath;
+      var isRiver = abs(riverN - 0.5) < 0.015 && !isWater && shaped < waterLevel + 0.15 && !onPath;
+      
+      // Alpha = elevation (0-255)
+      var elevation = floor(shaped * 255);
       
       var tileR = 0;
       var tileG = 0;
@@ -220,15 +267,21 @@ function setup() {
         tileG = 160;
         tileB = 180;
       } else if (isWater) {
-        var depthFactor = shaped / max(0.01, waterThreshold);
+        var depthFactor = shaped / max(0.01, waterLevel);
         tileR = floor(20 + depthFactor * 15);
         tileG = floor(60 + depthFactor * 25);
         tileB = floor(120 + depthFactor * 25);
+      } else if (isSnowCap) {
+        // Snow-capped peaks
+        tileR = 240;
+        tileG = 245;
+        tileB = 250;
       } else if (isMountain) {
-        var mBlend = (shaped - 0.60) / 0.40;
-        tileR = floor(110 + mBlend * 40);
-        tileG = floor(105 + mBlend * 40);
-        tileB = floor(100 + mBlend * 50);
+        // Rocky mountain gradient
+        var mBlend = constrain(mMask, 0, 1);
+        tileR = floor(100 + mBlend * 50);
+        tileG = floor(95 + mBlend * 50);
+        tileB = floor(90 + mBlend * 60);
       } else if (isForest) {
         var fMoist = moisture * 0.3;
         tileR = floor(45 + fMoist * 25);
@@ -236,8 +289,8 @@ function setup() {
         tileB = floor(40 + fMoist * 20);
       } else {
         var gMoist = moisture * 0.25;
-        tileR = floor(145 + shaped * 25 - gMoist * 20);
-        tileG = floor(125 + shaped * 20 + gMoist * 15);
+        tileR = floor(145 + shaped * 20 - gMoist * 20);
+        tileG = floor(125 + shaped * 15 + gMoist * 15);
         tileB = floor(85 + gMoist * 20);
       }
       

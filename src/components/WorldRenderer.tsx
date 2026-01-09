@@ -18,7 +18,7 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   
   // Height scale for converting 0-1 elevation (from Alpha channel) to world units
-  const heightScale = 15;
+  const heightScale = 25;
   
   const { geometry } = useMemo(() => {
     const size = world.gridSize;
@@ -90,8 +90,16 @@ function getTileColor(
       };
       
     case 'mountain':
-      // Gray/brown rock that lightens with height
+      // Gray/brown rock that lightens with height, snow at peaks
       const heightFactor = elevation * 0.3;
+      const isSnow = elevation > 0.75;
+      if (isSnow) {
+        return {
+          r: 0.92 * brightness,
+          g: 0.95 * brightness,
+          b: 0.98 * brightness
+        };
+      }
       return {
         r: (0.40 + heightFactor) * brightness,
         g: (0.38 + heightFactor) * brightness,
@@ -135,9 +143,11 @@ interface BridgesProps {
 }
 
 export function Bridges({ world }: BridgesProps) {
+  const heightScale = 25;
   const bridges = useMemo(() => {
     const items: { x: number; z: number; waterLevel: number }[] = [];
-    const waterLevel = (world.vars[4] ?? 30) / 100 * 0.35 + 0.15;
+    // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
+    const waterLevel = (world.vars[4] ?? 50) / 100 * 0.50 + 0.15;
     
     for (let y = 0; y < world.gridSize; y++) {
       for (let x = 0; x < world.gridSize; x++) {
@@ -146,7 +156,7 @@ export function Bridges({ world }: BridgesProps) {
           items.push({
             x,
             z: y,
-            waterLevel: waterLevel * 20
+            waterLevel: waterLevel * heightScale
           });
         }
       }
@@ -351,11 +361,13 @@ export function GridOverlay({ world }: GridOverlayProps) {
 // ============================================
 
 export function WaterPlane({ world }: { world: WorldData }) {
-  const waterLevel = (world.vars[4] ?? 30) / 100 * 0.35 + 0.15;
+  const heightScale = 25;
+  // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
+  const waterLevel = (world.vars[4] ?? 50) / 100 * 0.50 + 0.15;
   
   return (
     <mesh 
-      position={[world.gridSize / 2, waterLevel * 20 - 0.5, world.gridSize / 2]} 
+      position={[world.gridSize / 2, waterLevel * heightScale - 0.5, world.gridSize / 2]} 
       rotation={[-Math.PI / 2, 0, 0]}
     >
       <planeGeometry args={[world.gridSize, world.gridSize]} />
@@ -377,7 +389,7 @@ export function WaterPlane({ world }: { world: WorldData }) {
 export function Atmosphere() {
   return (
     <>
-      <fog attach="fog" args={['#1a2a3a', 20, 80]} />
+      <fog attach="fog" args={['#1a2a3a', 30, 120]} />
       <ambientLight intensity={0.4} />
       <directionalLight position={[50, 50, 25]} intensity={0.8} castShadow />
       <hemisphereLight args={['#6688aa', '#445566', 0.4]} />

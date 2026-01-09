@@ -9,7 +9,7 @@ interface ForestTreesProps {
 }
 
 export function ForestTrees({ world }: ForestTreesProps) {
-  const heightScale = 15;
+  const heightScale = 25;
   
   const trees = useMemo(() => {
     const items: { x: number; y: number; z: number; scale: number; variant: number }[] = [];
@@ -23,11 +23,12 @@ export function ForestTrees({ world }: ForestTreesProps) {
           const offsetX = ((gx * 17 + gy * 31) % 100) / 100 - 0.5;
           const offsetY = ((gx * 23 + gy * 13) % 100) / 100 - 0.5;
           
+          // Larger tree scale for better visibility
           items.push({
             x: gx + offsetX * 0.8,
             y: cell.elevation * heightScale,
             z: gy + offsetY * 0.8,
-            scale: 0.6 + ((gx * 7 + gy * 11) % 50) / 100,
+            scale: 1.0 + ((gx * 7 + gy * 11) % 50) / 80,
             variant: (gx + gy) % 3
           });
           
@@ -39,7 +40,7 @@ export function ForestTrees({ world }: ForestTreesProps) {
               x: gx + offsetX2 * 0.8,
               y: cell.elevation * heightScale,
               z: gy + offsetY2 * 0.8,
-              scale: 0.5 + ((gx * 13 + gy * 19) % 40) / 100,
+              scale: 0.8 + ((gx * 13 + gy * 19) % 40) / 80,
               variant: (gx + gy + 1) % 3
             });
           }
