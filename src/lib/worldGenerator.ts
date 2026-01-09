@@ -31,7 +31,7 @@ const PATH_COLOR = [200, 180, 140];
 const BRIDGE_COLOR = [100, 70, 40];
 
 function setup() {
-  colorMode(255, 255, 255, 255);
+  colorMode("RGB");
   noStroke();
   background(0);
   
@@ -184,7 +184,7 @@ const TILE_WIDTH = 16;
 const TILE_HEIGHT = 8;
 
 function setup() {
-  colorMode(360, 100, 100, 1);
+  colorMode("HSB");
   noStroke();
   background(220, 20, 6);
   
