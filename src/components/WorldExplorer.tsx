@@ -136,16 +136,22 @@ export function WorldExplorer({
     vars,
     debounceMs: 300
   });
+  
+  // Track previous mode to detect changes
+  const [prevMode, setPrevMode] = useState<InteractionMode>(interactionMode);
+  
   // Handle mode changes - set camera position accordingly
+  // Only trigger when mode actually changes, not on every world update
   useEffect(() => {
-    if (world) {
+    if (world && interactionMode !== prevMode) {
+      setPrevMode(interactionMode);
       if (interactionMode === 'editor') {
         setCameraToEditorView(world);
       } else {
         setCameraToExploreView(world);
       }
     }
-  }, [interactionMode, world]);
+  }, [interactionMode, prevMode, world]);
   
   useEffect(() => {
     if (isDiscovered && !showDiscoveryBanner) {

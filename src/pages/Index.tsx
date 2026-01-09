@@ -87,7 +87,7 @@ const Index = () => {
     if (worldMode === 'multiplayer' && !multiplayer.currentLand && !multiplayer.isLoading) {
       multiplayer.initializePlayerLand();
     }
-  }, [worldMode, multiplayer]);
+  }, [worldMode, multiplayer.currentLand, multiplayer.isLoading, multiplayer.initializePlayerLand]);
 
   // Parse actions from URL
   const [actions, setActions] = useState<WorldAction[]>(() => {
