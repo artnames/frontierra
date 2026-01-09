@@ -135,6 +135,8 @@ interface LandmarksProps {
 }
 
 export function Landmarks({ world }: LandmarksProps) {
+  const heightScale = 15;
+  
   const landmarks = useMemo(() => {
     const items: { x: number; y: number; z: number; type: number }[] = [];
     
@@ -144,9 +146,9 @@ export function Landmarks({ world }: LandmarksProps) {
         if (cell.hasLandmark) {
           items.push({
             x,
-            y: cell.elevation * 20,
+            y: cell.elevation * heightScale,
             z: y,
-            type: cell.landmarkType
+            type: Math.floor((x * 3 + y * 7) % 5)
           });
         }
       }

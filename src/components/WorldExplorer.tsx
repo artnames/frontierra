@@ -20,6 +20,7 @@ import {
   Atmosphere,
   Bridges
 } from '@/components/WorldRenderer';
+import { ForestTrees } from '@/components/ForestTrees';
 import { PlacedBeaconMesh } from '@/components/ActionSystem';
 import * as THREE from 'three';
 import { useThree, useFrame } from '@react-three/fiber';
@@ -68,6 +69,7 @@ function FirstPersonScene({
       <TerrainMesh world={world} />
       <WaterPlane world={world} />
       <Bridges world={world} />
+      <ForestTrees world={world} />
       <Landmarks world={world} />
       <PlantedObject world={world} isDiscovered={isDiscovered} />
       <GridOverlay world={world} />

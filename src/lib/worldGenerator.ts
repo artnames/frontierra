@@ -29,12 +29,12 @@ function setup() {
   var GRID_SIZE = 64;
   
   var continentScale = map(VAR[3], 0, 100, 0.025, 0.08);
-  var waterThreshold = map(VAR[4], 0, 100, 0.30, 0.55);
-  var forestDensity = map(VAR[5], 0, 100, 0.10, 0.75);
-  var mountainHeight = map(VAR[6], 0, 100, 1.2, 2.2);
+  var waterThreshold = map(VAR[4], 0, 100, 0.25, 0.50);
+  var forestDensity = map(VAR[5], 0, 100, 0.15, 0.80);
+  var mountainHeight = map(VAR[6], 0, 100, 1.5, 3.5);
   var pathDensityVal = map(VAR[7], 0, 100, 0.0, 1.0);
-  var terrainRoughness = map(VAR[8], 0, 100, 0.20, 0.70);
-  var landmarkDensity = map(VAR[9], 0, 100, 0.02, 0.30);
+  var terrainRoughness = map(VAR[8], 0, 100, 0.25, 0.80);
+  var landmarkDensity = map(VAR[9], 0, 100, 0.04, 0.35);
   
   var objX = floor(map(VAR[1], 0, 100, 4, GRID_SIZE - 4));
   var objY = floor(map(VAR[2], 0, 100, 4, GRID_SIZE - 4));
@@ -51,7 +51,7 @@ function setup() {
   var pathWidth = 1.2;
   var flowScale = 0.05 + pathDensityVal * 0.03;
   
-  if (pathDensityVal > 0.08) {
+  if (pathDensityVal > 0.02) {
     for (var p = 0; p < numPaths; p++) {
       var startEdge = floor(noise(p * 111 + 500) * 4);
       var edgePos = noise(p * 222 + 600) * 0.6 + 0.2;
@@ -154,7 +154,8 @@ function setup() {
       baseElev = baseElev + detail * terrainRoughness * 0.15;
       baseElev = baseElev + ridged * 0.12 * mountainHeight * 0.5;
       
-      var shaped = pow(baseElev, 1.0 + (mountainHeight - 1.2) * 0.3);
+      var shaped = pow(baseElev, 0.7 + (mountainHeight - 1.5) * 0.15);
+      shaped = shaped * (0.6 + mountainHeight * 0.25);
       shaped = constrain(shaped, 0, 1);
       var elevation = floor(shaped * 255);
       
@@ -175,7 +176,7 @@ function setup() {
       var forestVal = forestNoise * 0.6 + forestNoise2 * 0.4;
       var isForest = forestVal < forestDensity && !isWater && shaped < 0.65 && moisture > 0.35;
       
-      var isMountain = shaped > 0.60 && !isWater;
+      var isMountain = shaped > 0.50 && !isWater;
       
       var onPath = pathGrid[gy][gx] > 0.4;
       var isBridge = onPath && isWater;
