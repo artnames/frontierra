@@ -148,78 +148,82 @@ export function WorldMap2D({ params, getShareUrl }: WorldMap2DProps) {
   }, [genKey, input, lastGenerated]);
 
   // Color visualization - interprets RGBA encoding for display
+  // Primary: Elevation (R) determines base color, Biome (B) adds context
   function visualizePixelData(imageData: ImageData): ImageData {
     const data = imageData.data;
     const output = new ImageData(64, 64);
     const out = output.data;
 
     for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];     // Elevation
-      const g = data[i + 1]; // Moisture
-      const b = data[i + 2]; // Biome
+      const r = data[i];     // Elevation (0-255)
+      const g = data[i + 1]; // Moisture (0-255)
+      const b = data[i + 2]; // Biome hint (0-255)
       const a = data[i + 3]; // Features
 
       let outR: number, outG: number, outB: number;
 
-      // Color based on Blue channel (biome)
-      if (b <= 50) {
-        // Water - blue tones
-        const depth = r / 255;
-        outR = 26 + depth * 30;
-        outG = 74 + depth * 40;
-        outB = 106 + depth * 30;
+      const elev = r / 255;
+      const moist = g / 255;
+
+      // Primary coloring based on elevation and biome
+      if (b <= 60) {
+        // Water - deeper = darker blue
+        outR = 20 + elev * 40;
+        outG = 50 + elev * 60;
+        outB = 100 + elev * 50;
       } else if (b <= 100) {
-        // Ground - earthy tones
-        const elev = r / 255;
-        const moist = g / 255;
-        outR = 90 + elev * 40 - moist * 20;
-        outG = 122 + moist * 30;
-        outB = 74 + moist * 20;
-      } else if (b <= 150) {
-        // Forest - green tones
-        const moist = g / 255;
-        outR = 34 + moist * 20;
-        outG = 90 + moist * 40;
-        outB = 34 + moist * 20;
-      } else if (b <= 200) {
-        // Mountain - gray/rocky
-        const elev = r / 255;
-        outR = 100 + elev * 40;
-        outG = 100 + elev * 40;
-        outB = 110 + elev * 30;
-      } else if (b <= 230) {
+        // Low ground - sandy/earthy
+        outR = 120 + elev * 50 - moist * 30;
+        outG = 100 + elev * 40 + moist * 30;
+        outB = 60 + moist * 30;
+      } else if (b <= 160) {
+        // Forest/vegetation - green tones based on moisture
+        outR = 30 + moist * 40;
+        outG = 80 + moist * 60 + elev * 20;
+        outB = 30 + moist * 30;
+      } else if (b <= 220) {
+        // Hills/mountains - gray/brown based on elevation
+        outR = 100 + elev * 80;
+        outG = 90 + elev * 70;
+        outB = 80 + elev * 60;
+      } else {
+        // High peaks - light gray/white
+        outR = 160 + elev * 60;
+        outG = 160 + elev * 60;
+        outB = 170 + elev * 50;
+      }
+
+      // Features from Alpha channel - these override terrain color
+      if (a >= 230 && a <= 239) {
         // Path - tan/brown
         outR = 160;
-        outG = 128;
+        outG = 130;
         outB = 80;
-      } else {
+      } else if (a >= 220 && a <= 229) {
         // Bridge - dark brown
-        outR = 107;
-        outG = 68;
-        outB = 35;
-      }
-
-      // Overlay features from Alpha channel
-      if (a >= 250 && a <= 254) {
-        // Landmark - red marker
+        outR = 110;
+        outG = 75;
+        outB = 40;
+      } else if (a >= 250 && a <= 254) {
+        // Landmark - bright red marker
         outR = 255;
-        outG = 107;
-        outB = 107;
+        outG = 80;
+        outB = 80;
       } else if (a >= 245 && a <= 249) {
         // River - cyan
-        outR = 78;
-        outG = 205;
-        outB = 196;
+        outR = 60;
+        outG = 180;
+        outB = 200;
       } else if (a === 1) {
-        // Planted object - yellow marker
+        // Planted object - bright yellow marker
         outR = 255;
-        outG = 217;
-        outB = 61;
+        outG = 220;
+        outB = 50;
       }
 
-      out[i] = outR;
-      out[i + 1] = outG;
-      out[i + 2] = outB;
+      out[i] = Math.min(255, Math.max(0, Math.round(outR)));
+      out[i + 1] = Math.min(255, Math.max(0, Math.round(outG)));
+      out[i + 2] = Math.min(255, Math.max(0, Math.round(outB)));
       out[i + 3] = 255;
     }
 
