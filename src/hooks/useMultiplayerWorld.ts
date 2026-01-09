@@ -107,15 +107,18 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
   
   // Load or create player's land
   const initializePlayerLand = useCallback(async (playerId?: string) => {
+    if (!playerId) {
+      setState(prev => ({ ...prev, isLoading: false, error: 'No player ID provided' }));
+      return;
+    }
+    
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     
     try {
       let land: PlayerLand | null = null;
       
-      if (playerId) {
-        // Try to fetch existing land
-        land = await getLandByPlayerId(playerId);
-      }
+      // Try to fetch existing land
+      land = await getLandByPlayerId(playerId);
       
       if (!land && options.autoCreate) {
         // Create new land with random parameters
@@ -123,7 +126,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
         const randomSeed = Math.floor(Math.random() * 100000);
         const randomVars = Array(10).fill(0).map(() => Math.floor(Math.random() * 100));
         
-        land = await createLand(randomSeed, randomVars, position.x, position.y);
+        land = await createLand(playerId, randomSeed, randomVars, position.x, position.y);
       }
       
       if (land) {
