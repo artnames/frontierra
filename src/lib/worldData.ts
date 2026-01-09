@@ -69,31 +69,36 @@ function tileTypeToString(type: TileType): TerrainCell['type'] {
 // PERCEPTUAL ELEVATION CURVE
 // Transforms linear Alpha (0-1) into perceptually-shaped elevation
 // Deterministic, preserves ordering, no external data
-// Tuned for WORLD_HEIGHT_SCALE = 15
+// Tuned for WORLD_HEIGHT_SCALE = 35
 // ============================================
 
 function applyElevationCurve(rawElevation: number): number {
-  // Non-linear curve optimized for heightScale=15:
+  // Non-linear curve optimized for heightScale=35:
   // - Compresses low elevations (wide flat plains)
-  // - Smooth ramps at mid elevations (rolling hills)
+  // - Smooth ramps at mid elevations (rolling hills)  
   // - Amplifies high elevations (dramatic peaks)
   
   const e = rawElevation;
   
-  if (e < 0.25) {
-    // Low elevation: compress for flat plains
-    // Maps 0-0.25 → 0-0.12
-    return e * 0.48;
-  } else if (e < 0.55) {
+  if (e < 0.30) {
+    // Low elevation: flatten for walkable plains
+    // Maps 0-0.30 → 0-0.10
+    return e * 0.33;
+  } else if (e < 0.50) {
     // Mid elevation: gentle rolling hills
-    // Maps 0.25-0.55 → 0.12-0.35
-    const t = (e - 0.25) / 0.30;
-    return 0.12 + t * t * 0.23;
+    // Maps 0.30-0.50 → 0.10-0.25
+    const t = (e - 0.30) / 0.20;
+    return 0.10 + t * 0.15;
+  } else if (e < 0.70) {
+    // Upper-mid: steeper hills transitioning to mountains
+    // Maps 0.50-0.70 → 0.25-0.50
+    const t = (e - 0.50) / 0.20;
+    return 0.25 + Math.pow(t, 1.2) * 0.25;
   } else {
     // High elevation: exponential amplification for dramatic peaks
-    // Maps 0.55-1.0 → 0.35-1.0
-    const t = (e - 0.55) / 0.45;
-    return 0.35 + Math.pow(t, 1.4) * 0.65;
+    // Maps 0.70-1.0 → 0.50-1.0
+    const t = (e - 0.70) / 0.30;
+    return 0.50 + Math.pow(t, 1.5) * 0.50;
   }
 }
 
