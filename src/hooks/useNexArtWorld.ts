@@ -9,6 +9,11 @@ interface UseNexArtWorldOptions {
   seed: number;
   vars: number[];
   debounceMs?: number;
+  // World A context - enables shared macro geography
+  worldContext?: {
+    worldX: number;
+    worldY: number;
+  };
 }
 
 interface UseNexArtWorldResult {
@@ -24,7 +29,8 @@ const DEFAULT_DEBOUNCE_MS = 300;
 export function useNexArtWorld({
   seed,
   vars,
-  debounceMs = DEFAULT_DEBOUNCE_MS
+  debounceMs = DEFAULT_DEBOUNCE_MS,
+  worldContext
 }: UseNexArtWorldOptions): UseNexArtWorldResult {
   const [world, setWorld] = useState<WorldData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -42,10 +48,16 @@ export function useNexArtWorld({
     mode: 'static'
   }), [seed, vars]);
   
-  // Stable key for dependency tracking
+  // Build world context for World A mode
+  const worldContextObj = useMemo(() => worldContext ? {
+    worldX: worldContext.worldX,
+    worldY: worldContext.worldY
+  } : undefined, [worldContext?.worldX, worldContext?.worldY]);
+  
+  // Stable key for dependency tracking (includes world context)
   const paramsKey = useMemo(
-    () => `${input.seed}:${input.vars.join(',')}`,
-    [input.seed, input.vars]
+    () => `${input.seed}:${input.vars.join(',')}:${worldContextObj?.worldX ?? 'solo'}:${worldContextObj?.worldY ?? ''}`,
+    [input.seed, input.vars, worldContextObj?.worldX, worldContextObj?.worldY]
   );
   
   const generateWorld = useCallback(async (targetSeed: number, targetVars: number[]) => {
@@ -55,7 +67,7 @@ export function useNexArtWorld({
     setError(null);
     
     try {
-      const worldData = await generateWorldDataAsync(targetSeed, targetVars);
+      const worldData = await generateWorldDataAsync(targetSeed, targetVars, worldContextObj);
       
       // Check if this generation is still current
       if (currentGenId !== generationIdRef.current) {

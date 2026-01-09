@@ -567,23 +567,29 @@ function setup() {
 export interface WorldParams {
   seed: number;
   vars: number[];
+  // World A context - when provided, enables shared macro geography
+  worldContext?: {
+    worldX: number;  // 0-9
+    worldY: number;  // 0-9
+  };
 }
 
 // ============================================
-// VAR LABELS FOR UI
+// VAR LABELS FOR UI - EXPRESSION ONLY
+// In World A mode, these control local expression, NOT geography
 // ============================================
 
 export const VAR_LABELS: string[] = [
-  'Object Type',
-  'Object X',
-  'Object Y',
-  'Continent Scale',
-  'Water Level',
-  'Forest Density',
-  'Mountain Height',
-  'Path Density',
-  'Terrain Roughness',
-  'Mountain Density'
+  'Landmark Archetype',      // VAR[0] - Structure/object type
+  'Landmark X Bias',         // VAR[1] - Micro offset for placement
+  'Landmark Y Bias',         // VAR[2] - Micro offset for placement
+  'Terrain Detail',          // VAR[3] - Local noise frequency (micro-bumps)
+  'Biome Richness',          // VAR[4] - Color & vegetation variation
+  'Forest Density',          // VAR[5] - Tree clustering within fixed forest regions
+  'Mountain Steepness',      // VAR[6] - Slope curves, snow caps (NOT placement)
+  'Path Wear',               // VAR[7] - Width, erosion, smoothing (NOT routing)
+  'Surface Roughness',       // VAR[8] - Normal variation texture
+  'Visual Style'             // VAR[9] - Tone / saturation / contrast
 ];
 
 // ============================================
@@ -594,3 +600,322 @@ export const DEFAULT_PARAMS: WorldParams = {
   seed: 12345,
   vars: [50, 50, 50, 50, 50, 50, 50, 50, 50, 50]
 };
+
+// ============================================
+// WORLD A LAYOUT SOURCE - Shared Macro Geography
+// 
+// KEY DIFFERENCES FROM SOLO MODE:
+// - Continental elevation, major rivers, mountain ranges, coastlines 
+//   are derived from WORLD-SPACE coordinates (worldGX, worldGY)
+// - Player VARs only control LOCAL EXPRESSION (steepness, texture, etc.)
+// - All players in the same grid cell see identical macro features
+// ============================================
+
+export const WORLD_A_LAYOUT_SOURCE = `
+function setup() {
+  colorMode("RGB");
+  noStroke();
+  background(0, 0, 0, 0);
+
+  // ============================================
+  // WORLD A CONTEXT - Injected by host
+  // WORLD_X, WORLD_Y = grid position (0-9)
+  // LAND_SIZE = 64 (pixels per land)
+  // WORLD_SIZE = 10 (lands per axis)
+  // ============================================
+  
+  var GRID_SIZE = 64;
+  var LAND_SIZE = 64;
+  var WORLD_SIZE = 10;
+  
+  // World coordinates (injected by host as WORLD_X, WORLD_Y)
+  var worldX = typeof WORLD_X !== 'undefined' ? WORLD_X : 0;
+  var worldY = typeof WORLD_Y !== 'undefined' ? WORLD_Y : 0;
+  
+  // Seed-derived offsets for local variation
+  var seedOffsetA = random(0, 1000);
+  var seedOffsetB = random(0, 1000);
+  var seedOffsetC = random(0, 1000);
+  var seedOffsetD = random(0, 1000);
+  
+  // ============================================
+  // EXPRESSION-ONLY VAR MAPPINGS
+  // These affect intensity/texture, NEVER topology
+  // ============================================
+  
+  var landmarkType = floor(map(VAR[0], 0, 100, 0, 5));
+  var landmarkXBias = map(VAR[1], 0, 100, -8, 8);
+  var landmarkYBias = map(VAR[2], 0, 100, -8, 8);
+  var terrainDetail = map(VAR[3], 0, 100, 0.02, 0.15);
+  var biomeRichness = map(VAR[4], 0, 100, 0.3, 1.0);
+  var forestDensity = map(VAR[5], 0, 100, 0.15, 0.85);
+  var mountainSteepness = map(VAR[6], 0, 100, 0.3, 1.5);
+  var pathWear = map(VAR[7], 0, 100, 0.5, 2.0);
+  var surfaceRoughness = map(VAR[8], 0, 100, 0.02, 0.12);
+  var visualStyle = map(VAR[9], 0, 100, 0.7, 1.3);
+  
+  // Landmark position with micro-offset
+  var objX = floor(GRID_SIZE / 2 + landmarkXBias);
+  var objY = floor(GRID_SIZE / 2 + landmarkYBias);
+  objX = constrain(objX, 4, GRID_SIZE - 4);
+  objY = constrain(objY, 4, GRID_SIZE - 4);
+  
+  var BASE_FLOOR = 0.25;
+  
+  // ============================================
+  // MACRO GEOGRAPHY - FIXED FOR ALL PLAYERS
+  // Computed from WORLD-SPACE coordinates
+  // ============================================
+  
+  // Pre-compute macro masks for this land
+  var continentMask = [];
+  var mountainRegionMask = [];
+  var riverFlowMask = [];
+  var climateGradient = [];
+  var majorPathMask = [];
+  
+  for (var py = 0; py < GRID_SIZE; py++) {
+    continentMask[py] = [];
+    mountainRegionMask[py] = [];
+    riverFlowMask[py] = [];
+    climateGradient[py] = [];
+    majorPathMask[py] = [];
+    
+    for (var px = 0; px < GRID_SIZE; px++) {
+      // Convert to world-space coordinates
+      var worldGX = worldX * LAND_SIZE + px;
+      var worldGY = worldY * LAND_SIZE + py;
+      
+      // Normalize to 0-1 range across entire world
+      var normWX = worldGX / (WORLD_SIZE * LAND_SIZE);
+      var normWY = worldGY / (WORLD_SIZE * LAND_SIZE);
+      
+      // CONTINENTAL MASK - Very low frequency, spans entire world
+      // Creates central landmass with coastal fringes
+      var continentNoise1 = noise(normWX * 2.5 + 500, normWY * 2.5 + 500);
+      var continentNoise2 = noise(normWX * 5 + 1000, normWY * 5 + 1000);
+      var distFromCenter = sqrt(pow(normWX - 0.5, 2) + pow(normWY - 0.5, 2)) * 1.8;
+      var continentBase = continentNoise1 * 0.6 + continentNoise2 * 0.3 - distFromCenter * 0.5;
+      continentMask[py][px] = constrain(continentBase + 0.35, 0, 1);
+      
+      // MOUNTAIN REGION MASK - Low frequency, creates ranges
+      // Fixed positions independent of player
+      var mtn1 = noise(normWX * 3 + 2000, normWY * 3 + 2000);
+      var mtn2 = noise(normWX * 6 + 3000, normWY * 6 + 3000);
+      var mtnBase = mtn1 * 0.65 + mtn2 * 0.35;
+      
+      // Mountains avoid edges and cluster in ridges
+      var edgeDist = min(normWX, normWY, 1 - normWX, 1 - normWY);
+      var edgeFalloff = constrain(edgeDist * 5, 0, 1);
+      
+      if (mtnBase > 0.55 && continentMask[py][px] > 0.4) {
+        mountainRegionMask[py][px] = pow((mtnBase - 0.55) / 0.45, 0.6) * edgeFalloff;
+      } else {
+        mountainRegionMask[py][px] = 0;
+      }
+      
+      // RIVER FLOW MASK - Creates major drainage basins
+      var river1 = noise(normWX * 4 + 4000, normWY * 4 + 4000);
+      var river2 = noise(normWX * 8 + 5000, normWY * 8 + 5000);
+      var riverBase = river1 * 0.5 + river2 * 0.5;
+      riverFlowMask[py][px] = abs(riverBase - 0.5) < 0.025 ? 1 : 0;
+      
+      // CLIMATE GRADIENT - North/south temperature/moisture
+      climateGradient[py][px] = normWY;
+      
+      // MAJOR PATH NETWORK - Fixed trade routes
+      var path1 = noise(normWX * 3 + 6000, normWY * 3 + 6000);
+      var path2 = noise(normWX * 6 + 7000, normWY * 6 + 7000);
+      var pathBase = path1 * 0.6 + path2 * 0.4;
+      majorPathMask[py][px] = abs(pathBase - 0.5) < 0.03 ? 1 : 0;
+    }
+  }
+  
+  // ============================================
+  // PATH GENERATION - Fixed routes + local wear
+  // ============================================
+  var pathGrid = [];
+  for (var py = 0; py < GRID_SIZE; py++) {
+    pathGrid[py] = [];
+    for (var px = 0; px < GRID_SIZE; px++) {
+      // Start with major path network (fixed)
+      pathGrid[py][px] = majorPathMask[py][px] * pathWear;
+    }
+  }
+  
+  // Add local path details based on wear VAR
+  var numLocalPaths = floor(1 + pathWear * 1.5);
+  for (var p = 0; p < numLocalPaths; p++) {
+    var startEdge = floor(noise(p * 111 + seedOffsetA) * 4);
+    var edgePos = noise(p * 222 + seedOffsetB) * 0.6 + 0.2;
+    var cx = 0;
+    var cy = 0;
+    
+    if (startEdge === 0) {
+      cx = 0;
+      cy = floor(edgePos * GRID_SIZE);
+    } else if (startEdge === 1) {
+      cx = GRID_SIZE - 1;
+      cy = floor(edgePos * GRID_SIZE);
+    } else if (startEdge === 2) {
+      cx = floor(edgePos * GRID_SIZE);
+      cy = 0;
+    } else {
+      cx = floor(edgePos * GRID_SIZE);
+      cy = GRID_SIZE - 1;
+    }
+    
+    var targetX = GRID_SIZE * 0.5 + (noise(p * 333 + seedOffsetC) - 0.5) * GRID_SIZE * 0.4;
+    var targetY = GRID_SIZE * 0.5 + (noise(p * 444 + seedOffsetD) - 0.5) * GRID_SIZE * 0.4;
+    var prevAngle = 0;
+    
+    for (var step = 0; step < GRID_SIZE * 2; step++) {
+      if (cx < 0 || cx >= GRID_SIZE || cy < 0 || cy >= GRID_SIZE) break;
+      
+      var gxp = floor(cx);
+      var gyp = floor(cy);
+      if (gxp >= 0 && gxp < GRID_SIZE && gyp >= 0 && gyp < GRID_SIZE) {
+        pathGrid[gyp][gxp] = max(pathGrid[gyp][gxp], 0.7 * pathWear);
+      }
+      
+      var flowScale = 0.04 + pathWear * 0.02;
+      var n1 = noise(cx * flowScale + seedOffsetA, cy * flowScale);
+      var flowAngle = n1 * TWO_PI * 2;
+      var toTarget = atan2(targetY - cy, targetX - cx);
+      var angle = flowAngle * 0.3 + toTarget * 0.7;
+      angle = prevAngle * 0.5 + angle * 0.5;
+      prevAngle = angle;
+      
+      cx = cx + cos(angle) * 0.6;
+      cy = cy + sin(angle) * 0.6;
+    }
+  }
+  
+  // ============================================
+  // MAIN TERRAIN LOOP
+  // ============================================
+  for (var gy = 0; gy < GRID_SIZE; gy++) {
+    for (var gx = 0; gx < GRID_SIZE; gx++) {
+      
+      // Get macro masks for this position
+      var continent = continentMask[gy][gx];
+      var mtnRegion = mountainRegionMask[gy][gx];
+      var riverFlow = riverFlowMask[gy][gx];
+      var climate = climateGradient[gy][gx];
+      
+      // Base elevation from continental mask (FIXED)
+      var baseElevation = BASE_FLOOR + continent * 0.15;
+      
+      // Add local terrain detail (VAR-controlled)
+      var localDetail = noise(gx * terrainDetail + seedOffsetA, gy * terrainDetail);
+      var microDetail = noise(gx * surfaceRoughness * 5 + seedOffsetC, gy * surfaceRoughness * 5);
+      baseElevation = baseElevation + localDetail * 0.05 + microDetail * surfaceRoughness * 0.3;
+      
+      // Mountain elevation from region mask (FIXED position, VAR-controlled steepness)
+      var mountainNoise = noise(gx * 0.08 + seedOffsetB, gy * 0.08 + seedOffsetC);
+      var mountainDetail = noise(gx * 0.18 + seedOffsetD, gy * 0.18 + seedOffsetA);
+      var mountainShape = mountainNoise * 0.6 + mountainDetail * 0.4;
+      var peakFactor = pow(mtnRegion, 0.5) * pow(mountainShape, 0.4);
+      var mountainElevation = peakFactor * mountainSteepness * 0.5;
+      
+      var shaped = baseElevation + mountainElevation;
+      shaped = constrain(shaped, 0, 1);
+      
+      // Water level from continent mask (FIXED - sea is where continent is low)
+      var waterThreshold = 0.32;
+      var isWater = continent < 0.25 || shaped < waterThreshold;
+      
+      // River from macro mask (FIXED)
+      var isRiver = riverFlow > 0.5 && !isWater && shaped < waterThreshold + 0.18;
+      
+      var displayElevation = shaped;
+      if (!isWater && shaped < waterThreshold + 0.03) {
+        displayElevation = waterThreshold + 0.03;
+      }
+      
+      // Moisture from climate gradient + local variation
+      var moistBase = noise(gx * 0.05 + seedOffsetC, gy * 0.05 + seedOffsetD);
+      var moisture = moistBase * 0.4 + (1 - climate) * 0.3 + biomeRichness * 0.3;
+      if (isWater) moisture = 1.0;
+      moisture = constrain(moisture, 0, 1);
+      
+      // Forest from moisture + fixed mask
+      var forestNoise = noise(gx * 0.07 + seedOffsetB, gy * 0.07 + seedOffsetC);
+      var isForest = forestNoise < forestDensity && !isWater && mtnRegion < 0.35 && moisture > 0.25;
+      
+      // Mountain and snow detection
+      var isMountain = mtnRegion > 0.15 && !isWater;
+      var isSnowCap = mtnRegion > 0.45 && mountainShape > 0.5 && mountainSteepness > 0.6;
+      
+      // Paths
+      var onPath = pathGrid[gy][gx] > 0.3;
+      var isBridge = onPath && isWater;
+      var isPathTile = onPath && !isWater;
+      
+      var isObject = gx === objX && gy === objY;
+      
+      // ====== ELEVATION OUTPUT ======
+      var elevation = floor(displayElevation * 255);
+      
+      // ====== TILE TYPE PRIORITY (RGB) ======
+      var tileR = 0;
+      var tileG = 0;
+      var tileB = 0;
+      
+      // Apply visual style adjustment
+      var styleR = visualStyle;
+      var styleG = visualStyle;
+      var styleB = visualStyle;
+      
+      if (isObject) {
+        tileR = 255;
+        tileG = 220;
+        tileB = 60;
+      } else if (isBridge) {
+        tileR = floor(120 * styleR);
+        tileG = floor(80 * styleG);
+        tileB = floor(50 * styleB);
+      } else if (isPathTile) {
+        tileR = floor(180 * styleR);
+        tileG = floor(150 * styleG);
+        tileB = floor(100 * styleB);
+      } else if (isRiver) {
+        tileR = 70;
+        tileG = 160;
+        tileB = 180;
+      } else if (isWater) {
+        var depthFactor = continent / 0.25;
+        tileR = floor((20 + depthFactor * 15) * styleB);
+        tileG = floor((60 + depthFactor * 25) * styleB);
+        tileB = floor((120 + depthFactor * 25));
+      } else if (isSnowCap) {
+        tileR = floor(240 * styleR);
+        tileG = floor(245 * styleG);
+        tileB = 250;
+      } else if (isMountain) {
+        var mBlend = constrain(mtnRegion, 0, 1);
+        tileR = floor((100 + mBlend * 50) * styleR);
+        tileG = floor((95 + mBlend * 50) * styleG);
+        tileB = floor((90 + mBlend * 60) * styleB);
+      } else if (isForest) {
+        var fMoist = moisture * biomeRichness * 0.4;
+        tileR = floor((45 + fMoist * 30) * styleR);
+        tileG = floor((100 + moisture * 40) * styleG);
+        tileB = floor((40 + fMoist * 25) * styleB);
+      } else {
+        var gMoist = moisture * biomeRichness * 0.3;
+        tileR = floor((145 + displayElevation * 20 - gMoist * 20) * styleR);
+        tileG = floor((125 + displayElevation * 15 + gMoist * 15) * styleG);
+        tileB = floor((85 + gMoist * 20) * styleB);
+      }
+      
+      tileR = constrain(tileR, 0, 255);
+      tileG = constrain(tileG, 0, 255);
+      tileB = constrain(tileB, 0, 255);
+      
+      fill(tileR, tileG, tileB, elevation);
+      rect(gx, gy, 1, 1);
+    }
+  }
+}
+`;

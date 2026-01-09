@@ -195,8 +195,12 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
 // PUBLIC API - Async NexArt-based generation
 // ============================================
 
-export async function generateWorldDataAsync(seed: number, vars: number[]): Promise<WorldData> {
-  const grid = await generateNexArtWorld({ seed, vars });
+export async function generateWorldDataAsync(
+  seed: number, 
+  vars: number[],
+  worldContext?: { worldX: number; worldY: number }
+): Promise<WorldData> {
+  const grid = await generateNexArtWorld({ seed, vars, worldContext });
   
   if (!grid.isValid) {
     return {
