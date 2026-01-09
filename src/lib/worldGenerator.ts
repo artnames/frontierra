@@ -31,55 +31,92 @@ function setup() {
   var objY = floor(map(VAR[2], 0, 100, 4, GRID_SIZE - 4));
   
   var pathPoints = [];
-  var numPaths = floor(1 + pathDensityVal * 5);
-  var pathWidth = 1.2 + pathDensityVal * 0.3;
+  var numPaths = floor(2 + pathDensityVal * 6);
+  var pathWidth = 1.0 + pathDensityVal * 0.4;
+  var flowScale = 0.06 + pathDensityVal * 0.02;
+  var flowStrength = 0.8 + pathDensityVal * 0.4;
   
   if (pathDensityVal > 0.05) {
     for (var p = 0; p < numPaths; p++) {
       var points = [];
-      var isHoriz = noise(p * 100 + 777) > 0.4;
-      var px = isHoriz ? 0 : floor(noise(p * 200 + 888) * (GRID_SIZE - 10)) + 5;
-      var py = isHoriz ? floor(noise(p * 300 + 999) * (GRID_SIZE - 10)) + 5 : 0;
-      var baseAngle = isHoriz ? 0 : PI / 2;
-      var angle = baseAngle + (noise(p * 400 + 1111) - 0.5) * 0.4;
-      var curviness = 0.5 + noise(p * 500 + 111) * 0.6;
       
-      for (var s = 0; s < GRID_SIZE + 20; s++) {
-        points.push({x: px, y: py});
-        var flowNoise = noise(px * 0.05, py * 0.05);
-        var waveNoise = noise(px * 0.1, py * 0.1 + 100);
-        var combined = flowNoise * 0.6 + waveNoise * 0.4;
-        var angleOffset = (combined - 0.5) * curviness * 1.5;
-        var targetAngle = baseAngle + angleOffset;
-        angle = angle * 0.75 + targetAngle * 0.25;
-        px = px + cos(angle) * 0.7;
-        py = py + sin(angle) * 0.7;
+      var startEdge = floor(noise(p * 123 + 500) * 4);
+      var edgePos = noise(p * 234 + 600) * 0.7 + 0.15;
+      var px = 0;
+      var py = 0;
+      
+      if (startEdge === 0) {
+        px = 0;
+        py = floor(edgePos * GRID_SIZE);
+      } else if (startEdge === 1) {
+        px = GRID_SIZE - 1;
+        py = floor(edgePos * GRID_SIZE);
+      } else if (startEdge === 2) {
+        px = floor(edgePos * GRID_SIZE);
+        py = 0;
+      } else {
+        px = floor(edgePos * GRID_SIZE);
+        py = GRID_SIZE - 1;
+      }
+      
+      var prevAngle = 0;
+      
+      for (var s = 0; s < GRID_SIZE * 2; s++) {
+        if (px < -1 || px >= GRID_SIZE + 1 || py < -1 || py >= GRID_SIZE + 1) {
+          break;
+        }
         
-        if (pathDensityVal > 0.4 && s > 5 && s < GRID_SIZE && noise(px * 0.3, py * 0.3 + p) < 0.05) {
+        points.push({x: px, y: py});
+        
+        var n1 = noise(px * flowScale, py * flowScale);
+        var n2 = noise(px * flowScale * 2 + 100, py * flowScale * 2 + 100);
+        var n3 = noise(px * flowScale * 0.5 + 200, py * flowScale * 0.5 + 200);
+        var flowAngle = (n1 * 0.5 + n2 * 0.3 + n3 * 0.2) * TWO_PI * 2;
+        
+        var targetX = GRID_SIZE / 2 + (noise(p * 345) - 0.5) * GRID_SIZE * 0.6;
+        var targetY = GRID_SIZE / 2 + (noise(p * 456) - 0.5) * GRID_SIZE * 0.6;
+        var toTargetAngle = atan2(targetY - py, targetX - px);
+        
+        var blendedAngle = flowAngle * flowStrength + toTargetAngle * (1 - flowStrength * 0.7);
+        var smoothAngle = prevAngle * 0.6 + blendedAngle * 0.4;
+        prevAngle = smoothAngle;
+        
+        var stepSize = 0.5 + noise(px * 0.2, py * 0.2) * 0.3;
+        px = px + cos(smoothAngle) * stepSize;
+        py = py + sin(smoothAngle) * stepSize;
+        
+        if (pathDensityVal > 0.35 && s > 8 && s % 12 === 0 && noise(px * 0.4 + p, py * 0.4) < 0.15) {
           var branchPts = [];
           var bx = px;
           var by = py;
-          var bAngle = angle + (noise(bx, by) > 0.5 ? 0.6 : -0.6);
-          for (var b = 0; b < 12 + floor(noise(bx, by + 100) * 18); b++) {
+          var bAngle = smoothAngle + (noise(bx + p, by) > 0.5 ? PI * 0.4 : -PI * 0.4);
+          var bPrevAngle = bAngle;
+          
+          for (var b = 0; b < 8 + floor(noise(bx, by + 100) * 15); b++) {
             branchPts.push({x: bx, y: by});
-            var bn = noise(bx * 0.08, by * 0.08 + 300);
-            bAngle = bAngle * 0.82 + (bAngle + (bn - 0.5) * 0.7) * 0.18;
-            bx = bx + cos(bAngle) * 0.65;
-            by = by + sin(bAngle) * 0.65;
+            
+            var bn1 = noise(bx * flowScale * 1.5, by * flowScale * 1.5 + 300);
+            var bn2 = noise(bx * flowScale * 3 + 400, by * flowScale * 3);
+            var branchFlow = (bn1 * 0.6 + bn2 * 0.4) * TWO_PI * 2;
+            bAngle = bPrevAngle * 0.7 + branchFlow * 0.3;
+            bPrevAngle = bAngle;
+            
+            bx = bx + cos(bAngle) * 0.55;
+            by = by + sin(bAngle) * 0.55;
+            
             if (bx < 0 || bx >= GRID_SIZE || by < 0 || by >= GRID_SIZE) {
               break;
             }
           }
-          if (branchPts.length > 4) {
+          if (branchPts.length > 3) {
             pathPoints.push(branchPts);
           }
         }
-        
-        if (px < -2 || px >= GRID_SIZE + 2 || py < -2 || py >= GRID_SIZE + 2) {
-          break;
-        }
       }
-      pathPoints.push(points);
+      
+      if (points.length > 5) {
+        pathPoints.push(points);
+      }
     }
   }
   
