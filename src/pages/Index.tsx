@@ -438,6 +438,17 @@ const Index = () => {
             </div>
           )}
           
+          {/* Land Transition Overlay */}
+          {worldMode === 'multiplayer' && multiplayer.isTransitioning && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm transition-opacity duration-300">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm font-medium text-foreground">Crossing boundary...</p>
+                <p className="text-xs text-muted-foreground">Loading new land</p>
+              </div>
+            </div>
+          )}
+          
           {/* Multiplayer HUD */}
           {worldMode === 'multiplayer' && viewMode === 'firstperson' && (
             <MultiplayerHUD
