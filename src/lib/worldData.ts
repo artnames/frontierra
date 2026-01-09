@@ -5,10 +5,11 @@ export interface TerrainCell {
   x: number;
   y: number;
   elevation: number;
-  type: 'water' | 'ground' | 'forest' | 'mountain' | 'path';
+  type: 'water' | 'ground' | 'forest' | 'mountain' | 'path' | 'bridge';
   hasLandmark: boolean;
   landmarkType: number;
   isPath: boolean;
+  isBridge: boolean;
 }
 
 export interface WorldObject {
@@ -124,10 +125,37 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
   // Generate terrain
   const terrain: TerrainCell[][] = [];
   
-  // Generate path network using separate noise layers for roads
-  const pathNoiseX = createNoise2D(seed + 3000); // Horizontal road tendency
-  const pathNoiseY = createNoise2D(seed + 4000); // Vertical road tendency
+  // Generate road network deterministically
+  // Roads are created at specific intervals based on seed
+  const roadRng = mulberry32(seed + 5000);
   
+  // Determine road positions - create grid-like road network
+  const numHRoads = 2 + Math.floor(pathDensity * 4); // 2-6 horizontal roads
+  const numVRoads = 2 + Math.floor(pathDensity * 4); // 2-6 vertical roads
+  
+  const hRoadPositions: number[] = [];
+  const vRoadPositions: number[] = [];
+  
+  // Generate horizontal road Y positions
+  for (let i = 0; i < numHRoads; i++) {
+    const pos = Math.floor(roadRng() * (GRID_SIZE - 10)) + 5;
+    hRoadPositions.push(pos);
+  }
+  
+  // Generate vertical road X positions
+  for (let i = 0; i < numVRoads; i++) {
+    const pos = Math.floor(roadRng() * (GRID_SIZE - 10)) + 5;
+    vRoadPositions.push(pos);
+  }
+  
+  // Sort for consistent checking
+  hRoadPositions.sort((a, b) => a - b);
+  vRoadPositions.sort((a, b) => a - b);
+  
+  // Road width (1-2 cells)
+  const roadWidth = pathDensity > 0.5 ? 2 : 1;
+  
+  // First pass: generate base terrain
   for (let y = 0; y < GRID_SIZE; y++) {
     terrain[y] = [];
     for (let x = 0; x < GRID_SIZE; x++) {
@@ -137,42 +165,58 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
       // Apply height multiplier to non-water areas
       const scaledElevation = baseElevation * heightMultiplier;
       
-      // Path detection using grid-aligned noise for road-like paths
-      // Create roads that run roughly horizontal and vertical
-      const roadScaleX = 0.15; // Larger = more frequent roads
-      const roadScaleY = 0.15;
-      const roadWidth = 0.08 + pathDensity * 0.12; // Width of roads based on density
+      // Check if this cell is on a road
+      let isOnRoad = false;
+      if (pathDensity > 0.05) {
+        for (const roadY of hRoadPositions) {
+          if (Math.abs(y - roadY) < roadWidth) {
+            isOnRoad = true;
+            break;
+          }
+        }
+        if (!isOnRoad) {
+          for (const roadX of vRoadPositions) {
+            if (Math.abs(x - roadX) < roadWidth) {
+              isOnRoad = true;
+              break;
+            }
+          }
+        }
+      }
       
-      // Sample noise and check if we're near the "road lines" (where noise crosses 0.5)
-      const hRoadNoise = pathNoiseX(x * 0.02, y * roadScaleY);
-      const vRoadNoise = pathNoiseY(x * roadScaleX, y * 0.02);
-      
-      const isHRoad = Math.abs(hRoadNoise - 0.5) < roadWidth;
-      const isVRoad = Math.abs(vRoadNoise - 0.5) < roadWidth;
-      
-      const isPath = baseElevation >= waterLevel && baseElevation < 0.65 && 
-                     pathDensity > 0.1 && (isHRoad || isVRoad);
+      const isWater = baseElevation < waterLevel;
+      const isBridge = isOnRoad && isWater;
+      const isPath = isOnRoad && !isWater && baseElevation < 0.65;
       
       // Determine terrain type based on base elevation (before scaling)
       let type: TerrainCell['type'];
-      if (baseElevation < waterLevel) {
+      if (isBridge) {
+        type = 'bridge';
+      } else if (isPath) {
+        type = 'path';
+      } else if (isWater) {
         type = 'water';
       } else if (baseElevation > 0.65) {
         type = 'mountain';
-      } else if (isPath) {
-        type = 'path';
       } else {
         const forestNoise = noise2(x * 0.1, y * 0.1);
         type = forestNoise < forestDensity * baseElevation ? 'forest' : 'ground';
       }
       
-      // Landmarks - more of them, but not on paths
+      // Landmarks - more of them, but not on paths or bridges
       const landmarkNoise = noise3(x * 0.15, y * 0.15);
-      const hasLandmark = type !== 'water' && type !== 'mountain' && type !== 'path' && 
+      const hasLandmark = type !== 'water' && type !== 'mountain' && type !== 'path' && type !== 'bridge' && 
                           landmarkNoise < landmarkDensity;
       
-      // Final elevation - water stays low, land gets height multiplier
-      const finalElevation = type === 'water' ? waterLevel * 0.3 : scaledElevation;
+      // Final elevation - water stays low, bridges sit above water, land gets height multiplier
+      let finalElevation: number;
+      if (type === 'bridge') {
+        finalElevation = waterLevel * 0.3 + 0.05; // Slightly above water
+      } else if (type === 'water') {
+        finalElevation = waterLevel * 0.3;
+      } else {
+        finalElevation = scaledElevation;
+      }
       
       terrain[y][x] = {
         x,
@@ -181,7 +225,8 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
         type,
         hasLandmark,
         landmarkType: hasLandmark ? Math.floor(landmarkNoise * 100) % 3 : 0,
-        isPath
+        isPath: isPath || isBridge,
+        isBridge
       };
     }
   }
@@ -277,6 +322,7 @@ export function isWalkable(world: WorldData, worldX: number, worldY: number): bo
   }
   
   const cell = world.terrain[gridY]?.[gridX];
+  // Water is not walkable, but bridges are
   return cell?.type !== 'water';
 }
 

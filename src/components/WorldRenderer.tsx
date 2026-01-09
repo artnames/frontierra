@@ -43,7 +43,10 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
             r = 0.15; g = 0.35; b = 0.15;
             break;
           case 'path':
-            r = 0.55; g = 0.45; b = 0.35; // Sandy/dirt path color
+            r = 0.6; g = 0.5; b = 0.35; // Sandy/dirt path color - more visible
+            break;
+          case 'bridge':
+            r = 0.45; g = 0.35; b = 0.25; // Wooden bridge color
             break;
           default: // ground
             r = 0.35; g = 0.3; b = 0.2;
@@ -136,6 +139,80 @@ function LandmarkObject({ x, y, z, type }: { x: number; y: number; z: number; ty
       </mesh>
     );
   }
+}
+
+interface BridgesProps {
+  world: WorldData;
+}
+
+export function Bridges({ world }: BridgesProps) {
+  const bridges = useMemo(() => {
+    const items: { x: number; z: number; waterLevel: number }[] = [];
+    const waterLevel = (world.vars[4] ?? 30) / 100 * 0.35 + 0.15;
+    
+    for (let y = 0; y < world.gridSize; y++) {
+      for (let x = 0; x < world.gridSize; x++) {
+        const cell = world.terrain[y][x];
+        if (cell.type === 'bridge') {
+          items.push({
+            x: x,
+            z: y,
+            waterLevel: waterLevel * 20
+          });
+        }
+      }
+    }
+    
+    return items;
+  }, [world]);
+  
+  return (
+    <group>
+      {bridges.map((bridge, i) => (
+        <BridgePlank key={i} x={bridge.x} z={bridge.z} waterLevel={bridge.waterLevel} />
+      ))}
+    </group>
+  );
+}
+
+function BridgePlank({ x, z, waterLevel }: { x: number; z: number; waterLevel: number }) {
+  const bridgeHeight = waterLevel + 0.3; // Slightly above water
+  
+  return (
+    <group position={[x, bridgeHeight, z]}>
+      {/* Main plank */}
+      <mesh>
+        <boxGeometry args={[0.95, 0.1, 0.95]} />
+        <meshLambertMaterial color="#6b4423" />
+      </mesh>
+      {/* Side rails */}
+      <mesh position={[-0.4, 0.15, 0]}>
+        <boxGeometry args={[0.05, 0.2, 0.9]} />
+        <meshLambertMaterial color="#5a3a1a" />
+      </mesh>
+      <mesh position={[0.4, 0.15, 0]}>
+        <boxGeometry args={[0.05, 0.2, 0.9]} />
+        <meshLambertMaterial color="#5a3a1a" />
+      </mesh>
+      {/* Support posts at corners */}
+      <mesh position={[-0.4, -0.3, -0.4]}>
+        <cylinderGeometry args={[0.04, 0.04, 0.5, 6]} />
+        <meshLambertMaterial color="#4a2a10" />
+      </mesh>
+      <mesh position={[0.4, -0.3, -0.4]}>
+        <cylinderGeometry args={[0.04, 0.04, 0.5, 6]} />
+        <meshLambertMaterial color="#4a2a10" />
+      </mesh>
+      <mesh position={[-0.4, -0.3, 0.4]}>
+        <cylinderGeometry args={[0.04, 0.04, 0.5, 6]} />
+        <meshLambertMaterial color="#4a2a10" />
+      </mesh>
+      <mesh position={[0.4, -0.3, 0.4]}>
+        <cylinderGeometry args={[0.04, 0.04, 0.5, 6]} />
+        <meshLambertMaterial color="#4a2a10" />
+      </mesh>
+    </group>
+  );
 }
 
 interface PlantedObjectProps {
