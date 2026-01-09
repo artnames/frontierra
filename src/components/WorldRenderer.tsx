@@ -10,7 +10,7 @@ import {
   getWaterLevel, 
   RIVER_DEPTH_OFFSET, 
   PATH_HEIGHT_OFFSET, 
-  BRIDGE_HEIGHT_OFFSET 
+  BRIDGE_FIXED_HEIGHT 
 } from '@/lib/worldConstants';
 
 // ============================================
@@ -211,10 +211,8 @@ interface BridgesProps {
 }
 
 export function Bridges({ world }: BridgesProps) {
-  const heightScale = WORLD_HEIGHT_SCALE;
   const bridges = useMemo(() => {
-    const items: { x: number; z: number; waterLevel: number }[] = [];
-    const waterLevel = getWaterLevel(world.vars);
+    const items: { x: number; z: number }[] = [];
     
     for (let y = 0; y < world.gridSize; y++) {
       for (let x = 0; x < world.gridSize; x++) {
@@ -222,29 +220,26 @@ export function Bridges({ world }: BridgesProps) {
         if (cell.type === 'bridge') {
           // COORDINATE FIX: Flip Y for Three.js positioning
           const flippedZ = world.gridSize - 1 - y;
-          items.push({
-            x,
-            z: flippedZ,
-            waterLevel: waterLevel * heightScale
-          });
+          items.push({ x, z: flippedZ });
         }
       }
     }
     
     return items;
-  }, [world, heightScale]);
+  }, [world]);
   
   return (
     <group>
       {bridges.map((bridge, i) => (
-        <BridgePlank key={i} x={bridge.x} z={bridge.z} waterLevel={bridge.waterLevel} />
+        <BridgePlank key={i} x={bridge.x} z={bridge.z} />
       ))}
     </group>
   );
 }
 
-function BridgePlank({ x, z, waterLevel }: { x: number; z: number; waterLevel: number }) {
-  const bridgeHeight = waterLevel + BRIDGE_HEIGHT_OFFSET;
+function BridgePlank({ x, z }: { x: number; z: number }) {
+  // Use fixed bridge height - just above water surface
+  const bridgeHeight = BRIDGE_FIXED_HEIGHT;
   
   return (
     <group position={[x, bridgeHeight, z]}>
