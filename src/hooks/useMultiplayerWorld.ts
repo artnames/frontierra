@@ -197,7 +197,10 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
   // Update land parameters (seed/vars) - only works on own land
   const updateLandParams = useCallback(async (updates: { seed?: number; vars?: number[] }) => {
     if (!state.playerId || !state.currentLand) return;
-    if (state.isVisitingOtherLand) {
+    
+    // Check ownership directly by comparing IDs (more reliable than cached boolean)
+    const isOwner = state.currentLand.player_id === state.playerId;
+    if (!isOwner) {
       console.warn('[MultiplayerWorld] Cannot update parameters on someone else\'s land');
       return;
     }
@@ -207,7 +210,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
       setState(prev => ({ ...prev, currentLand: updatedLand }));
       forceRegenerate();
     }
-  }, [state.playerId, state.currentLand, state.isVisitingOtherLand, forceRegenerate]);
+  }, [state.playerId, state.currentLand, forceRegenerate]);
   
   // Subscribe to real-time land updates
   useEffect(() => {
