@@ -17,8 +17,7 @@ const globalCameraState = {
   manualHeight: null as number | null,
   yaw: 0,
   pitch: 0,
-  initialized: false,
-  lastWorldSeed: null as number | null
+  initialized: false
 };
 
 export function useFirstPersonControls({ world, onPositionChange, preservePosition = true, enabled = true, allowVerticalMovement = true }: FirstPersonControlsProps) {
@@ -38,20 +37,17 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
   const manualHeightOffset = useRef(0); // Store manual height offset from terrain
   const isInitialized = useRef(false);
 
-  // Initialize camera position only once, or when seed changes
+  // Initialize camera position only once (preserve across seed changes in editor mode)
   useEffect(() => {
-    // Reset if seed changes (new world) or not yet initialized
-    const seedChanged = globalCameraState.lastWorldSeed !== null && 
-                        globalCameraState.lastWorldSeed !== world.seed;
-    
-    if (!isInitialized.current || seedChanged) {
-      if (globalCameraState.initialized && preservePosition && globalCameraState.position && !seedChanged) {
+    if (!isInitialized.current) {
+      if (globalCameraState.initialized && preservePosition && globalCameraState.position) {
+        // Restore previous position
         position.current.copy(globalCameraState.position);
         manualHeightOffset.current = globalCameraState.manualHeight ?? 0;
         rotationState.current.yaw = globalCameraState.yaw;
         rotationState.current.pitch = globalCameraState.pitch;
       } else {
-        // Spawn: x,z are ground coords, y is height in Three.js
+        // Fresh spawn: x,z are ground coords, y is height in Three.js
         const spawnX = world.spawnPoint.x;
         const spawnZ = world.spawnPoint.y; // world y -> Three.js z
         const terrainHeight = getElevationAt(world, spawnX, spawnZ);
@@ -67,7 +63,6 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
         globalCameraState.yaw = rotationState.current.yaw;
         globalCameraState.pitch = rotationState.current.pitch;
         globalCameraState.initialized = true;
-        globalCameraState.lastWorldSeed = world.seed;
       }
       isInitialized.current = true;
     }
@@ -327,21 +322,18 @@ export function resetCameraToSpawn() {
   globalCameraState.manualHeight = null;
 }
 
-// Set camera to editor view (high corner looking down)
+// Set camera to editor view (position 0,0 at altitude 25, looking straight down)
 export function setCameraToEditorView(world: WorldData) {
-  const gridSize = world.gridSize;
-  // Position at corner, high up
-  globalCameraState.position = new THREE.Vector3(gridSize * 0.9, 50, gridSize * 0.9);
-  globalCameraState.manualHeight = 48; // High above terrain
-  globalCameraState.yaw = -Math.PI * 0.75; // Looking toward center
-  globalCameraState.pitch = -0.8; // Looking down
+  // Position at origin (0,0), altitude 25
+  globalCameraState.position = new THREE.Vector3(0, 25, 0);
+  globalCameraState.manualHeight = 25; // Store altitude offset
+  globalCameraState.yaw = 0; // Facing default direction
+  globalCameraState.pitch = -Math.PI / 2; // Looking straight down
   globalCameraState.initialized = true;
-  globalCameraState.lastWorldSeed = world.seed;
 }
 
 // Set camera to explore view (ground level at spawn)
 export function setCameraToExploreView(world: WorldData) {
   globalCameraState.initialized = false;
   globalCameraState.manualHeight = 0;
-  globalCameraState.lastWorldSeed = world.seed;
 }
