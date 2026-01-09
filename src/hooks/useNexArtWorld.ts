@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { WorldData, generateWorldDataAsync, cacheWorldData, isWorldValid } from '@/lib/worldData';
 import { normalizeNexArtInput } from '@/lib/nexartWorld';
+import { createWorldContext, WORLD_A_ID } from '@/lib/worldContext';
 
 interface UseNexArtWorldOptions {
   seed: number;
@@ -48,16 +49,16 @@ export function useNexArtWorld({
     mode: 'static'
   }), [seed, vars]);
   
-  // Build world context for World A mode
-  const worldContextObj = useMemo(() => worldContext ? {
-    worldX: worldContext.worldX,
-    worldY: worldContext.worldY
-  } : undefined, [worldContext?.worldX, worldContext?.worldY]);
+  // Build full WorldContext for World A mode
+  const fullWorldContext = useMemo(() => {
+    if (!worldContext) return undefined;
+    return createWorldContext(worldContext.worldX, worldContext.worldY);
+  }, [worldContext?.worldX, worldContext?.worldY]);
   
   // Stable key for dependency tracking (includes world context)
   const paramsKey = useMemo(
-    () => `${input.seed}:${input.vars.join(',')}:${worldContextObj?.worldX ?? 'solo'}:${worldContextObj?.worldY ?? ''}`,
-    [input.seed, input.vars, worldContextObj?.worldX, worldContextObj?.worldY]
+    () => `${input.seed}:${input.vars.join(',')}:${fullWorldContext?.worldX ?? 'solo'}:${fullWorldContext?.worldY ?? ''}`,
+    [input.seed, input.vars, fullWorldContext?.worldX, fullWorldContext?.worldY]
   );
   
   const generateWorld = useCallback(async (targetSeed: number, targetVars: number[]) => {
@@ -67,7 +68,7 @@ export function useNexArtWorld({
     setError(null);
     
     try {
-      const worldData = await generateWorldDataAsync(targetSeed, targetVars, worldContextObj);
+      const worldData = await generateWorldDataAsync(targetSeed, targetVars, fullWorldContext);
       
       // Check if this generation is still current
       if (currentGenId !== generationIdRef.current) {

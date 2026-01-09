@@ -20,12 +20,13 @@ import { WorldContractPanel } from '@/components/WorldContractPanel';
 import { ReplayControls } from '@/components/ReplayControls';
 import { ActionSystem } from '@/components/ActionSystem';
 import { MultiplayerHUD } from '@/components/MultiplayerHUD';
+import { WorldAMap } from '@/components/WorldAMap';
 import { useMultiplayerWorld } from '@/hooks/useMultiplayerWorld';
 import { useToast } from '@/hooks/use-toast';
 import { useSearchParams } from 'react-router-dom';
 
 type ViewMode = 'map' | 'firstperson';
-type SidebarTab = 'parameters' | 'contract' | 'actions' | 'replay';
+type SidebarTab = 'parameters' | 'contract' | 'actions' | 'replay' | 'worldmap';
 type WorldMode = 'solo' | 'multiplayer';
 
 const Index = () => {
@@ -34,7 +35,7 @@ const Index = () => {
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('explore');
   const [copied, setCopied] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false); // Default hidden in explore mode
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('contract');
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('worldmap');
   const [deterministicTest, setDeterministicTest] = useState<DeterminismTest | null>(null);
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayFrame, setReplayFrame] = useState<ReplayFrame | null>(null);
@@ -400,10 +401,14 @@ const Index = () => {
 
         {/* Control Sidebar - Absolute positioned to overlay canvas */}
         {showSidebar && (
-          <aside className="fixed top-[52px] right-0 bottom-0 w-80 border-l border-border bg-card/95 backdrop-blur-sm flex flex-col overflow-hidden z-[100] shadow-xl">
+        <aside className="fixed top-[52px] right-0 bottom-0 w-80 border-l border-border bg-card/95 backdrop-blur-sm flex flex-col overflow-hidden z-[100] shadow-xl">
             {/* Tab Navigation */}
             <div className="flex border-b border-border bg-secondary/30">
-              {(['contract', 'actions', 'replay', 'parameters'] as SidebarTab[]).map(tab => (
+              {/* Show worldmap tab only in multiplayer mode */}
+              {(worldMode === 'multiplayer' 
+                ? (['worldmap', 'contract', 'actions', 'replay', 'parameters'] as SidebarTab[])
+                : (['contract', 'actions', 'replay', 'parameters'] as SidebarTab[])
+              ).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setSidebarTab(tab)}
@@ -412,13 +417,21 @@ const Index = () => {
                       ? 'text-primary border-b-2 border-primary bg-card' 
                       : 'text-muted-foreground hover:text-foreground'}`}
                 >
-                  {tab}
+                  {tab === 'worldmap' ? 'World A' : tab}
                 </button>
               ))}
             </div>
             
             {/* Tab Content */}
             <div className="flex-1 overflow-y-auto p-3">
+              {sidebarTab === 'worldmap' && worldMode === 'multiplayer' && (
+                <WorldAMap
+                  currentLand={multiplayer.currentLand}
+                  playerId={multiplayer.playerId}
+                  onVisitLand={multiplayer.visitLand}
+                />
+              )}
+              
               {sidebarTab === 'contract' && (
                 <WorldContractPanel
                   world={world}
