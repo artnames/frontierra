@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { WorldParams, WORLD_SOURCE } from '@/lib/worldGenerator';
 import { normalizeNexArtInput } from '@/lib/nexartWorld';
 
@@ -7,80 +7,114 @@ interface WorldCanvasProps {
   onGenerate?: () => void;
 }
 
+const NEXART_TIMEOUT_MS = 10000;
+
 export function WorldCanvas({ params, onGenerate }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastGenerated, setLastGenerated] = useState<string>('');
 
-  const generateWorld = useCallback(async () => {
-    const paramsKey = JSON.stringify(params);
-    if (paramsKey === lastGenerated && !error) return;
-    
-    setIsGenerating(true);
-    setError(null);
-    
-    // Normalize inputs BEFORE calling NexArt
-    const input = normalizeNexArtInput({
-      seed: params.seed,
-      vars: params.vars,
-      mode: 'static'
-    });
-    
-    let result;
-    try {
-      const { executeCodeMode } = await import('@nexart/codemode-sdk');
-      result = await executeCodeMode({
-        source: WORLD_SOURCE,
-        width: 512,
-        height: 512,
-        seed: input.seed,
-        vars: input.vars,
-        mode: input.mode,
-      });
-    } catch (err) {
-      // Surface NexArt error verbatim - NO FALLBACK
-      const message = err instanceof Error ? err.message : String(err);
-      setError(`World cannot be verified — ${message}`);
-      setLastGenerated(paramsKey);
-      setIsGenerating(false);
-      return;
-    }
-      
-    // The SDK returns result.image as a PNG Blob for static mode
-    if (canvasRef.current && result.image) {
-      const ctx = canvasRef.current.getContext('2d');
-      if (ctx) {
-        const url = URL.createObjectURL(result.image);
-        const img = new Image();
-        img.onload = () => {
-          ctx.clearRect(0, 0, 512, 512);
-          ctx.drawImage(img, 0, 0);
-          URL.revokeObjectURL(url);
-          setLastGenerated(paramsKey);
-          setIsGenerating(false);
-          onGenerate?.();
-        };
-        img.onerror = () => {
-          URL.revokeObjectURL(url);
-          setError('World cannot be verified — failed to load generated image.');
-          setLastGenerated(paramsKey);
-          setIsGenerating(false);
-        };
-        img.src = url;
-        return;
-      }
-    }
-      
-    setError('World cannot be verified — invalid canonical input.');
-    setLastGenerated(paramsKey);
-    setIsGenerating(false);
-    onGenerate?.();
-  }, [params, lastGenerated, error, onGenerate]);
+  // Normalize inputs ONCE and create stable key
+  const input = useMemo(() => normalizeNexArtInput({
+    seed: params.seed,
+    vars: params.vars,
+    mode: 'static'
+  }), [params.seed, params.vars]);
+
+  // Stable dependency key - string, not object reference
+  const genKey = `${input.seed}:${input.vars.join(',')}:${input.mode}`;
 
   useEffect(() => {
-    generateWorld();
-  }, [generateWorld]);
+    // Skip if already generated this exact key
+    if (genKey === lastGenerated) return;
+
+    let cancelled = false;
+    console.log('[NexArt] Starting generation:', genKey);
+
+    const runGeneration = async () => {
+      setIsGenerating(true);
+      setError(null);
+
+      try {
+        const { executeCodeMode } = await import('@nexart/codemode-sdk');
+        
+        // Timeout gate - never hang forever
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('NexArt execution timeout (10s)')), NEXART_TIMEOUT_MS);
+        });
+
+        const executionPromise = executeCodeMode({
+          source: WORLD_SOURCE,
+          width: 512,
+          height: 512,
+          seed: input.seed,
+          vars: input.vars,
+          mode: input.mode,
+        });
+
+        const result = await Promise.race([executionPromise, timeoutPromise]);
+
+        if (cancelled) return;
+        console.log('[NexArt] Generation complete:', genKey);
+
+        // The SDK returns result.image as a PNG Blob for static mode
+        if (canvasRef.current && result.image) {
+          const ctx = canvasRef.current.getContext('2d');
+          if (ctx) {
+            const url = URL.createObjectURL(result.image);
+            const img = new Image();
+            
+            img.onload = () => {
+              if (cancelled) {
+                URL.revokeObjectURL(url);
+                return;
+              }
+              ctx.clearRect(0, 0, 512, 512);
+              ctx.drawImage(img, 0, 0);
+              URL.revokeObjectURL(url);
+              setLastGenerated(genKey);
+              setIsGenerating(false);
+              onGenerate?.();
+            };
+            
+            img.onerror = () => {
+              URL.revokeObjectURL(url);
+              if (cancelled) return;
+              setError('World cannot be verified — failed to load generated image.');
+              setLastGenerated(genKey);
+              setIsGenerating(false);
+            };
+            
+            img.src = url;
+            return;
+          }
+        }
+
+        // No valid result
+        if (!cancelled) {
+          setError('World cannot be verified — no image returned.');
+          setLastGenerated(genKey);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[NexArt] Generation failed:', message);
+        setError(`World cannot be verified — ${message}`);
+        setLastGenerated(genKey);
+      } finally {
+        if (!cancelled) {
+          setIsGenerating(false);
+        }
+      }
+    };
+
+    runGeneration();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [genKey, input, lastGenerated, onGenerate]);
 
   return (
     <div className="relative">
