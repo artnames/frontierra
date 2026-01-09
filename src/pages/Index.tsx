@@ -1,5 +1,5 @@
-import { useCallback, useState, useMemo, useEffect } from 'react';
-import { Eye, Grid3X3, Copy, Check, Shuffle, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useCallback, useState, useMemo } from 'react';
+import { Eye, Map, Copy, Check, Shuffle, Settings, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
@@ -12,18 +12,17 @@ import {
   runDeterminismTest,
   serializeActions,
   parseActions,
-  ReplayFrame,
-  generateReplayPath
+  ReplayFrame
 } from '@/lib/worldContract';
 import { WorldExplorer } from '@/components/WorldExplorer';
-import { WorldCanvas } from '@/components/WorldCanvas';
+import { WorldMap2D } from '@/components/WorldMap2D';
 import { WorldContractPanel } from '@/components/WorldContractPanel';
 import { ReplayControls } from '@/components/ReplayControls';
 import { ActionSystem } from '@/components/ActionSystem';
 import { useToast } from '@/hooks/use-toast';
 import { useSearchParams } from 'react-router-dom';
 
-type ViewMode = 'isometric' | 'firstperson';
+type ViewMode = 'map' | 'firstperson';
 type SidebarTab = 'parameters' | 'contract' | 'actions' | 'replay';
 
 const Index = () => {
@@ -197,14 +196,14 @@ const Index = () => {
                 First Person
               </Button>
               <Button
-                variant={viewMode === 'isometric' ? 'default' : 'ghost'}
+                variant={viewMode === 'map' ? 'default' : 'ghost'}
                 size="sm"
-                onClick={() => setViewMode('isometric')}
+                onClick={() => setViewMode('map')}
                 className="gap-1.5 h-7 text-xs"
                 disabled={isReplaying}
               >
-                <Grid3X3 className="w-3.5 h-3.5" />
-                Isometric
+                <Map className="w-3.5 h-3.5" />
+                2D Map
               </Button>
             </div>
           </div>
@@ -248,8 +247,10 @@ const Index = () => {
               replayFrame={replayFrame}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-background grid-pattern p-4">
-              <WorldCanvas params={params} onGenerate={handleGenerate} />
+            <div className="w-full h-full flex bg-background">
+              <div className="flex-1 flex items-center justify-center p-4">
+                <WorldMap2D params={params} getShareUrl={getShareUrl} />
+              </div>
             </div>
           )}
           
@@ -305,7 +306,7 @@ const Index = () => {
                 />
               )}
               
-              {sidebarTab === 'actions' && viewMode === 'isometric' && (
+              {sidebarTab === 'actions' && viewMode === 'map' && (
                 <div className="text-center text-muted-foreground text-sm py-8">
                   Switch to First Person view to execute actions
                 </div>
