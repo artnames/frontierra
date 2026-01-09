@@ -159,7 +159,9 @@ async function extractPixelData(blob: Blob, size: number): Promise<Uint8ClampedA
         reject(new Error('Failed to create canvas context'));
         return;
       }
-      
+      // IMPORTANT: keep the 64×64 pixel output crisp so categorical RGB tiles
+      // (path/bridge/river/etc.) are not blurred by interpolation.
+      ctx.imageSmoothingEnabled = false;
       ctx.drawImage(img, 0, 0, size, size);
       const imageData = ctx.getImageData(0, 0, size, size);
       URL.revokeObjectURL(url);

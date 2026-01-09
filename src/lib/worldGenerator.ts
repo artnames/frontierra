@@ -25,6 +25,17 @@ function setup() {
   colorMode("RGB");
   noStroke();
   background(0, 0, 0, 0);
+
+  // Ensure the execution seed actually drives noise()/random() deterministically.
+  // (Some runtimes do not auto-seed p5 noise; this makes seed changes visible.)
+  var __seed = 0;
+  if (typeof SEED !== "undefined") {
+    __seed = SEED;
+  } else if (typeof seed !== "undefined") {
+    __seed = seed;
+  }
+  noiseSeed(__seed);
+  randomSeed(__seed);
   
   var GRID_SIZE = 64;
   
@@ -40,10 +51,10 @@ function setup() {
   var continentScale = map(VAR[3], 0, 100, 0.025, 0.08);
   var waterLevel = map(VAR[4], 0, 100, 0.15, 0.65);
   var forestDensity = map(VAR[5], 0, 100, 0.15, 0.80);
-  var mountainPeakHeight = map(VAR[6], 0, 100, 0.15, 0.70);
+  var mountainPeakHeight = map(VAR[6], 0, 100, 0.25, 0.95);
   var pathDensityVal = map(VAR[7], 0, 100, 0.0, 1.0);
-  var terrainRoughness = map(VAR[8], 0, 100, 0.25, 0.80);
-  var mountainDensity = map(VAR[9], 0, 100, 0.08, 0.75);
+  var terrainRoughness = map(VAR[8], 0, 100, 0.10, 1.00);
+  var mountainDensity = map(VAR[9], 0, 100, 0.05, 1.00);
   
   var objX = floor(map(VAR[1], 0, 100, 4, GRID_SIZE - 4));
   var objY = floor(map(VAR[2], 0, 100, 4, GRID_SIZE - 4));
