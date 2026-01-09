@@ -15,18 +15,20 @@ interface WorldMap2DProps {
 
 const NEXART_TIMEOUT_MS = 10000;
 
-// Legend items matching the Blue channel encoding
-const LEGEND_ITEMS = [
-  { label: 'Water', color: '#1a4a6a', range: '0–50' },
-  { label: 'Ground', color: '#5a7a4a', range: '51–100' },
-  { label: 'Forest', color: '#2a5a2a', range: '101–150' },
-  { label: 'Mountain', color: '#7a7a8a', range: '151–200' },
-  { label: 'Path', color: '#a08050', range: '201–230' },
-  { label: 'Bridge', color: '#6b4423', range: '231–255' },
+// Legend for continuous elevation (Blue channel now shows gradient, not categories)
+const ELEVATION_LEGEND = [
+  { label: 'Deep Water', color: '#1a3a5a', range: '0–30%' },
+  { label: 'Shallow Water', color: '#2a5a7a', range: '30–48%' },
+  { label: 'Lowlands', color: '#4a6a3a', range: '48–60%' },
+  { label: 'Hills', color: '#6a7a4a', range: '60–75%' },
+  { label: 'Mountains', color: '#7a7a7a', range: '75–90%' },
+  { label: 'Peaks', color: '#a0a5aa', range: '90–100%' },
 ];
 
 const FEATURE_LEGEND = [
-  { label: 'Ruins', color: '#ff6b6b', desc: 'Alpha 250' },
+  { label: 'Path', color: '#a08050', desc: 'Alpha 230–239' },
+  { label: 'Bridge', color: '#6b4423', desc: 'Alpha 220–229' },
+  { label: 'Ruins', color: '#7a7068', desc: 'Alpha 250' },
   { label: 'Crystal', color: '#66aaff', desc: 'Alpha 251' },
   { label: 'Ancient Tree', color: '#4a8a4a', desc: 'Alpha 252' },
   { label: 'Stone Circle', color: '#8a8a8a', desc: 'Alpha 253' },
@@ -306,11 +308,11 @@ export function WorldMap2D({ params, getShareUrl }: WorldMap2DProps) {
           </div>
         )}
         
-        {/* Biome Legend */}
+        {/* Elevation Legend */}
         <div className="space-y-2">
-          <div className="data-label">Biome (Blue Channel)</div>
+          <div className="data-label">Elevation (Red Channel)</div>
           <div className="grid grid-cols-2 gap-1.5">
-            {LEGEND_ITEMS.map((item) => (
+            {ELEVATION_LEGEND.map((item) => (
               <div key={item.label} className="flex items-center gap-2 text-xs">
                 <div 
                   className="w-3 h-3 rounded-sm border border-border flex-shrink-0" 

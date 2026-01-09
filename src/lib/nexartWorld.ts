@@ -202,34 +202,60 @@ function parseRGBAPixels(
   let plantedObjectY = Math.floor(gridSize / 2);
   
   const objType = Math.floor((vars[0] ?? 50) / 100 * 5);
+  const waterThreshold = (vars[4] ?? 30) / 100 * 0.20 + 0.28;
   
   for (let y = 0; y < gridSize; y++) {
     cells[y] = [];
     for (let x = 0; x < gridSize; x++) {
       const i = (y * gridSize + x) * 4;
-      const r = pixels[i];     // Elevation
-      const g = pixels[i + 1]; // Moisture
-      const b = pixels[i + 2]; // Biome
+      const r = pixels[i];     // Elevation (continuous)
+      const g = pixels[i + 1]; // Moisture (continuous)
+      const b = pixels[i + 2]; // Biome hint (continuous)
       const a = pixels[i + 3]; // Feature mask
       
-      // Derive elevation from red channel
+      // Derive CONTINUOUS elevation from red channel
       const elevation = r / 255;
       
-      // Derive moisture from green channel
+      // Derive CONTINUOUS moisture from green channel
       const moisture = g / 255;
       
-      // Derive tile type from blue channel
-      const tileType = classifyBiomeFromBlue(b);
-      
-      // Parse alpha channel for features
+      // Parse Alpha channel for features (new encoding)
+      // 255: No feature
+      // 250-254: Landmark types (0-4)
+      // 245-249: River
+      // 230-239: Path
+      // 220-229: Bridge
+      // 1: Planted object
       const hasLandmark = a >= 250 && a <= 254;
       const landmarkType = hasLandmark ? (a - 250) : 0;
       const hasRiver = a >= 245 && a <= 249;
+      const isPath = a >= 230 && a <= 239;
+      const isBridge = a >= 220 && a <= 229;
       const isPlantedObject = a === 1;
       
       if (isPlantedObject) {
         plantedObjectX = x;
         plantedObjectY = y;
+      }
+      
+      // Determine tile type from Alpha features + elevation threshold
+      let tileType: TileType;
+      if (isBridge) {
+        tileType = TileType.BRIDGE;
+      } else if (isPath) {
+        tileType = TileType.PATH;
+      } else if (elevation < waterThreshold) {
+        tileType = TileType.WATER;
+      } else {
+        // Soft classification based on elevation + moisture
+        const landFraction = (elevation - waterThreshold) / (1 - waterThreshold);
+        if (landFraction > 0.6) {
+          tileType = TileType.MOUNTAIN;
+        } else if (moisture > 0.5 && landFraction < 0.4) {
+          tileType = TileType.FOREST;
+        } else {
+          tileType = TileType.GROUND;
+        }
       }
       
       cells[y][x] = {
@@ -243,8 +269,8 @@ function parseRGBAPixels(
         landmarkType,
         hasRiver,
         isPlantedObject,
-        isPath: tileType === TileType.PATH,
-        isBridge: tileType === TileType.BRIDGE
+        isPath,
+        isBridge
       };
     }
   }
@@ -257,9 +283,9 @@ function parseRGBAPixels(
   spawnX = Math.max(2, Math.min(gridSize - 3, spawnX));
   spawnY = Math.max(2, Math.min(gridSize - 3, spawnY));
   
-  // Ensure spawn is not on water
+  // Ensure spawn is not on water (using elevation threshold)
   let attempts = 0;
-  while (cells[spawnY]?.[spawnX]?.tileType === TileType.WATER && attempts < 100) {
+  while (cells[spawnY]?.[spawnX]?.elevation < waterThreshold && attempts < 100) {
     spawnX = (spawnX + 1) % gridSize;
     if (spawnX === 0) spawnY = (spawnY + 1) % gridSize;
     attempts++;

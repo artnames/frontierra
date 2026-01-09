@@ -12,9 +12,9 @@
 // ============================================
 
 export const WORLD_LAYOUT_SOURCE = `
-// NexArt Canonical World Layout Generator
-// Outputs a 64x64 RGBA-encoded grid
-// Red: elevation | Green: moisture | Blue: biome | Alpha: features
+// NexArt Canonical World Layout Generator - Continuous Physical Field
+// Outputs a 64x64 RGBA-encoded heightfield
+// Red: CONTINUOUS elevation | Green: moisture | Blue: biome hint | Alpha: features
 
 function setup() {
   colorMode("RGB");
@@ -23,27 +23,27 @@ function setup() {
   
   var GRID_SIZE = 64;
   
-  // Map VAR parameters to generation controls
-  var terrainScale = map(VAR[3], 0, 100, 0.02, 0.08);
-  var waterLevel = map(VAR[4], 0, 100, 0.25, 0.55);
-  var forestDensity = map(VAR[5], 0, 100, 0.2, 0.9);
-  // Reduced mountain height for more natural feel (0.2-0.5 instead of 0.6-1.0)
-  var mountainHeight = map(VAR[6], 0, 100, 0.2, 0.5);
+  // ========================================
+  // MAP VAR PARAMETERS TO GENERATION CONTROLS
+  // ========================================
+  var continentScale = map(VAR[3], 0, 100, 0.015, 0.045);   // Low-frequency for continents
+  var waterThreshold = map(VAR[4], 0, 100, 0.28, 0.48);     // Elevation threshold for water
+  var vegetationDensity = map(VAR[5], 0, 100, 0.3, 0.95);   // Vegetation from moisture
+  var mountainExponent = map(VAR[6], 0, 100, 1.4, 1.9);     // Exponential shaping power
   var pathDensity = map(VAR[7], 0, 100, 0.0, 1.0);
-  var roughness = map(VAR[8], 0, 100, 0.3, 0.9);
-  // Increased landmark density range for more visible landmarks
-  var landmarkDensity = map(VAR[9], 0, 100, 0.05, 0.35);
+  var terrainRoughness = map(VAR[8], 0, 100, 0.2, 0.7);     // Mid-frequency detail
+  var landmarkDensity = map(VAR[9], 0, 100, 0.04, 0.25);
   
   // Object position from VAR
   var objX = floor(map(VAR[1], 0, 100, 4, GRID_SIZE - 4));
   var objY = floor(map(VAR[2], 0, 100, 4, GRID_SIZE - 4));
   
   // ========================================
-  // PATH NETWORK (Flow-based simulation)
+  // PATH NETWORK (Flow-based, marked in Alpha only)
   // ========================================
   var pathPoints = [];
   var numPaths = 2 + floor(pathDensity * 4);
-  var pathWidth = 1.2;
+  var pathWidth = 1.3;
   
   for (var p = 0; p < numPaths; p++) {
     var points = [];
@@ -56,17 +56,12 @@ function setup() {
     
     for (var s = 0; s < GRID_SIZE + 20; s++) {
       points.push({x: px, y: py});
-      
-      // Multi-layer flow noise for organic paths
       var flowNoise = noise(px * 0.05, py * 0.05);
       var waveNoise = noise(px * 0.1, py * 0.1 + 100);
-      var microNoise = noise(px * 0.2, py * 0.2 + 200);
-      var combined = flowNoise * 0.5 + waveNoise * 0.35 + microNoise * 0.15;
+      var combined = flowNoise * 0.6 + waveNoise * 0.4;
       var angleOffset = (combined - 0.5) * curviness * 1.5;
-      
       var targetAngle = baseAngle + angleOffset;
       angle = angle * 0.75 + targetAngle * 0.25;
-      
       px += cos(angle) * 0.7;
       py += sin(angle) * 0.7;
       
@@ -76,7 +71,6 @@ function setup() {
         var bx = px;
         var by = py;
         var bAngle = angle + (noise(bx, by) > 0.5 ? 0.6 : -0.6);
-        
         for (var b = 0; b < 12 + floor(noise(bx, by + 100) * 18); b++) {
           branchPts.push({x: bx, y: by});
           var bn = noise(bx * 0.08, by * 0.08 + 300);
@@ -93,115 +87,148 @@ function setup() {
     pathPoints.push(points);
   }
   
-  // Check if point is on a path
-  function isOnPath(x, y) {
+  function distToPath(x, y) {
+    var minDist = 9999;
     for (var i = 0; i < pathPoints.length; i++) {
       var pts = pathPoints[i];
       for (var j = 0; j < pts.length; j++) {
         var dx = x - pts[j].x;
         var dy = y - pts[j].y;
-        if (sqrt(dx*dx + dy*dy) < pathWidth) return true;
+        var d = sqrt(dx*dx + dy*dy);
+        if (d < minDist) minDist = d;
       }
     }
-    return false;
+    return minDist;
   }
   
   // ========================================
-  // GENERATE EACH PIXEL (RGBA encoded)
+  // GENERATE EACH PIXEL - CONTINUOUS FIELD
   // ========================================
   for (var y = 0; y < GRID_SIZE; y++) {
     for (var x = 0; x < GRID_SIZE; x++) {
       
-      // ---- RED CHANNEL: ELEVATION ----
-      // Multi-octave Perlin noise with ridged component for mountains
-      var baseElev = 0;
-      baseElev += noise(x * terrainScale, y * terrainScale) * 1.0;
-      baseElev += noise(x * terrainScale * 2, y * terrainScale * 2) * 0.5 * roughness;
-      baseElev += noise(x * terrainScale * 4, y * terrainScale * 4) * 0.25 * roughness;
-      baseElev = baseElev / (1.0 + 0.5 * roughness + 0.25 * roughness);
+      // ======== RED CHANNEL: CONTINUOUS ELEVATION ========
+      // Layer 1: Continental base (very low frequency)
+      var continental = noise(x * continentScale, y * continentScale);
       
-      // Ridged noise for mountain formation - smoother transitions
-      var ridged = 1.0 - abs(noise(x * terrainScale * 1.5 + 500, y * terrainScale * 1.5) - 0.5) * 2;
-      // Smoother mountain factor with less aggressive exponent and more gradual blending
-      var mountainFactor = pow(max(0, baseElev - 0.55) * 2, 1.2) * mountainHeight;
-      var elevation = baseElev + ridged * mountainFactor * 0.25;
-      // Smooth the elevation to avoid cliff edges
-      elevation = constrain(elevation, 0, 0.95);
+      // Layer 2: Regional hills (mid frequency)
+      var hills = noise(x * continentScale * 2.5 + 500, y * continentScale * 2.5);
+      hills = hills * terrainRoughness;
       
-      var redChannel = floor(elevation * 255);
+      // Layer 3: Local detail (higher frequency)
+      var detail = noise(x * continentScale * 6 + 1000, y * continentScale * 6);
+      detail = detail * terrainRoughness * 0.4;
       
-      // ---- GREEN CHANNEL: MOISTURE/VEGETATION ----
-      // Cellular-like noise for biome boundaries
-      var moisture = noise(x * 0.06 + 1000, y * 0.06);
-      moisture += noise(x * 0.12 + 1000, y * 0.12) * 0.4;
-      moisture = moisture / 1.4;
+      // Layer 4: Ridged noise for mountain spines
+      var ridgeNoise = noise(x * continentScale * 3 + 2000, y * continentScale * 3);
+      var ridged = 1.0 - abs(ridgeNoise - 0.5) * 2;
+      ridged = ridged * ridged; // Square for sharper ridges
       
-      // Higher moisture near water
-      var distToWater = max(0, (elevation - waterLevel) / (1 - waterLevel));
-      moisture = moisture * (1 - distToWater * 0.3);
-      moisture = constrain(moisture, 0, 1);
+      // Combine layers with proper weighting
+      var rawElevation = continental * 0.55 + hills * 0.25 + detail * 0.12 + ridged * 0.08;
       
-      var greenChannel = floor(moisture * 255);
+      // Apply exponential shaping for natural slope distribution
+      // This creates gradual lowlands and progressive mountain rise
+      var shapedElevation = pow(rawElevation, mountainExponent);
       
-      // ---- BLUE CHANNEL: BIOME/MATERIAL ----
-      // 0-50: Water | 51-100: Ground | 101-150: Forest | 151-200: Mountain | 201-230: Path | 231-255: Bridge
-      var isWater = elevation < waterLevel;
-      var onPath = isOnPath(x, y);
-      var isBridge = onPath && isWater;
-      var isPath = onPath && !isWater && elevation < 0.7;
-      // Lower mountain threshold for more gradual peaks
-      var isMountain = elevation > 0.55;
-      var isForest = !isWater && !isMountain && !isPath && moisture * forestDensity > 0.3 && noise(x * 0.1 + 2000, y * 0.1) < forestDensity * 0.8;
+      // Smooth the extremes
+      shapedElevation = constrain(shapedElevation, 0, 1);
       
-      var blueChannel;
-      if (isBridge) {
-        blueChannel = 240;
-      } else if (isPath) {
-        blueChannel = 210;
-      } else if (isWater) {
-        blueChannel = floor(25 + elevation / waterLevel * 25);
-      } else if (isMountain) {
-        blueChannel = floor(155 + (elevation - 0.55) / 0.4 * 45);
-      } else if (isForest) {
-        blueChannel = floor(105 + moisture * 45);
-      } else {
-        blueChannel = floor(55 + elevation * 45);
+      // Encode as 0-255 (continuous, NOT categorical)
+      var redChannel = floor(shapedElevation * 255);
+      
+      // ======== GREEN CHANNEL: MOISTURE/FERTILITY ========
+      // Multi-octave moisture field
+      var baseMoisture = noise(x * 0.055 + 3000, y * 0.055);
+      var moistureDetail = noise(x * 0.12 + 3500, y * 0.12) * 0.35;
+      var moisture = baseMoisture * 0.7 + moistureDetail * 0.3;
+      
+      // Moisture decreases with elevation (rain shadow effect)
+      var elevationInfluence = max(0, shapedElevation - waterThreshold) / (1 - waterThreshold);
+      moisture = moisture * (1 - elevationInfluence * 0.4);
+      
+      // Moisture increases near water
+      if (shapedElevation < waterThreshold + 0.08) {
+        var waterProximity = 1 - (shapedElevation / (waterThreshold + 0.08));
+        moisture = moisture + waterProximity * 0.25;
       }
       
-      // ---- ALPHA CHANNEL: FEATURE MASK ----
+      moisture = constrain(moisture, 0, 1);
+      var greenChannel = floor(moisture * 255);
+      
+      // ======== BLUE CHANNEL: SOFT BIOME HINT ========
+      // Continuous value derived from elevation + moisture
+      // NOT categorical - provides gradient for 3D interpolation
+      var biomeValue;
+      
+      if (shapedElevation < waterThreshold) {
+        // Water depth gradient (0-80)
+        var waterDepth = shapedElevation / waterThreshold;
+        biomeValue = floor(waterDepth * 80);
+      } else {
+        // Land gradient (81-255) based on elevation
+        var landElevation = (shapedElevation - waterThreshold) / (1 - waterThreshold);
+        // Blend with moisture for biome variation
+        var biomeBlend = landElevation * 0.7 + (1 - moisture) * 0.3;
+        biomeValue = floor(81 + biomeBlend * 174);
+      }
+      
+      var blueChannel = constrain(biomeValue, 0, 255);
+      
+      // ======== ALPHA CHANNEL: FEATURE MASK ========
       // 255: No feature
-      // 250-254: Landmark types (0-4): Ruins, Crystal, Ancient Tree, Stone Circle, Obelisk
-      // 245-249: River
-      // 240-244: Reserved
+      // 230-239: Path (with gradient for path edges)
+      // 220-229: Bridge (path over water)
+      // 250-254: Landmark types
+      // 245-249: River channels
       // 1: Planted object marker
       var alphaChannel = 255;
       
-      // River detection FIRST (lower priority than landmarks)
-      var riverNoise = noise(x * 0.04 + 5000, y * 0.04);
-      var isRiver = !isWater && !onPath && abs(riverNoise - 0.5) < 0.03 && elevation < 0.5;
-      if (isRiver) {
-        alphaChannel = 245 + floor((riverNoise - 0.47) / 0.06 * 4);
+      var pathDist = distToPath(x, y);
+      var onPath = pathDist < pathWidth;
+      var isUnderwater = shapedElevation < waterThreshold;
+      
+      // Path marking (does NOT affect elevation in 2D)
+      if (onPath) {
+        if (isUnderwater) {
+          // Bridge - path crossing water
+          var bridgeGradient = floor((1 - pathDist / pathWidth) * 9);
+          alphaChannel = 220 + constrain(bridgeGradient, 0, 9);
+        } else {
+          // Path on land
+          var pathGradient = floor((1 - pathDist / pathWidth) * 9);
+          alphaChannel = 230 + constrain(pathGradient, 0, 9);
+        }
       }
       
-      // Landmark placement - HIGHER priority, uses cellular-like noise for clustering
-      var landmarkNoise = noise(x * 0.08 + 3000, y * 0.08 + 3000);
-      var landmarkNoise2 = noise(x * 0.15 + 3500, y * 0.15 + 3500);
+      // River detection (carved channels at low elevation)
+      var riverNoise = noise(x * 0.035 + 5000, y * 0.035);
+      var isRiverCandidate = abs(riverNoise - 0.5) < 0.025;
+      var validRiverElevation = shapedElevation > waterThreshold && shapedElevation < waterThreshold + 0.25;
+      
+      if (!onPath && isRiverCandidate && validRiverElevation) {
+        var riverIntensity = 1 - abs(riverNoise - 0.5) / 0.025;
+        alphaChannel = 245 + floor(riverIntensity * 4);
+      }
+      
+      // Landmark placement on valid terrain
+      var landmarkNoise = noise(x * 0.07 + 4000, y * 0.07 + 4000);
+      var landmarkNoise2 = noise(x * 0.14 + 4500, y * 0.14 + 4500);
       var combinedLandmark = landmarkNoise * 0.6 + landmarkNoise2 * 0.4;
       
-      // Place landmarks on valid terrain with better distribution
-      if (!isWater && !isMountain && !onPath && !isRiver && combinedLandmark < landmarkDensity) {
-        // Use different noise for type to ensure variety
-        var typeNoise = noise(x * 0.3 + 4000, y * 0.3 + 4000);
+      var validLandmarkTerrain = !isUnderwater && shapedElevation < 0.75 && !onPath && alphaChannel > 240;
+      if (validLandmarkTerrain && combinedLandmark < landmarkDensity) {
+        var typeNoise = noise(x * 0.25 + 6000, y * 0.25 + 6000);
         var landmarkType = floor(typeNoise * 5);
         alphaChannel = 250 + constrain(landmarkType, 0, 4);
       }
       
-      // Mark planted object position (highest priority)
+      // Planted object marker (highest priority)
       if (x === objX && y === objY) {
         alphaChannel = 1;
       }
       
-      // Draw the encoded pixel
+      // ======== OUTPUT PIXEL ========
       fill(redChannel, greenChannel, blueChannel, alphaChannel);
       rect(x, y, 1, 1);
     }

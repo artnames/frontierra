@@ -67,40 +67,65 @@ function tileTypeToString(type: TileType): TerrainCell['type'] {
 }
 
 function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
-  const waterLevel = (grid.vars[4] ?? 30) / 100 * 0.35 + 0.15;
-  // Reduced height multiplier for more natural mountains (was 0.5-2.0, now 0.3-0.8)
-  const heightMult = (grid.vars[6] ?? 50) / 100 * 0.5 + 0.3;
+  const waterThreshold = (grid.vars[4] ?? 30) / 100 * 0.20 + 0.28;
+  const heightScale = 15; // World units for full elevation range
   
   // Convert cells to terrain - ALL data comes from NexArt pixels
+  // Elevation is CONTINUOUS from Red channel, not categorical
   const terrain: TerrainCell[][] = grid.cells.map(row =>
-    row.map((cell: GridCell) => ({
-      x: cell.x,
-      y: cell.y,
-      elevation: computeWorldElevation(cell, waterLevel, heightMult),
-      moisture: cell.moisture,
-      type: tileTypeToString(cell.tileType),
-      hasLandmark: cell.hasLandmark,
-      landmarkType: cell.landmarkType,
-      hasRiver: cell.hasRiver,
-      isPath: cell.isPath,
-      isBridge: cell.isBridge
-    }))
+    row.map((cell: GridCell) => {
+      // Direct elevation from Red channel (continuous 0-1)
+      const rawElevation = cell.elevation;
+      
+      // Determine type from Alpha channel features and Blue channel hints
+      let type: TerrainCell['type'];
+      
+      // Check Alpha for path/bridge
+      if (cell.isBridge) {
+        type = 'bridge';
+      } else if (cell.isPath) {
+        type = 'path';
+      } else if (rawElevation < waterThreshold) {
+        type = 'water';
+      } else {
+        // Use Blue channel + moisture to hint at biome
+        // But don't override elevation - it's continuous
+        const landFraction = (rawElevation - waterThreshold) / (1 - waterThreshold);
+        if (landFraction > 0.6) {
+          type = 'mountain';
+        } else if (cell.moisture > 0.5 && landFraction < 0.4) {
+          type = 'forest';
+        } else {
+          type = 'ground';
+        }
+      }
+      
+      return {
+        x: cell.x,
+        y: cell.y,
+        elevation: rawElevation, // Keep as continuous 0-1, scaled in 3D
+        moisture: cell.moisture,
+        type,
+        hasLandmark: cell.hasLandmark,
+        landmarkType: cell.landmarkType,
+        hasRiver: cell.hasRiver,
+        isPath: cell.isPath,
+        isBridge: cell.isBridge
+      };
+    })
   );
   
-  // Calculate object elevation from NexArt-derived terrain
+  // Calculate object elevation from continuous terrain
   const objCell = grid.cells[grid.plantedObjectY]?.[grid.plantedObjectX];
-  const objTerrainCell = terrain[grid.plantedObjectY]?.[grid.plantedObjectX];
-  const objElevation = objCell?.tileType === TileType.WATER 
-    ? waterLevel * 20 
-    : (objTerrainCell?.elevation ?? 0.3) * 20;
+  const objElevation = (objCell?.elevation ?? 0.3) * heightScale;
   
   // Calculate spawn rotation
   const toCenterX = grid.gridSize / 2 - grid.spawnX;
   const toCenterY = grid.gridSize / 2 - grid.spawnY;
   const rotationY = Math.atan2(toCenterX, toCenterY);
   
-  const spawnTerrainCell = terrain[grid.spawnY]?.[grid.spawnX];
-  const spawnElevation = (spawnTerrainCell?.elevation ?? 0.3) * 20;
+  const spawnCell = grid.cells[grid.spawnY]?.[grid.spawnX];
+  const spawnElevation = (spawnCell?.elevation ?? 0.3) * heightScale;
   
   const verification = verifyNexArtWorld(grid);
   
@@ -125,31 +150,6 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
     isNexArtVerified: verification.isVerified,
     nexartError: verification.errorMessage
   };
-}
-
-// Compute world elevation from NexArt pixel data (no noise!)
-function computeWorldElevation(cell: GridCell, waterLevel: number, heightMult: number): number {
-  // Elevation comes directly from NexArt Red channel
-  const baseElevation = cell.elevation;
-  
-  // Apply gentler exponential scaling for mountains - less cliff-like
-  if (cell.tileType === TileType.MOUNTAIN) {
-    // Smoother curve with lower exponent
-    return waterLevel + Math.pow(baseElevation, 1.15) * heightMult * 0.8;
-  }
-  
-  // Bridges sit just above water
-  if (cell.tileType === TileType.BRIDGE) {
-    return waterLevel * 0.3 + 0.08;
-  }
-  
-  // Water is at water level
-  if (cell.tileType === TileType.WATER) {
-    return waterLevel * 0.3;
-  }
-  
-  // Ground/forest/path use gentler linear scaling for smoother transitions
-  return waterLevel + (baseElevation - waterLevel) * heightMult * 0.5;
 }
 
 // ============================================
