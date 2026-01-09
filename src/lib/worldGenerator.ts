@@ -163,15 +163,14 @@ function setup() {
   
   // FIRST: Create low-frequency region mask that defines WHERE mountains CAN form
   // This creates distinct island-like clusters with clear valleys between
-  // CRITICAL: Use SEED offset so mountains move with different seeds
-  var seedOffset = SEED * 0.1;
+  // NOTE: Code Mode runtime seeds noise() deterministically from the execution seed (no SEED global).
   var mountainRegionMask = [];
   for (var ry = 0; ry < GRID_SIZE; ry++) {
     mountainRegionMask[ry] = [];
     for (var rx = 0; rx < GRID_SIZE; rx++) {
-      // Very low frequency for large-scale clustering - seed determines position
-      var region1 = noise(rx * 0.025 + seedOffset, ry * 0.025 + seedOffset * 0.7);
-      var region2 = noise(rx * 0.05 + seedOffset * 1.3, ry * 0.05 + seedOffset * 0.5);
+      // Very low frequency for large-scale clustering
+      var region1 = noise(rx * 0.025 + 8000, ry * 0.025 + 8000 * 0.7);
+      var region2 = noise(rx * 0.05 + 8500, ry * 0.05 + 8500 * 0.5);
       var regionVal = region1 * 0.7 + region2 * 0.3;
       
       // Threshold determines which areas can have mountains
@@ -190,11 +189,11 @@ function setup() {
   
   // SECOND: Create circular mountain patches ONLY within eligible regions
   // More patches at high density for ~60% coverage at 100%
-  // Use SEED to vary patch positions
+  // NOTE: noise() is already seeded by the execution seed; use deterministic offsets here.
   var numPatches = floor(4 + mountainDensity * 25);
   for (var mp = 0; mp < numPatches; mp++) {
-    var patchX = noise(mp * 137 + SEED * 0.3) * GRID_SIZE;
-    var patchY = noise(mp * 251 + SEED * 0.5) * GRID_SIZE;
+    var patchX = noise(mp * 137 + 10000) * GRID_SIZE;
+    var patchY = noise(mp * 251 + 10500) * GRID_SIZE;
     
     // Check if patch center is in an eligible region
     var patchCenterRegion = 0;
@@ -207,10 +206,10 @@ function setup() {
       continue;
     }
     
-    // Patch size scales with density and region strength - use SEED for variety
-    var patchRadius = 5 + mountainDensity * 15 + noise(mp * 373 + SEED * 0.2) * 8;
+    // Patch size scales with density and region strength
+    var patchRadius = 5 + mountainDensity * 15 + noise(mp * 373 + 10800) * 8;
     patchRadius = patchRadius * (0.6 + patchCenterRegion * 0.6);
-    var patchStrength = 0.5 + noise(mp * 491 + SEED * 0.4) * 0.5;
+    var patchStrength = 0.5 + noise(mp * 491 + 10200) * 0.5;
     
     for (var mpy = 0; mpy < GRID_SIZE; mpy++) {
       for (var mpx = 0; mpx < GRID_SIZE; mpx++) {
@@ -233,11 +232,11 @@ function setup() {
   }
   
   // THIRD: Add elongated ranges within regions for variety (not continent-spanning)
-  // Use SEED to vary range positions
+  // NOTE: noise() is already seeded by the execution seed; use deterministic offsets here.
   var numRanges = floor(1 + mountainDensity * 4);
   for (var mr = 0; mr < numRanges; mr++) {
-    var rangeStartX = noise(mr * 571 + SEED * 0.25) * GRID_SIZE;
-    var rangeStartY = noise(mr * 683 + SEED * 0.35) * GRID_SIZE;
+    var rangeStartX = noise(mr * 571 + 9000) * GRID_SIZE;
+    var rangeStartY = noise(mr * 683 + 9500) * GRID_SIZE;
     
     // Check if range starts in eligible region
     var rsx = floor(constrain(rangeStartX, 0, GRID_SIZE - 1));
@@ -246,8 +245,8 @@ function setup() {
       continue;
     }
     
-    var rangeAngle = noise(mr * 797 + SEED * 0.15) * TWO_PI;
-    var rangeLength = 10 + noise(mr * 911 + SEED * 0.45) * 20;
+    var rangeAngle = noise(mr * 797 + 9100) * TWO_PI;
+    var rangeLength = 10 + noise(mr * 911 + 9200) * 20;
     var rangeWidth = 3 + mountainDensity * 6;
     
     for (var rs = 0; rs < rangeLength; rs++) {
