@@ -31,10 +31,10 @@ function setup() {
   var continentScale = map(VAR[3], 0, 100, 0.025, 0.08);
   var waterThreshold = map(VAR[4], 0, 100, 0.25, 0.50);
   var forestDensity = map(VAR[5], 0, 100, 0.15, 0.80);
-  var mountainHeight = map(VAR[6], 0, 100, 1.5, 3.5);
+  var mountainHeight = map(VAR[6], 0, 100, 1.0, 4.0);
   var pathDensityVal = map(VAR[7], 0, 100, 0.0, 1.0);
   var terrainRoughness = map(VAR[8], 0, 100, 0.25, 0.80);
-  var landmarkDensity = map(VAR[9], 0, 100, 0.04, 0.35);
+  var mountainDensity = map(VAR[9], 0, 100, 0.10, 0.70);
   
   var objX = floor(map(VAR[1], 0, 100, 4, GRID_SIZE - 4));
   var objY = floor(map(VAR[2], 0, 100, 4, GRID_SIZE - 4));
@@ -154,9 +154,21 @@ function setup() {
       baseElev = baseElev + detail * terrainRoughness * 0.15;
       baseElev = baseElev + ridged * 0.12 * mountainHeight * 0.5;
       
-      var shaped = pow(baseElev, 0.7 + (mountainHeight - 1.5) * 0.15);
-      shaped = shaped * (0.6 + mountainHeight * 0.25);
+      var shaped = pow(baseElev, 0.6 + (mountainHeight - 1.0) * 0.12);
+      shaped = shaped * (0.5 + mountainHeight * 0.3);
       shaped = constrain(shaped, 0, 1);
+      
+      var mountainNoise = noise(gx * 0.07 + 8000, gy * 0.07);
+      var mountainNoise2 = noise(gx * 0.15 + 8500, gy * 0.15);
+      var mountainVal = mountainNoise * 0.6 + mountainNoise2 * 0.4;
+      var isMountainCandidate = mountainVal < mountainDensity && shaped > 0.35;
+      
+      if (isMountainCandidate) {
+        var mountainBoost = pow(mountainVal / mountainDensity, 0.5) * mountainHeight * 0.35;
+        shaped = shaped + mountainBoost;
+        shaped = constrain(shaped, 0, 1);
+      }
+      
       var elevation = floor(shaped * 255);
       
       var isWater = shaped < waterThreshold;
@@ -174,18 +186,13 @@ function setup() {
       var forestNoise = noise(gx * 0.09 + 7000, gy * 0.09);
       var forestNoise2 = noise(gx * 0.18 + 7500, gy * 0.18);
       var forestVal = forestNoise * 0.6 + forestNoise2 * 0.4;
-      var isForest = forestVal < forestDensity && !isWater && shaped < 0.65 && moisture > 0.35;
+      var isForest = forestVal < forestDensity && !isWater && shaped < 0.60 && moisture > 0.30;
       
-      var isMountain = shaped > 0.50 && !isWater;
+      var isMountain = isMountainCandidate && shaped > 0.45 && !isWater;
       
       var onPath = pathGrid[gy][gx] > 0.4;
       var isBridge = onPath && isWater;
       var isPathTile = onPath && !isWater;
-      
-      var lmN1 = noise(gx * 0.12 + 4000, gy * 0.12 + 4000);
-      var lmN2 = noise(gx * 0.24 + 4500, gy * 0.24 + 4500);
-      var lmVal = lmN1 * 0.55 + lmN2 * 0.45;
-      var isLandmark = lmVal < landmarkDensity && !isWater && !onPath && shaped < 0.75;
       
       var isObject = gx === objX && gy === objY;
       
@@ -200,10 +207,6 @@ function setup() {
         tileR = 255;
         tileG = 220;
         tileB = 60;
-      } else if (isLandmark) {
-        tileR = 220;
-        tileG = 80;
-        tileB = 80;
       } else if (isBridge) {
         tileR = 120;
         tileG = 80;
@@ -509,5 +512,5 @@ export const VAR_LABELS = [
   'Mountain Height',
   'Path Density',
   'Roughness',
-  'Landmarks'
+  'Mountain Density'
 ];

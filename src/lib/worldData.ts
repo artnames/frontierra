@@ -12,11 +12,9 @@ import { WorldParams } from './worldGenerator';
 export interface TerrainCell {
   x: number;
   y: number;
-  elevation: number;    // From NexArt Red channel
-  moisture: number;     // From NexArt Green channel
+  elevation: number;    // From NexArt Alpha channel
+  moisture: number;     // Derived from NexArt Green channel
   type: 'water' | 'ground' | 'forest' | 'mountain' | 'path' | 'bridge';
-  hasLandmark: boolean;
-  landmarkType: number;
   hasRiver: boolean;
   isPath: boolean;
   isBridge: boolean;
@@ -105,8 +103,6 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
         elevation: rawElevation,
         moisture: cell.g / 255, // Derive from green channel
         type,
-        hasLandmark: cell.hasLandmark,
-        landmarkType: 0,
         hasRiver: cell.isRiver,
         isPath: cell.isPath,
         isBridge: cell.isBridge

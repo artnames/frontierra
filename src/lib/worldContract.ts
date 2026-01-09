@@ -12,7 +12,7 @@ export function computeWorldHash(world: WorldData): string {
   const terrainString = world.terrain
     .flat()
     .map((cell: TerrainCell) => 
-      `${cell.x},${cell.y}:${cell.elevation.toFixed(4)}:${cell.type}:${cell.hasLandmark ? 1 : 0}`
+      `${cell.x},${cell.y}:${cell.elevation.toFixed(4)}:${cell.type}`
     )
     .join('|');
   

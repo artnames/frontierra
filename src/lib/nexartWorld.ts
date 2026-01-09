@@ -28,10 +28,9 @@ export enum TileType {
   MOUNTAIN = 3,
   PATH = 4,
   BRIDGE = 5,
-  LANDMARK = 6,
-  RIVER = 7,
-  OBJECT = 8,
-  VOID = 9
+  RIVER = 6,
+  OBJECT = 7,
+  VOID = 8
 }
 
 // ============================================
@@ -46,7 +45,6 @@ export interface GridCell {
   r: number;                // Raw R value
   g: number;                // Raw G value  
   b: number;                // Raw B value
-  hasLandmark: boolean;
   isPath: boolean;
   isBridge: boolean;
   isRiver: boolean;
@@ -222,7 +220,6 @@ function parseRGBAPixels(
       const tileType = classifyTileFromRGB(r, g, b);
       
       const isObject = tileType === TileType.OBJECT;
-      const hasLandmark = tileType === TileType.LANDMARK;
       const isPath = tileType === TileType.PATH;
       const isBridge = tileType === TileType.BRIDGE;
       const isRiver = tileType === TileType.RIVER;
@@ -240,7 +237,6 @@ function parseRGBAPixels(
         r,
         g,
         b,
-        hasLandmark,
         isPath,
         isBridge,
         isRiver,
@@ -283,11 +279,6 @@ function classifyTileFromRGB(r: number, g: number, b: number): TileType {
   // Object: bright yellow (255, 220, 60)
   if (r > 240 && g > 200 && b < 100) {
     return TileType.OBJECT;
-  }
-  
-  // Landmark: red-ish (220, 80, 80)
-  if (r > 180 && g < 120 && b < 120) {
-    return TileType.LANDMARK;
   }
   
   // Bridge: dark brown (120, 80, 50)

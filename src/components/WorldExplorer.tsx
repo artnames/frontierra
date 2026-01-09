@@ -13,7 +13,6 @@ import {
 import { useFirstPersonControls } from '@/hooks/useFirstPersonControls';
 import { 
   TerrainMesh, 
-  Landmarks, 
   PlantedObject, 
   GridOverlay, 
   WaterPlane,
@@ -70,7 +69,6 @@ function FirstPersonScene({
       <WaterPlane world={world} />
       <Bridges world={world} />
       <ForestTrees world={world} />
-      <Landmarks world={world} />
       <PlantedObject world={world} isDiscovered={isDiscovered} />
       <GridOverlay world={world} />
       
