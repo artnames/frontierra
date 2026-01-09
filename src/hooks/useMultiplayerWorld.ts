@@ -78,7 +78,9 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
       setState(prev => ({
         ...prev,
         currentLand: newLand,
-        playerPosition: entryPosition
+        playerPosition: entryPosition,
+        // Keep visiting-state in sync for gating editor/params reliably
+        isVisitingOtherLand: prev.playerId ? newLand.player_id !== prev.playerId : false
       }));
       // Force regenerate world with new land's parameters
       forceRegenerate();

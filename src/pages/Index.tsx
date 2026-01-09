@@ -67,10 +67,12 @@ const Index = () => {
   });
   
   // Check if we're on someone else's land (multiplayer)
+  // Derive this from the authenticated user + current land owner (more reliable than a cached boolean)
   const isOtherPlayerLand = useMemo(() => {
     if (worldMode !== 'multiplayer' || !multiplayer.currentLand) return false;
-    return multiplayer.isVisitingOtherLand;
-  }, [worldMode, multiplayer.currentLand, multiplayer.isVisitingOtherLand]);
+    if (!user?.id) return false;
+    return multiplayer.currentLand.player_id !== user.id;
+  }, [worldMode, multiplayer.currentLand?.player_id, user?.id]);
 
   // Force explore mode when on someone else's land
   const effectiveInteractionMode: InteractionMode = isOtherPlayerLand ? 'explore' : interactionMode;
@@ -538,7 +540,7 @@ const Index = () => {
                         onChange={(e) => {
                           const value = parseInt(e.target.value, 10);
                           if (!isNaN(value)) {
-                            if (worldMode === 'multiplayer' && multiplayer.currentLand && !multiplayer.isVisitingOtherLand) {
+                            if (worldMode === 'multiplayer' && multiplayer.currentLand && !isOtherPlayerLand) {
                               multiplayer.updateLandParams({ seed: Math.max(0, value) });
                             } else {
                               setSeed(Math.max(0, value));
@@ -546,14 +548,14 @@ const Index = () => {
                           }
                         }}
                         className="bg-secondary border-border font-mono text-sm h-8"
-                        disabled={isReplaying || (worldMode === 'multiplayer' && multiplayer.isVisitingOtherLand)}
+                        disabled={isReplaying || (worldMode === 'multiplayer' && isOtherPlayerLand)}
                       />
                       <Button
                         variant="outline"
                         size="icon"
                         onClick={() => {
                           const newSeed = Math.floor(Math.random() * 100000);
-                          if (worldMode === 'multiplayer' && multiplayer.currentLand && !multiplayer.isVisitingOtherLand) {
+                          if (worldMode === 'multiplayer' && multiplayer.currentLand && !isOtherPlayerLand) {
                             multiplayer.updateLandParams({ seed: newSeed });
                           } else {
                             randomizeSeed();
@@ -561,7 +563,7 @@ const Index = () => {
                         }}
                         className="shrink-0 h-8 w-8"
                         title="Randomize seed"
-                        disabled={isReplaying || (worldMode === 'multiplayer' && multiplayer.isVisitingOtherLand)}
+                        disabled={isReplaying || (worldMode === 'multiplayer' && isOtherPlayerLand)}
                       >
                         <Shuffle className="w-3.5 h-3.5" />
                       </Button>
@@ -583,7 +585,7 @@ const Index = () => {
                         <Slider
                           value={[value]}
                           onValueChange={([v]) => {
-                            if (worldMode === 'multiplayer' && multiplayer.currentLand && !multiplayer.isVisitingOtherLand) {
+                            if (worldMode === 'multiplayer' && multiplayer.currentLand && !isOtherPlayerLand) {
                               const newVars = [...activeParams.vars];
                               newVars[index] = v;
                               multiplayer.updateLandParams({ vars: newVars });
@@ -595,7 +597,7 @@ const Index = () => {
                           max={100}
                           step={1}
                           className="w-full"
-                          disabled={isReplaying || (worldMode === 'multiplayer' && multiplayer.isVisitingOtherLand)}
+                          disabled={isReplaying || (worldMode === 'multiplayer' && isOtherPlayerLand)}
                         />
                       </div>
                     ))}
@@ -611,7 +613,7 @@ const Index = () => {
                     </Button>
                   )}
                   
-                  {worldMode === 'multiplayer' && multiplayer.isVisitingOtherLand && (
+                  {worldMode === 'multiplayer' && isOtherPlayerLand && (
                     <p className="text-xs text-muted-foreground text-center py-2">
                       You can only edit your own land
                     </p>
