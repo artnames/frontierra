@@ -17,5 +17,5 @@ export const RIVER_DEPTH_OFFSET = 1.5;
 // Path max height above water
 export const PATH_HEIGHT_OFFSET = 0.8;
 
-// Bridge height above water
-export const BRIDGE_HEIGHT_OFFSET = 0.5;
+// Bridge height above water (match path height for seamless crossings)
+export const BRIDGE_HEIGHT_OFFSET = PATH_HEIGHT_OFFSET;

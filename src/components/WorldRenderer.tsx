@@ -376,7 +376,7 @@ export function PlantedObject({ world, isDiscovered }: PlantedObjectProps) {
   };
   
   return (
-    <group position={[x, terrainY, flippedZ]}>
+    <group position={[x, terrainY, flippedZ]} scale={[0.3, 0.3, 0.3]}>
       <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[1.5, 32]} />
         <meshBasicMaterial 

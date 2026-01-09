@@ -62,9 +62,19 @@ const Index = () => {
     if (worldMode !== 'multiplayer' || !multiplayer.currentLand) return false;
     return multiplayer.isVisitingOtherLand;
   }, [worldMode, multiplayer.currentLand, multiplayer.isVisitingOtherLand]);
-  
+
   // Force explore mode when on someone else's land
   const effectiveInteractionMode: InteractionMode = isOtherPlayerLand ? 'explore' : interactionMode;
+
+  // Ensure the panel opens when switching into editor mode
+  useEffect(() => {
+    if (effectiveInteractionMode === 'editor') {
+      setShowSidebar(true);
+    }
+    if (effectiveInteractionMode === 'explore') {
+      setShowSidebar(false);
+    }
+  }, [effectiveInteractionMode]);
   
   // Handle mode changes
   const handleInteractionModeChange = useCallback((mode: InteractionMode) => {

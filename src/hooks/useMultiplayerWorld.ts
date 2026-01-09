@@ -89,7 +89,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
   // Sync edge transition with current land
   useEffect(() => {
     edgeTransition.setCurrentLand(state.currentLand);
-  }, [state.currentLand, edgeTransition]);
+  }, [state.currentLand, edgeTransition.setCurrentLand]);
   
   // Load or create player's land
   const initializePlayerLand = useCallback(async (playerId?: string) => {

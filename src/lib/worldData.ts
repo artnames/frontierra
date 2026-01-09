@@ -4,7 +4,7 @@
 
 import { NexArtWorldGrid, TileType, GridCell, generateNexArtWorld, verifyNexArtWorld } from './nexartWorld';
 import { WorldParams } from './worldGenerator';
-import { WORLD_HEIGHT_SCALE, getWaterLevel } from './worldConstants';
+import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET, PATH_HEIGHT_OFFSET, BRIDGE_HEIGHT_OFFSET } from './worldConstants';
 
 // ============================================
 // WORLD DATA INTERFACES (3D Projection of NexArt)
@@ -254,43 +254,60 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
   if (!world.isNexArtVerified || world.terrain.length === 0) {
     return 0;
   }
-  
+
   // Use shared height scale constant
   const heightScale = WORLD_HEIGHT_SCALE;
+
+  // Match renderer modifiers so movement/collision lines up with what you see.
+  const waterLevel = getWaterLevel(world.vars);
+  const waterHeight = waterLevel * heightScale;
+  const riverDepth = waterHeight - RIVER_DEPTH_OFFSET;
+  const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
+  const bridgeHeight = waterHeight + BRIDGE_HEIGHT_OFFSET;
+
   const gridX = Math.floor(worldX);
   const gridY = Math.floor(worldY);
-  
+
   if (gridX < 0 || gridX >= world.gridSize - 1 || gridY < 0 || gridY >= world.gridSize - 1) {
     return 0;
   }
-  
+
   // COORDINATE FIX: Flip Y-axis to match P5.js [y][x] grid with Three.js PlaneGeometry
   // P5.js draws from top-left, Three.js PlaneGeometry maps from bottom-left
   const flippedY = world.gridSize - 1 - gridY;
-  
+
   const cell = world.terrain[flippedY]?.[gridX];
-  if (cell?.type === 'bridge') {
-    const waterLevel = getWaterLevel(world.vars);
-    return waterLevel * heightScale + 0.5;
+  if (cell?.isBridge || cell?.type === 'bridge') {
+    return bridgeHeight;
   }
-  
+
   // Bilinear interpolation of ALREADY CURVED elevation
   // (terrain cells store the shaped elevation from nexartGridToWorldData)
   // Use flipped Y for correct coordinate mapping
   const fx = worldX - gridX;
   const fy = worldY - gridY;
-  
+
   const flippedY1 = Math.max(0, flippedY - 1);
-  
+
   const e00 = world.terrain[flippedY]?.[gridX]?.elevation ?? 0;
   const e10 = world.terrain[flippedY]?.[gridX + 1]?.elevation ?? 0;
   const e01 = world.terrain[flippedY1]?.[gridX]?.elevation ?? 0;
   const e11 = world.terrain[flippedY1]?.[gridX + 1]?.elevation ?? 0;
-  
+
   const e0 = e00 * (1 - fx) + e10 * fx;
   const e1 = e01 * (1 - fx) + e11 * fx;
-  
-  return (e0 * (1 - fy) + e1 * fy) * heightScale;
+
+  let height = (e0 * (1 - fy) + e1 * fy) * heightScale;
+
+  if (cell?.hasRiver) {
+    height = Math.min(height, riverDepth);
+  }
+
+  if (cell?.isPath && !cell?.isBridge) {
+    height = Math.min(height, pathMaxHeight);
+  }
+
+  return height;
 }
 
 export function isWalkable(world: WorldData, worldX: number, worldY: number): boolean {
