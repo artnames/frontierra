@@ -12,28 +12,27 @@ export const WORLD_LAYOUT_SOURCE = `
 // Outputs a 64x64 grid where each pixel represents a tile
 // RGB encodes tile type, Alpha encodes landmark presence
 
-// Tile type colors (must match nexartWorld.ts classification):
-// Water:    RGB ~(0, 50, 200)  - Blue
-// Ground:   RGB ~(180, 140, 100) - Tan
-// Forest:   RGB ~(60, 140, 60)  - Green  
-// Mountain: RGB ~(140, 140, 160) - Gray
-// Path:     RGB ~(200, 180, 140) - Light brown
-// Bridge:   RGB ~(100, 70, 40)  - Dark brown
-
-var GRID_SIZE = 64;
-
-// Color definitions
-var WATER_COLOR = [0, 50, 200];
-var GROUND_COLOR = [180, 140, 100];
-var FOREST_COLOR = [60, 140, 60];
-var MOUNTAIN_COLOR = [140, 140, 160];
-var PATH_COLOR = [200, 180, 140];
-var BRIDGE_COLOR = [100, 70, 40];
-
 function setup() {
   colorMode("RGB");
   noStroke();
   background(0);
+  
+  // Grid configuration - defined inside setup for NexArt sandbox compatibility
+  var GRID_SIZE = 64;
+  
+  // Tile type colors (must match nexartWorld.ts classification):
+  // Water:    RGB ~(0, 50, 200)  - Blue
+  // Ground:   RGB ~(180, 140, 100) - Tan
+  // Forest:   RGB ~(60, 140, 60)  - Green  
+  // Mountain: RGB ~(140, 140, 160) - Gray
+  // Path:     RGB ~(200, 180, 140) - Light brown
+  // Bridge:   RGB ~(100, 70, 40)  - Dark brown
+  var WATER_COLOR = [0, 50, 200];
+  var GROUND_COLOR = [180, 140, 100];
+  var FOREST_COLOR = [60, 140, 60];
+  var MOUNTAIN_COLOR = [140, 140, 160];
+  var PATH_COLOR = [200, 180, 140];
+  var BRIDGE_COLOR = [100, 70, 40];
   
   // Map VAR parameters
   var terrainScale = map(VAR[3], 0, 100, 0.02, 0.1);
@@ -179,14 +178,15 @@ export const WORLD_SOURCE = `
 // Isometric Preview (visual representation only)
 // The canonical layout comes from WORLD_LAYOUT_SOURCE
 
-var GRID_SIZE = 32;
-var TILE_WIDTH = 16;
-var TILE_HEIGHT = 8;
-
 function setup() {
   colorMode("HSB");
   noStroke();
   background(220, 20, 6);
+  
+  // Grid configuration - defined inside setup for NexArt sandbox compatibility
+  var GRID_SIZE = 32;
+  var TILE_WIDTH = 16;
+  var TILE_HEIGHT = 8;
   
   var terrainScale = map(VAR[3], 0, 100, 0.02, 0.15);
   var waterLevel = map(VAR[4], 0, 100, 0.2, 0.6);
