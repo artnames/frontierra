@@ -69,32 +69,31 @@ function tileTypeToString(type: TileType): TerrainCell['type'] {
 // PERCEPTUAL ELEVATION CURVE
 // Transforms linear Alpha (0-1) into perceptually-shaped elevation
 // Deterministic, preserves ordering, no external data
+// Tuned for WORLD_HEIGHT_SCALE = 15
 // ============================================
 
 function applyElevationCurve(rawElevation: number): number {
-  // Non-linear curve that:
+  // Non-linear curve optimized for heightScale=15:
   // - Compresses low elevations (wide flat plains)
   // - Smooth ramps at mid elevations (rolling hills)
   // - Amplifies high elevations (dramatic peaks)
   
-  // Use a piecewise curve for natural geological feel
   const e = rawElevation;
   
-  if (e < 0.3) {
-    // Low elevation: compress significantly for flat plains
-    // Maps 0-0.3 → 0-0.15 (half the range)
-    return e * 0.5;
-  } else if (e < 0.6) {
+  if (e < 0.25) {
+    // Low elevation: compress for flat plains
+    // Maps 0-0.25 → 0-0.12
+    return e * 0.48;
+  } else if (e < 0.55) {
     // Mid elevation: gentle rolling hills
-    // Maps 0.3-0.6 → 0.15-0.35 (smooth transition)
-    const t = (e - 0.3) / 0.3;
-    return 0.15 + t * t * 0.2;
+    // Maps 0.25-0.55 → 0.12-0.35
+    const t = (e - 0.25) / 0.30;
+    return 0.12 + t * t * 0.23;
   } else {
     // High elevation: exponential amplification for dramatic peaks
-    // Maps 0.6-1.0 → 0.35-1.0 (expanded range)
-    const t = (e - 0.6) / 0.4;
-    // Smooth exponential curve for mountain slopes
-    return 0.35 + Math.pow(t, 1.5) * 0.65;
+    // Maps 0.55-1.0 → 0.35-1.0
+    const t = (e - 0.55) / 0.45;
+    return 0.35 + Math.pow(t, 1.4) * 0.65;
   }
 }
 
@@ -301,7 +300,11 @@ export function isWalkable(world: WorldData, worldX: number, worldY: number): bo
     return false;
   }
   
-  const cell = world.terrain[gridY]?.[gridX];
+  // COORDINATE FIX: Flip Y-axis to match P5.js [y][x] grid with Three.js
+  const flippedY = world.gridSize - 1 - gridY;
+  
+  const cell = world.terrain[flippedY]?.[gridX];
+  // Water is not walkable, but bridges are
   return cell?.type !== 'water';
 }
 
