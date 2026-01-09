@@ -150,25 +150,50 @@ export async function updateLand(
   return data;
 }
 
-// Find an unoccupied grid position for a new land
+// World A bounds (10×10 grid)
+const WORLD_A_MIN = 0;
+const WORLD_A_MAX = 9;
+
+// Clamp position to World A bounds
+export function clampToWorldA(x: number, y: number): { x: number; y: number } {
+  return {
+    x: Math.max(WORLD_A_MIN, Math.min(WORLD_A_MAX, Math.floor(x))),
+    y: Math.max(WORLD_A_MIN, Math.min(WORLD_A_MAX, Math.floor(y)))
+  };
+}
+
+// Check if position is within World A bounds
+export function isWithinWorldA(x: number, y: number): boolean {
+  return x >= WORLD_A_MIN && x <= WORLD_A_MAX && y >= WORLD_A_MIN && y <= WORLD_A_MAX;
+}
+
+// Find an unoccupied grid position for a new land (constrained to World A: 0-9)
 export async function findAvailablePosition(): Promise<{ x: number; y: number }> {
-  // Fetch all existing lands to find gaps
+  // Fetch all existing lands within World A bounds
   const { data: lands } = await supabase
     .from('player_lands')
-    .select('pos_x, pos_y');
+    .select('pos_x, pos_y')
+    .gte('pos_x', WORLD_A_MIN)
+    .lte('pos_x', WORLD_A_MAX)
+    .gte('pos_y', WORLD_A_MIN)
+    .lte('pos_y', WORLD_A_MAX);
   
   if (!lands || lands.length === 0) {
-    return { x: 0, y: 0 };  // First land at origin
+    return { x: 5, y: 5 };  // Start near center of World A
   }
   
   const occupied = new Set(lands.map(l => `${l.pos_x},${l.pos_y}`));
   
-  // Spiral outward from origin to find first available slot
-  let x = 0, y = 0, dx = 1, dy = 0;
+  // Spiral outward from center (5,5) to find first available slot within bounds
+  const centerX = 5, centerY = 5;
+  let x = centerX, y = centerY;
+  let dx = 1, dy = 0;
   let segmentLength = 1, segmentPassed = 0;
   
+  // Check all 100 positions in World A
   for (let i = 0; i < 100; i++) {
-    if (!occupied.has(`${x},${y}`)) {
+    // Only consider positions within World A bounds
+    if (isWithinWorldA(x, y) && !occupied.has(`${x},${y}`)) {
       return { x, y };
     }
     
@@ -188,7 +213,18 @@ export async function findAvailablePosition(): Promise<{ x: number; y: number }>
     }
   }
   
-  return { x, y };
+  // Fallback: linear scan for any available position
+  for (let fy = WORLD_A_MIN; fy <= WORLD_A_MAX; fy++) {
+    for (let fx = WORLD_A_MIN; fx <= WORLD_A_MAX; fx++) {
+      if (!occupied.has(`${fx},${fy}`)) {
+        return { x: fx, y: fy };
+      }
+    }
+  }
+  
+  // World A is full - return center anyway (will fail on insert)
+  console.warn('[LandRegistry] World A is full (100/100 lands claimed)');
+  return { x: centerX, y: centerY };
 }
 
 // Subscribe to land changes (for real-time multiplayer)

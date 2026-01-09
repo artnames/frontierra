@@ -1,8 +1,9 @@
 // Multiplayer World Hook
 // Manages the deterministic world loading and edge transitions
+// Integrates with World A shared macro geography via worldContext
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { PlayerLand, LAND_GRID_SIZE } from '@/lib/multiplayer/types';
+import { PlayerLand, LAND_GRID_SIZE, WORLD_A_GRID_WIDTH, WORLD_A_GRID_HEIGHT } from '@/lib/multiplayer/types';
 import { 
   getLandByPlayerId, 
   getLandAtPosition,
@@ -13,6 +14,7 @@ import {
 } from '@/lib/multiplayer/landRegistry';
 import { useNexArtWorld } from './useNexArtWorld';
 import { useEdgeTransition } from './useEdgeTransition';
+import { createWorldContext, WorldContext } from '@/lib/worldContext';
 
 interface MultiplayerWorldState {
   playerId: string | null;
@@ -40,7 +42,16 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     isVisitingOtherLand: false
   });
   
-  // Generate world from current land's parameters
+  // Build World A context from current land position
+  // This enables shared macro geography across all lands
+  const worldContext = useMemo<{ worldX: number; worldY: number } | undefined>(() => {
+    if (!state.currentLand) return undefined;
+    // Clamp to World A bounds (0-9)
+    const ctx = createWorldContext(state.currentLand.pos_x, state.currentLand.pos_y);
+    return { worldX: ctx.worldX, worldY: ctx.worldY };
+  }, [state.currentLand?.pos_x, state.currentLand?.pos_y]);
+  
+  // Generate world from current land's parameters WITH world context
   const worldParams = useMemo(() => ({
     seed: state.currentLand?.seed ?? 0,
     vars: state.currentLand?.vars ?? [50, 50, 50, 50, 50, 50, 50, 50, 50, 50]
@@ -52,7 +63,10 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     isVerifying,
     error: worldError,
     forceRegenerate 
-  } = useNexArtWorld(worldParams);
+  } = useNexArtWorld({
+    ...worldParams,
+    worldContext  // Pass World A context for shared macro geography
+  });
   
   // Edge transition handling
   const handleTransitionComplete = useCallback((
@@ -199,6 +213,9 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     neighborLands: state.neighborLands,
     playerPosition: state.playerPosition,
     isVisitingOtherLand: state.isVisitingOtherLand,
+    
+    // World A context (for shared macro geography)
+    worldContext,
     
     // World data (from NexArt)
     world,
