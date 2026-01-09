@@ -250,17 +250,25 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
       // New position on ground plane
       const newX = position.current.x + moveX * speed;
       const newZ = position.current.z + moveZ * speed;
-      
-      // Check walkability
-      if (isWalkable(world, newX, newZ)) {
+
+      const inBounds =
+        newX >= 0 &&
+        newX <= world.gridSize - 0.001 &&
+        newZ >= 0 &&
+        newZ <= world.gridSize - 0.001;
+
+      // In editor (allowVerticalMovement=true), we allow moving over water.
+      const canMove = inBounds && (allowVerticalMovement || isWalkable(world, newX, newZ));
+
+      if (canMove) {
         position.current.x = newX;
         position.current.z = newZ;
-        
+
         // Update height based on terrain + manual offset
         const terrainHeight = getElevationAt(world, newX, newZ);
         position.current.y = terrainHeight + 1.8 + manualHeightOffset.current;
-      } else {
-        // Try sliding along obstacles
+      } else if (inBounds) {
+        // Explore mode: try sliding along obstacles (water edges)
         if (isWalkable(world, newX, position.current.z)) {
           position.current.x = newX;
           const terrainHeight = getElevationAt(world, newX, position.current.z);

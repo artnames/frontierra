@@ -27,8 +27,11 @@ export function ActionSystem({
   
   const gridX = Math.floor(playerPosition.x);
   const gridY = Math.floor(playerPosition.y);
-  const cell = world.terrain[gridY]?.[gridX];
-  
+
+  // COORDINATE FIX: Flip Y to match Three.js world Z
+  const flippedY = world.gridSize - 1 - gridY;
+  const cell = world.terrain[flippedY]?.[gridX];
+
   const canPlace = cell && cell.type !== 'water' && actions.length === 0;
   
   const handlePlaceBeacon = useCallback(() => {
@@ -152,17 +155,17 @@ interface PlacedBeaconProps {
 }
 
 export function PlacedBeaconMesh({ action, world }: PlacedBeaconProps) {
-  const cell = world.terrain[action.gridY]?.[action.gridX];
-  const elevation = cell ? cell.elevation * 20 : 0;
-  
+  const flippedZ = world.gridSize - 1 - action.gridY;
+  const terrainY = getElevationAt(world, action.gridX, flippedZ);
+
   return (
-    <group position={[action.gridX, elevation, action.gridY]}>
+    <group position={[action.gridX, terrainY, flippedZ]}>
       {/* Small base stone */}
       <mesh position={[0, 0.08, 0]}>
         <cylinderGeometry args={[0.12, 0.15, 0.16, 6]} />
         <meshStandardMaterial color="#4a5a5a" />
       </mesh>
-      
+
       {/* Tiny glowing crystal */}
       <mesh position={[0, 0.25, 0]}>
         <octahedronGeometry args={[0.1, 0]} />
@@ -172,7 +175,7 @@ export function PlacedBeaconMesh({ action, world }: PlacedBeaconProps) {
           emissiveIntensity={0.8}
         />
       </mesh>
-      
+
       {/* Very subtle point light - only visible when close */}
       <pointLight 
         position={[0, 0.25, 0]} 
