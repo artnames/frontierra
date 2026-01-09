@@ -43,7 +43,7 @@ function setup() {
   var mountainPeakHeight = map(VAR[6], 0, 100, 0.15, 0.70);
   var pathDensityVal = map(VAR[7], 0, 100, 0.0, 1.0);
   var terrainRoughness = map(VAR[8], 0, 100, 0.25, 0.80);
-  var mountainDensity = map(VAR[9], 0, 100, 0.05, 0.50);
+  var mountainDensity = map(VAR[9], 0, 100, 0.08, 0.75);
   
   var objX = floor(map(VAR[1], 0, 100, 4, GRID_SIZE - 4));
   var objY = floor(map(VAR[2], 0, 100, 4, GRID_SIZE - 4));
@@ -161,24 +161,27 @@ function setup() {
   }
   
   // Create mountain chains (elongated ranges) based on density
-  var numChains = floor(1 + mountainDensity * 8);
+  // More chains at high density for ~60% map coverage at 100%
+  var numChains = floor(2 + mountainDensity * 12);
   for (var mc = 0; mc < numChains; mc++) {
     var chainStartX = noise(mc * 137 + 9000) * GRID_SIZE;
     var chainStartY = noise(mc * 251 + 9500) * GRID_SIZE;
     var chainAngle = noise(mc * 373 + 9100) * TWO_PI;
-    var chainLength = 15 + noise(mc * 491 + 9200) * 35;
-    var chainWidth = 4 + mountainDensity * 8;
+    var chainLength = 20 + noise(mc * 491 + 9200) * 45;
+    var chainWidth = 5 + mountainDensity * 12;
     
     for (var cs = 0; cs < chainLength; cs++) {
-      var cx = chainStartX + cos(chainAngle) * cs * 1.5;
-      var cy = chainStartY + sin(chainAngle) * cs * 1.5;
+      var cx = chainStartX + cos(chainAngle) * cs * 1.4;
+      var cy = chainStartY + sin(chainAngle) * cs * 1.4;
       
-      var wobble = noise(cs * 0.3 + mc * 50, mc * 0.5) * 6 - 3;
+      // More pronounced wobble for natural mountain ridges
+      var wobble = noise(cs * 0.25 + mc * 50, mc * 0.5) * 8 - 4;
       cx = cx + cos(chainAngle + HALF_PI) * wobble;
       cy = cy + sin(chainAngle + HALF_PI) * wobble;
       
-      var segmentRadius = chainWidth * (0.6 + noise(cs * 0.2 + mc * 100, mc) * 0.6);
-      var segmentStrength = 0.5 + noise(cs * 0.15 + mc * 200, mc * 0.3) * 0.5;
+      // Varying segment size along the chain
+      var segmentRadius = chainWidth * (0.5 + noise(cs * 0.15 + mc * 100, mc) * 0.8);
+      var segmentStrength = 0.55 + noise(cs * 0.12 + mc * 200, mc * 0.3) * 0.45;
       
       for (var mcy = 0; mcy < GRID_SIZE; mcy++) {
         for (var mcx = 0; mcx < GRID_SIZE; mcx++) {
@@ -187,7 +190,7 @@ function setup() {
           var cdist = sqrt(cdx * cdx + cdy * cdy);
           if (cdist < segmentRadius) {
             var cfall = 1.0 - (cdist / segmentRadius);
-            cfall = pow(cfall, 1.2);
+            cfall = pow(cfall, 1.1);
             mountainMask[mcy][mcx] = max(mountainMask[mcy][mcx], cfall * segmentStrength);
           }
         }
@@ -195,13 +198,13 @@ function setup() {
     }
   }
   
-  // Add additional circular patches for variety
-  var numPatches = floor(2 + mountainDensity * 15);
+  // Add additional circular patches for variety - more patches at high density
+  var numPatches = floor(3 + mountainDensity * 20);
   for (var mp = 0; mp < numPatches; mp++) {
     var patchX = noise(mp * 137 + 10000) * GRID_SIZE;
     var patchY = noise(mp * 251 + 10500) * GRID_SIZE;
-    var patchRadius = 3 + mountainDensity * 10 + noise(mp * 373 + 10800) * 8;
-    var patchStrength = 0.4 + noise(mp * 491 + 10200) * 0.6;
+    var patchRadius = 4 + mountainDensity * 14 + noise(mp * 373 + 10800) * 10;
+    var patchStrength = 0.45 + noise(mp * 491 + 10200) * 0.55;
     
     for (var mpy = 0; mpy < GRID_SIZE; mpy++) {
       for (var mpx = 0; mpx < GRID_SIZE; mpx++) {
@@ -210,9 +213,31 @@ function setup() {
         var dist = sqrt(dx * dx + dy * dy);
         if (dist < patchRadius) {
           var falloff = 1.0 - (dist / patchRadius);
-          falloff = pow(falloff, 1.3);
+          falloff = pow(falloff, 1.2);
           mountainMask[mpy][mpx] = max(mountainMask[mpy][mpx], falloff * patchStrength);
         }
+      }
+    }
+  }
+  
+  // Low-frequency noise mask for clustering - creates distinct mountain regions vs valleys
+  // This ensures mountains form in clusters, not uniformly
+  var mountainRegionNoise = [];
+  for (var ry = 0; ry < GRID_SIZE; ry++) {
+    mountainRegionNoise[ry] = [];
+    for (var rx = 0; rx < GRID_SIZE; rx++) {
+      var regionVal = noise(rx * 0.04 + 11000, ry * 0.04);
+      var regionDetail = noise(rx * 0.08 + 11500, ry * 0.08);
+      mountainRegionNoise[ry][rx] = regionVal * 0.7 + regionDetail * 0.3;
+    }
+  }
+  
+  // Apply region mask to mountain mask - only keep mountains where region noise is high
+  for (var mry = 0; mry < GRID_SIZE; mry++) {
+    for (var mrx = 0; mrx < GRID_SIZE; mrx++) {
+      var regionThreshold = 0.55 - mountainDensity * 0.35;
+      if (mountainRegionNoise[mry][mrx] < regionThreshold) {
+        mountainMask[mry][mrx] = mountainMask[mry][mrx] * 0.15;
       }
     }
   }

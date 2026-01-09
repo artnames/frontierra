@@ -20,6 +20,16 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
   // Height scale matches worldData.ts (increased for dramatic terrain)
   const heightScale = 35;
   
+  // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
+  const waterLevel = (world.vars[4] ?? 50) / 100 * 0.50 + 0.15;
+  const waterHeight = waterLevel * heightScale;
+  
+  // River depth below water level
+  const riverDepth = waterHeight - 1.5;
+  
+  // Path height - slightly above water to be visible
+  const pathMaxHeight = waterHeight + 0.8;
+  
   const { geometry } = useMemo(() => {
     const size = world.gridSize;
     const geometry = new THREE.PlaneGeometry(size, size, size - 1, size - 1);
@@ -35,11 +45,23 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
       
       const cell = world.terrain[y]?.[x];
       if (cell) {
-        // Height from ALREADY CURVED elevation (stored in terrain cell)
-        positions.setY(i, cell.elevation * heightScale);
+        // Base height from ALREADY CURVED elevation
+        let height = cell.elevation * heightScale;
+        
+        // Rivers carve DOWN into terrain - visible depression
+        if (cell.hasRiver) {
+          height = Math.min(height, riverDepth);
+        }
+        
+        // Paths flatten terrain for walkability - clamp to max path height
+        if (cell.isPath && !cell.isBridge) {
+          height = Math.min(height, pathMaxHeight);
+        }
+        
+        positions.setY(i, height);
         
         // Color derived from tile type (RGB categorical) with enhanced shading
-        const { r, g, b } = getTileColor(cell.type, cell.elevation, cell.moisture);
+        const { r, g, b } = getTileColor(cell.type, cell.elevation, cell.moisture, cell.hasRiver, cell.isPath);
         
         colors[i * 3] = r;
         colors[i * 3 + 1] = g;
@@ -51,7 +73,7 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
     geometry.computeVertexNormals();
     
     return { geometry };
-  }, [world, heightScale]);
+  }, [world, heightScale, waterHeight, riverDepth, pathMaxHeight]);
   
   return (
     <mesh ref={meshRef} geometry={geometry} position={[world.gridSize / 2, 0, world.gridSize / 2]}>
@@ -66,16 +88,35 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
 function getTileColor(
   type: TerrainCell['type'], 
   elevation: number, // Already curved elevation from worldData
-  moisture: number
+  moisture: number,
+  hasRiver: boolean = false,
+  isPath: boolean = false
 ): { r: number; g: number; b: number } {
   // Enhanced brightness curve - high elevations catch more light
-  // Uses squared elevation for more dramatic high-altitude lighting
   const baseBrightness = 0.65;
   const elevationLight = Math.pow(elevation, 0.7) * 0.5;
   const brightness = baseBrightness + elevationLight;
   
   // Ambient occlusion simulation - low areas slightly darker
   const ao = 0.9 + elevation * 0.1;
+  
+  // Rivers get distinct color regardless of underlying tile type
+  if (hasRiver) {
+    return {
+      r: 0.18,
+      g: 0.45,
+      b: 0.55
+    };
+  }
+  
+  // Paths get distinct color for visibility
+  if (isPath && type !== 'bridge') {
+    return {
+      r: 0.62 * brightness * ao,
+      g: 0.52 * brightness * ao,
+      b: 0.38 * brightness * ao
+    };
+  }
   
   switch (type) {
     case 'water':
@@ -89,7 +130,6 @@ function getTileColor(
       
     case 'forest':
       // Darker forests with strong moisture influence
-      // Low-lying forests are darker (canopy shadow effect)
       const forestDark = 0.7 + elevation * 0.3;
       const moist = moisture * 0.4;
       return {
@@ -100,19 +140,16 @@ function getTileColor(
       
     case 'mountain':
       // Enhanced mountain shading with dramatic height variation
-      // Low mountains are darker rock, high peaks are bright with snow
       const isSnow = elevation > 0.65;
       const isHighSnow = elevation > 0.8;
       
       if (isHighSnow) {
-        // Bright snow peaks
         return {
           r: 0.95 * brightness,
           g: 0.97 * brightness,
           b: 1.0 * brightness
         };
       } else if (isSnow) {
-        // Transitional snow/rock mix
         const snowMix = (elevation - 0.65) / 0.15;
         return {
           r: (0.45 + snowMix * 0.45) * brightness,
@@ -121,7 +158,6 @@ function getTileColor(
         };
       }
       
-      // Rock with elevation-based shading
       const rockHeight = elevation * 0.4;
       return {
         r: (0.32 + rockHeight) * brightness * ao,
@@ -130,7 +166,6 @@ function getTileColor(
       };
       
     case 'path':
-      // Paths with subtle elevation lighting
       return {
         r: 0.58 * brightness * ao,
         g: 0.48 * brightness * ao,
@@ -138,7 +173,6 @@ function getTileColor(
       };
       
     case 'bridge':
-      // Darker wood tones
       return {
         r: 0.40 * brightness,
         g: 0.28 * brightness,
@@ -147,8 +181,6 @@ function getTileColor(
       
     case 'ground':
     default:
-      // Enhanced ground with moisture and elevation variation
-      // Moisture makes ground greener/darker
       const groundMoist = moisture * 0.3;
       return {
         r: (0.50 - groundMoist * 0.15) * brightness * ao,
@@ -385,13 +417,34 @@ export function GridOverlay({ world }: GridOverlayProps) {
 // ============================================
 
 export function WaterPlane({ world }: { world: WorldData }) {
-  const heightScale = 35; // Match updated height scale
+  const heightScale = 35;
   // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
   const waterLevel = (world.vars[4] ?? 50) / 100 * 0.50 + 0.15;
   
+  // Calculate minimum terrain elevation to prevent flooding above water line
+  const minTerrainElevation = useMemo(() => {
+    let minElev = Infinity;
+    for (const row of world.terrain) {
+      for (const cell of row) {
+        if (cell.type === 'water') {
+          minElev = Math.min(minElev, cell.elevation);
+        }
+      }
+    }
+    // If no water cells, use water level as baseline
+    return minElev === Infinity ? waterLevel * 0.8 : minElev;
+  }, [world.terrain, waterLevel]);
+  
+  // Water plane height: clamped to not exceed lowest water cell elevation
+  // This ensures water stays in basins and doesn't flood forests/ground
+  const waterPlaneHeight = Math.min(
+    waterLevel * heightScale - 0.5,
+    minTerrainElevation * heightScale + 0.5
+  );
+  
   return (
     <mesh 
-      position={[world.gridSize / 2, waterLevel * heightScale - 0.5, world.gridSize / 2]} 
+      position={[world.gridSize / 2, waterPlaneHeight, world.gridSize / 2]} 
       rotation={[-Math.PI / 2, 0, 0]}
     >
       <planeGeometry args={[world.gridSize, world.gridSize]} />
