@@ -27,25 +27,18 @@ function setup() {
   background(0, 0, 0, 0);
 
   // ============================================
-  // SEED INITIALIZATION - Critical for determinism
-  // The seed MUST affect ALL noise calculations
+  // SEEDING (Protocol)
+  // CodeMode runtime seeds random() + noise() from the host input.seed.
+  // IMPORTANT: Do NOT call noiseSeed()/randomSeed() here unless you have the seed value.
   // ============================================
-  var __seed = 0;
-  if (typeof SEED !== "undefined") {
-    __seed = SEED;
-  } else if (typeof seed !== "undefined") {
-    __seed = seed;
-  }
-  noiseSeed(__seed);
-  randomSeed(__seed);
-  
-  // Create seed-derived offsets for unique worlds
-  // These make each seed produce completely different noise patterns
-  var seedOffsetA = (__seed % 10000) * 0.1;
-  var seedOffsetB = ((__seed * 7) % 10000) * 0.1;
-  var seedOffsetC = ((__seed * 13) % 10000) * 0.1;
-  var seedOffsetD = ((__seed * 31) % 10000) * 0.1;
-  
+
+  // Seed-derived offsets (deterministic via seeded random()).
+  // Used to decorrelate multiple noise fields while still being seed-stable.
+  var seedOffsetA = random(0, 1000);
+  var seedOffsetB = random(0, 1000);
+  var seedOffsetC = random(0, 1000);
+  var seedOffsetD = random(0, 1000);
+
   var GRID_SIZE = 64;
   
   // ============================================
