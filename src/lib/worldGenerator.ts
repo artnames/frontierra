@@ -170,27 +170,33 @@ function setup() {
       
       // ---- ALPHA CHANNEL: FEATURE MASK ----
       // 255: No feature
-      // 250-254: Landmark types (0-4)
+      // 250-254: Landmark types (0-4): Ruins, Crystal, Ancient Tree, Stone Circle, Obelisk
       // 245-249: River
       // 240-244: Reserved
       // 1: Planted object marker
       var alphaChannel = 255;
       
-      // Landmark placement - use higher noise threshold comparison
-      var landmarkNoise = noise(x * 0.12 + 3000, y * 0.12 + 3000);
-      // Compare against threshold: lower noise values get landmarks when density is high
-      if (!isWater && !isMountain && !onPath && landmarkNoise < landmarkDensity * 0.8) {
-        var landmarkType = floor(noise(x * 0.25, y * 0.25 + 4000) * 5);
-        alphaChannel = 250 + landmarkType;
-      }
-      
-      // River detection (low elevation paths through terrain)
+      // River detection FIRST (lower priority than landmarks)
       var riverNoise = noise(x * 0.04 + 5000, y * 0.04);
-      if (!isWater && !onPath && abs(riverNoise - 0.5) < 0.03 && elevation < 0.5) {
+      var isRiver = !isWater && !onPath && abs(riverNoise - 0.5) < 0.03 && elevation < 0.5;
+      if (isRiver) {
         alphaChannel = 245 + floor((riverNoise - 0.47) / 0.06 * 4);
       }
       
-      // Mark planted object position
+      // Landmark placement - HIGHER priority, uses cellular-like noise for clustering
+      var landmarkNoise = noise(x * 0.08 + 3000, y * 0.08 + 3000);
+      var landmarkNoise2 = noise(x * 0.15 + 3500, y * 0.15 + 3500);
+      var combinedLandmark = landmarkNoise * 0.6 + landmarkNoise2 * 0.4;
+      
+      // Place landmarks on valid terrain with better distribution
+      if (!isWater && !isMountain && !onPath && !isRiver && combinedLandmark < landmarkDensity) {
+        // Use different noise for type to ensure variety
+        var typeNoise = noise(x * 0.3 + 4000, y * 0.3 + 4000);
+        var landmarkType = floor(typeNoise * 5);
+        alphaChannel = 250 + constrain(landmarkType, 0, 4);
+      }
+      
+      // Mark planted object position (highest priority)
       if (x === objX && y === objY) {
         alphaChannel = 1;
       }
