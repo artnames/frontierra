@@ -43,6 +43,13 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     isVisitingOtherLand: false
   });
   
+  // Keep playerId in sync with options.initialPlayerId (e.g., when user logs in)
+  useEffect(() => {
+    if (options.initialPlayerId && options.initialPlayerId !== state.playerId) {
+      setState(prev => ({ ...prev, playerId: options.initialPlayerId! }));
+    }
+  }, [options.initialPlayerId, state.playerId]);
+  
   // Build World A context from current land position
   // This enables shared macro geography across all lands
   const worldContext = useMemo<{ worldX: number; worldY: number } | undefined>(() => {
@@ -196,21 +203,29 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
   
   // Update land parameters (seed/vars) - only works on own land
   const updateLandParams = useCallback(async (updates: { seed?: number; vars?: number[] }) => {
-    if (!state.playerId || !state.currentLand) return;
+    const playerId = state.playerId || options.initialPlayerId;
     
-    // Check ownership directly by comparing IDs (more reliable than cached boolean)
-    const isOwner = state.currentLand.player_id === state.playerId;
-    if (!isOwner) {
-      console.warn('[MultiplayerWorld] Cannot update parameters on someone else\'s land');
+    if (!playerId || !state.currentLand) {
+      console.warn('[MultiplayerWorld] Cannot update: no playerId or currentLand', { playerId, currentLand: state.currentLand });
       return;
     }
     
-    const updatedLand = await updateLand(state.playerId, updates);
+    // Check ownership directly by comparing IDs (more reliable than cached boolean)
+    const isOwner = state.currentLand.player_id === playerId;
+    if (!isOwner) {
+      console.warn('[MultiplayerWorld] Cannot update parameters on someone else\'s land', { 
+        landOwner: state.currentLand.player_id, 
+        playerId 
+      });
+      return;
+    }
+    
+    const updatedLand = await updateLand(playerId, updates);
     if (updatedLand) {
       setState(prev => ({ ...prev, currentLand: updatedLand }));
       forceRegenerate();
     }
-  }, [state.playerId, state.currentLand, forceRegenerate]);
+  }, [state.playerId, state.currentLand, options.initialPlayerId, forceRegenerate]);
   
   // Subscribe to real-time land updates
   useEffect(() => {
