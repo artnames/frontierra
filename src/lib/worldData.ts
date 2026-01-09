@@ -4,7 +4,7 @@
 
 import { NexArtWorldGrid, TileType, GridCell, generateNexArtWorld, verifyNexArtWorld } from './nexartWorld';
 import { WorldParams } from './worldGenerator';
-import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET, PATH_HEIGHT_OFFSET, BRIDGE_HEIGHT_OFFSET } from './worldConstants';
+import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET, PATH_HEIGHT_OFFSET, BRIDGE_FIXED_HEIGHT } from './worldConstants';
 
 // ============================================
 // WORLD DATA INTERFACES (3D Projection of NexArt)
@@ -267,7 +267,8 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
   const waterHeight = waterLevel * heightScale;
   const riverDepth = waterHeight - RIVER_DEPTH_OFFSET;
   const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
-  const bridgeHeight = waterHeight + BRIDGE_HEIGHT_OFFSET;
+  // Bridge uses fixed height - just above water surface
+  const bridgeHeight = BRIDGE_FIXED_HEIGHT;
 
   const gridX = Math.floor(worldX);
   const gridY = Math.floor(worldY);

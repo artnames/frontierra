@@ -11,11 +11,12 @@ export function getWaterLevel(vars: number[]): number {
   return (vars[4] ?? 50) / 100 * 0.45 + 0.10;
 }
 
-// River depth below water level
+// River depth below water level (in world units, not scaled)
 export const RIVER_DEPTH_OFFSET = 1.5;
 
-// Path max height above water
+// Path max height above water (in world units, not scaled)
 export const PATH_HEIGHT_OFFSET = 0.8;
 
-// Bridge height above water (match path height for seamless crossings)
-export const BRIDGE_HEIGHT_OFFSET = PATH_HEIGHT_OFFSET;
+// Fixed bridge height - bridges sit just above the water surface
+// This is an absolute height, not relative to scaled water level
+export const BRIDGE_FIXED_HEIGHT = 2.5;
