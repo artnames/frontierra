@@ -142,41 +142,29 @@ export function PlacedBeaconMesh({ action, world }: PlacedBeaconProps) {
   
   return (
     <group position={[action.gridX, elevation, action.gridY]}>
-      {/* Base */}
-      <mesh position={[0, 0.3, 0]}>
-        <cylinderGeometry args={[0.4, 0.5, 0.6, 8]} />
-        <meshStandardMaterial color="#3a5a5a" />
+      {/* Small base stone */}
+      <mesh position={[0, 0.08, 0]}>
+        <cylinderGeometry args={[0.12, 0.15, 0.16, 6]} />
+        <meshStandardMaterial color="#4a5a5a" />
       </mesh>
       
-      {/* Pillar */}
-      <mesh position={[0, 1.5, 0]}>
-        <cylinderGeometry args={[0.15, 0.2, 2, 8]} />
-        <meshStandardMaterial color="#4a6a6a" />
-      </mesh>
-      
-      {/* Light orb */}
-      <mesh position={[0, 2.8, 0]}>
-        <sphereGeometry args={[0.3, 16, 16]} />
+      {/* Tiny glowing crystal */}
+      <mesh position={[0, 0.25, 0]}>
+        <octahedronGeometry args={[0.1, 0]} />
         <meshStandardMaterial 
           color="#5ac4c4" 
           emissive="#5ac4c4" 
-          emissiveIntensity={1}
+          emissiveIntensity={0.8}
         />
       </mesh>
       
-      {/* Point light */}
+      {/* Very subtle point light - only visible when close */}
       <pointLight 
-        position={[0, 2.8, 0]} 
+        position={[0, 0.25, 0]} 
         color="#5ac4c4" 
-        intensity={3} 
-        distance={15} 
+        intensity={0.5} 
+        distance={3} 
       />
-      
-      {/* Ground glow */}
-      <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[1.5, 32]} />
-        <meshBasicMaterial color="#5ac4c4" transparent opacity={0.3} />
-      </mesh>
     </group>
   );
 }

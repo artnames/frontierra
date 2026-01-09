@@ -124,8 +124,9 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
   // Generate terrain
   const terrain: TerrainCell[][] = [];
   
-  // Generate path network using a separate noise layer
-  const pathNoise = createNoise2D(seed + 3000);
+  // Generate path network using separate noise layers for roads
+  const pathNoiseX = createNoise2D(seed + 3000); // Horizontal road tendency
+  const pathNoiseY = createNoise2D(seed + 4000); // Vertical road tendency
   
   for (let y = 0; y < GRID_SIZE; y++) {
     terrain[y] = [];
@@ -136,11 +137,21 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
       // Apply height multiplier to non-water areas
       const scaledElevation = baseElevation * heightMultiplier;
       
-      // Path detection - paths form along specific noise contours
-      const pathValue = pathNoise(x * 0.08, y * 0.08);
-      const pathThreshold = 0.05 + (1 - pathDensity) * 0.15; // Higher density = more paths
+      // Path detection using grid-aligned noise for road-like paths
+      // Create roads that run roughly horizontal and vertical
+      const roadScaleX = 0.15; // Larger = more frequent roads
+      const roadScaleY = 0.15;
+      const roadWidth = 0.08 + pathDensity * 0.12; // Width of roads based on density
+      
+      // Sample noise and check if we're near the "road lines" (where noise crosses 0.5)
+      const hRoadNoise = pathNoiseX(x * 0.02, y * roadScaleY);
+      const vRoadNoise = pathNoiseY(x * roadScaleX, y * 0.02);
+      
+      const isHRoad = Math.abs(hRoadNoise - 0.5) < roadWidth;
+      const isVRoad = Math.abs(vRoadNoise - 0.5) < roadWidth;
+      
       const isPath = baseElevation >= waterLevel && baseElevation < 0.65 && 
-                     Math.abs(pathValue - 0.5) < pathThreshold;
+                     pathDensity > 0.1 && (isHRoad || isVRoad);
       
       // Determine terrain type based on base elevation (before scaling)
       let type: TerrainCell['type'];
