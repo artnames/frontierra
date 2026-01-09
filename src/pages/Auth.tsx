@@ -130,7 +130,7 @@ export default function Auth() {
           <Globe className="w-6 h-6 text-primary" />
           <div>
             <h1 className="font-display text-lg font-bold text-foreground glow-text">
-              Frontierra
+              Frontierra <span className="text-xs font-normal text-muted-foreground">by Nexart</span>
             </h1>
             <p className="text-xs text-muted-foreground">
               Claim Your Land
@@ -272,6 +272,23 @@ export default function Auth() {
           </div>
         </div>
       </main>
+
+      {/* X/Twitter Link - Bottom Right */}
+      <a
+        href="https://x.com/ArtNames_io"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-4 right-4 p-2 rounded-full bg-card/80 border border-border hover:bg-secondary transition-colors"
+        aria-label="Follow us on X"
+      >
+        <svg 
+          viewBox="0 0 24 24" 
+          className="w-5 h-5 text-foreground"
+          fill="currentColor"
+        >
+          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+        </svg>
+      </a>
     </div>
   );
 }
