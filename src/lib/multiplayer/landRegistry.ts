@@ -84,6 +84,7 @@ export function buildTopology(lands: PlayerLand[]): WorldTopology {
 
 // Create a new land for a player
 export async function createLand(
+  playerId: string,
   seed: number,
   vars: number[],
   posX: number = 0,
@@ -97,6 +98,7 @@ export async function createLand(
   const { data, error } = await supabase
     .from('player_lands')
     .insert({
+      player_id: playerId,
       seed: Math.floor(seed),
       vars: normalizedVars,
       pos_x: posX,
