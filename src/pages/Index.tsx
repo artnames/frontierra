@@ -1,5 +1,5 @@
-import { useCallback, useState, useMemo } from 'react';
-import { Eye, Map, Copy, Check, Shuffle, Settings, ChevronLeft } from 'lucide-react';
+import { useCallback, useState, useMemo, useEffect } from 'react';
+import { Eye, Map, Copy, Check, Shuffle, Settings, ChevronLeft, Users, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
@@ -19,14 +19,18 @@ import { WorldMap2D } from '@/components/WorldMap2D';
 import { WorldContractPanel } from '@/components/WorldContractPanel';
 import { ReplayControls } from '@/components/ReplayControls';
 import { ActionSystem } from '@/components/ActionSystem';
+import { MultiplayerHUD } from '@/components/MultiplayerHUD';
+import { useMultiplayerWorld } from '@/hooks/useMultiplayerWorld';
 import { useToast } from '@/hooks/use-toast';
 import { useSearchParams } from 'react-router-dom';
 
 type ViewMode = 'map' | 'firstperson';
 type SidebarTab = 'parameters' | 'contract' | 'actions' | 'replay';
+type WorldMode = 'solo' | 'multiplayer';
 
 const Index = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('firstperson');
+  const [worldMode, setWorldMode] = useState<WorldMode>('solo');
   const [copied, setCopied] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('contract');
@@ -47,14 +51,31 @@ const Index = () => {
     randomizeSeed
   } = useWorldParams();
 
+  // Multiplayer world management
+  const multiplayer = useMultiplayerWorld({
+    autoCreate: true
+  });
+  
+  // Initialize multiplayer land on first load
+  useEffect(() => {
+    if (worldMode === 'multiplayer' && !multiplayer.currentLand && !multiplayer.isLoading) {
+      multiplayer.initializePlayerLand();
+    }
+  }, [worldMode, multiplayer]);
+
   // Parse actions from URL
   const [actions, setActions] = useState<WorldAction[]>(() => {
     const actionsParam = searchParams.get('actions');
     return actionsParam ? parseActions(actionsParam) : [];
   });
   
+  // Use multiplayer world data when in multiplayer mode, else solo params
+  const activeParams = worldMode === 'multiplayer' && multiplayer.currentLand
+    ? { seed: multiplayer.currentLand.seed, vars: multiplayer.currentLand.vars }
+    : params;
+    
   // Generate world for contract panel
-  const world = useMemo(() => generateWorldData(params.seed, params.vars), [params.seed, params.vars]);
+  const world = useMemo(() => generateWorldData(activeParams.seed, activeParams.vars), [activeParams.seed, activeParams.vars]);
 
   const handleGenerate = useCallback(() => {
     applyToUrl();
@@ -174,13 +195,50 @@ const Index = () => {
                 Deterministic World Explorer
               </h1>
               <p className="text-xs text-muted-foreground">
-                Seed: <span className="text-primary font-mono">{params.seed}</span>
-                {actions.length > 0 && (
-                  <span className="ml-2">
-                    Actions: <span className="text-accent font-mono">{actions.length}</span>
-                  </span>
+                {worldMode === 'multiplayer' && multiplayer.currentLand ? (
+                  <>
+                    Land: <span className="text-primary font-mono">{multiplayer.currentLand.seed}</span>
+                    <span className="ml-2">
+                      Grid: <span className="text-accent font-mono">
+                        ({multiplayer.currentLand.pos_x}, {multiplayer.currentLand.pos_y})
+                      </span>
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    Seed: <span className="text-primary font-mono">{activeParams.seed}</span>
+                    {actions.length > 0 && (
+                      <span className="ml-2">
+                        Actions: <span className="text-accent font-mono">{actions.length}</span>
+                      </span>
+                    )}
+                  </>
                 )}
               </p>
+            </div>
+            
+            {/* World Mode Toggle */}
+            <div className="hidden md:flex items-center gap-1 bg-secondary/50 rounded p-1">
+              <Button
+                variant={worldMode === 'solo' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setWorldMode('solo')}
+                className="gap-1.5 h-7 text-xs"
+                disabled={isReplaying}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                Solo
+              </Button>
+              <Button
+                variant={worldMode === 'multiplayer' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setWorldMode('multiplayer')}
+                className="gap-1.5 h-7 text-xs"
+                disabled={isReplaying}
+              >
+                <Users className="w-3.5 h-3.5" />
+                Multiplayer
+              </Button>
             </div>
             
             {/* View Mode Toggle */}
@@ -237,8 +295,8 @@ const Index = () => {
         <div className="flex-1 relative">
           {viewMode === 'firstperson' ? (
             <WorldExplorer 
-              seed={params.seed} 
-              vars={params.vars}
+              seed={activeParams.seed} 
+              vars={activeParams.vars}
               initialActions={actions}
               onActionsChange={setActions}
               onPositionUpdate={handlePositionUpdate}
@@ -249,9 +307,20 @@ const Index = () => {
           ) : (
             <div className="w-full h-full flex bg-background">
               <div className="flex-1 flex items-center justify-center p-4">
-                <WorldMap2D params={params} getShareUrl={getShareUrl} />
+                <WorldMap2D params={activeParams} getShareUrl={getShareUrl} />
               </div>
             </div>
+          )}
+          
+          {/* Multiplayer HUD */}
+          {worldMode === 'multiplayer' && viewMode === 'firstperson' && (
+            <MultiplayerHUD
+              currentLand={multiplayer.currentLand}
+              neighborLands={multiplayer.neighborLands}
+              playerPosition={multiplayer.playerPosition}
+              isTransitioning={multiplayer.isTransitioning}
+              onVisitLand={multiplayer.visitLand}
+            />
           )}
           
           {/* Sidebar toggle button (when hidden) */}
