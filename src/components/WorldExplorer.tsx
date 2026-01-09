@@ -16,7 +16,8 @@ import {
   PlantedObject, 
   GridOverlay, 
   WaterPlane,
-  Atmosphere 
+  Atmosphere,
+  Bridges
 } from '@/components/WorldRenderer';
 import { PlacedBeaconMesh } from '@/components/ActionSystem';
 import * as THREE from 'three';
@@ -67,6 +68,7 @@ function FirstPersonScene({
       <Atmosphere />
       <TerrainMesh world={world} />
       <WaterPlane world={world} />
+      <Bridges world={world} />
       <Landmarks world={world} />
       <PlantedObject world={world} isDiscovered={isDiscovered} />
       <GridOverlay world={world} />
