@@ -1,13 +1,10 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { WorldData, generateWorldData, distanceToObject } from '@/lib/worldData';
+import { WorldData, generateWorldDataAsync, cacheWorldData, distanceToObject, isWorldValid } from '@/lib/worldData';
 import { 
   WorldAction, 
   ReplayFrame,
   DeterminismTest,
-  runDeterminismTest,
-  serializeActions,
-  parseActions
 } from '@/lib/worldContract';
 import { useFirstPersonControls } from '@/hooks/useFirstPersonControls';
 import { 
@@ -45,7 +42,6 @@ function FirstPersonScene({
   const handlePositionChange = useCallback((x: number, y: number, z: number) => {
     onPositionChange(x, y, z);
     
-    // Check proximity to planted object
     const distance = distanceToObject(world, x, y);
     const wasDiscovered = isDiscovered;
     const nowDiscovered = distance < 3;
@@ -56,7 +52,6 @@ function FirstPersonScene({
     }
   }, [world, isDiscovered, onPositionChange, onDiscovery]);
   
-  // Always call the hook - pass enabled flag to control behavior
   useFirstPersonControls({ 
     world, 
     onPositionChange: handlePositionChange,
@@ -73,12 +68,10 @@ function FirstPersonScene({
       <PlantedObject world={world} isDiscovered={isDiscovered} />
       <GridOverlay world={world} />
       
-      {/* Render placed beacons */}
       {actions.map((action, i) => (
         <PlacedBeaconMesh key={i} action={action} world={world} />
       ))}
       
-      {/* Replay camera */}
       {isReplaying && replayFrame && (
         <ReplayCamera frame={replayFrame} />
       )}
@@ -123,18 +116,38 @@ export function WorldExplorer({
   const [isDiscovered, setIsDiscovered] = useState(false);
   const [showDiscoveryBanner, setShowDiscoveryBanner] = useState(false);
   const [actions, setActions] = useState<WorldAction[]>(initialActions);
+  const [world, setWorld] = useState<WorldData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [nexartError, setNexartError] = useState<string | null>(null);
   
-  // Generate world data deterministically
-  const world = useMemo(() => generateWorldData(seed, vars), [seed, vars]);
+  // Generate world data via NexArt (async)
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setNexartError(null);
+    
+    generateWorldDataAsync(seed, vars).then(worldData => {
+      if (cancelled) return;
+      
+      if (!isWorldValid(worldData)) {
+        setNexartError(worldData.nexartError || 'NexArt generation failed');
+        setWorld(null);
+      } else {
+        cacheWorldData(worldData);
+        setWorld(worldData);
+      }
+      setIsLoading(false);
+    });
+    
+    return () => { cancelled = true; };
+  }, [seed, vars]);
   
-  // Handle discovery animation
   useEffect(() => {
     if (isDiscovered && !showDiscoveryBanner) {
       setShowDiscoveryBanner(true);
     }
   }, [isDiscovered, showDiscoveryBanner]);
   
-  // Sync actions with parent
   useEffect(() => {
     setActions(initialActions);
   }, [initialActions]);
@@ -149,12 +162,45 @@ export function WorldExplorer({
     setIsDiscovered(discovered);
   }, []);
   
-  const isInvalid = deterministicTest && !deterministicTest.isValid;
+  const isInvalid = (deterministicTest && !deterministicTest.isValid) || nexartError !== null;
+  
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="relative w-full h-full flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm text-muted-foreground">GENERATING VIA NEXART...</span>
+        </div>
+      </div>
+    );
+  }
+  
+  // NexArt failure - NO FALLBACK
+  if (nexartError || !world) {
+    return (
+      <div className="relative w-full h-full flex items-center justify-center bg-destructive/10">
+        <div className="terminal-panel p-8 border-destructive bg-background/95 text-center max-w-md">
+          <div className="text-3xl font-display font-bold text-destructive mb-3">
+            ⚠ WORLD CANNOT BE VERIFIED
+          </div>
+          <div className="text-sm text-muted-foreground mb-4">
+            NexArt execution failed. The world cannot be generated or validated.
+          </div>
+          <div className="text-xs text-destructive/70 font-mono p-3 bg-destructive/10 rounded mb-4">
+            {nexartError || 'Unknown error'}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            NexArt is the canonical world generator. No fallback available.
+          </div>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="relative w-full h-full">
-      {/* Invalid world overlay */}
-      {isInvalid && (
+      {isInvalid && !nexartError && (
         <div className="absolute inset-0 z-20 pointer-events-none">
           <div className="absolute inset-0 bg-destructive/10 animate-pulse" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
