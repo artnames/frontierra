@@ -2,14 +2,15 @@
 
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import { WorldData } from '@/lib/worldData';
+import { WorldData, getElevationAt } from '@/lib/worldData';
+import { WORLD_HEIGHT_SCALE } from '@/lib/worldConstants';
 
 interface ForestTreesProps {
   world: WorldData;
 }
 
 export function ForestTrees({ world }: ForestTreesProps) {
-  const heightScale = 25;
+  const heightScale = WORLD_HEIGHT_SCALE;
   
   const trees = useMemo(() => {
     const items: { x: number; y: number; z: number; scale: number; variant: number }[] = [];
@@ -21,13 +22,21 @@ export function ForestTrees({ world }: ForestTreesProps) {
         if (cell?.type === 'forest') {
           // Deterministic offset within cell
           const offsetX = ((gx * 17 + gy * 31) % 100) / 100 - 0.5;
-          const offsetY = ((gx * 23 + gy * 13) % 100) / 100 - 0.5;
+          const offsetZ = ((gx * 23 + gy * 13) % 100) / 100 - 0.5;
+          
+          // COORDINATE FIX: Flip Y-axis for Three.js positioning
+          const flippedZ = world.gridSize - 1 - gy;
+          
+          // Get proper terrain elevation using getElevationAt
+          const treeX = gx + offsetX * 0.8;
+          const treeZ = flippedZ + offsetZ * 0.8;
+          const terrainY = getElevationAt(world, treeX, treeZ);
           
           // Larger tree scale for better visibility
           items.push({
-            x: gx + offsetX * 0.8,
-            y: cell.elevation * heightScale,
-            z: gy + offsetY * 0.8,
+            x: treeX,
+            y: terrainY,
+            z: treeZ,
             scale: 1.0 + ((gx * 7 + gy * 11) % 50) / 80,
             variant: (gx + gy) % 3
           });
@@ -35,11 +44,15 @@ export function ForestTrees({ world }: ForestTreesProps) {
           // Add second tree for denser forests
           if (cell.moisture > 0.5) {
             const offsetX2 = ((gx * 41 + gy * 19) % 100) / 100 - 0.5;
-            const offsetY2 = ((gx * 29 + gy * 37) % 100) / 100 - 0.5;
+            const offsetZ2 = ((gx * 29 + gy * 37) % 100) / 100 - 0.5;
+            const tree2X = gx + offsetX2 * 0.8;
+            const tree2Z = flippedZ + offsetZ2 * 0.8;
+            const terrain2Y = getElevationAt(world, tree2X, tree2Z);
+            
             items.push({
-              x: gx + offsetX2 * 0.8,
-              y: cell.elevation * heightScale,
-              z: gy + offsetY2 * 0.8,
+              x: tree2X,
+              y: terrain2Y,
+              z: tree2Z,
               scale: 0.8 + ((gx * 13 + gy * 19) % 40) / 80,
               variant: (gx + gy + 1) % 3
             });

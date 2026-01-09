@@ -4,7 +4,14 @@
 
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { WorldData, TerrainCell } from '@/lib/worldData';
+import { WorldData, TerrainCell, getElevationAt } from '@/lib/worldData';
+import { 
+  WORLD_HEIGHT_SCALE, 
+  getWaterLevel, 
+  RIVER_DEPTH_OFFSET, 
+  PATH_HEIGHT_OFFSET, 
+  BRIDGE_HEIGHT_OFFSET 
+} from '@/lib/worldConstants';
 
 // ============================================
 // TERRAIN MESH - Derived from NexArt elevation
@@ -17,18 +24,18 @@ interface TerrainMeshProps {
 export function TerrainMesh({ world }: TerrainMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   
-  // Height scale matches worldData.ts (increased for dramatic terrain)
-  const heightScale = 35;
+  // Use shared height scale constant
+  const heightScale = WORLD_HEIGHT_SCALE;
   
-  // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
-  const waterLevel = (world.vars[4] ?? 50) / 100 * 0.50 + 0.15;
+  // Water level from shared function
+  const waterLevel = getWaterLevel(world.vars);
   const waterHeight = waterLevel * heightScale;
   
   // River depth below water level
-  const riverDepth = waterHeight - 1.5;
+  const riverDepth = waterHeight - RIVER_DEPTH_OFFSET;
   
   // Path height - slightly above water to be visible
-  const pathMaxHeight = waterHeight + 0.8;
+  const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
   
   const { geometry } = useMemo(() => {
     const size = world.gridSize;
@@ -43,7 +50,12 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
       const x = Math.floor(i % size);
       const y = Math.floor(i / size);
       
-      const cell = world.terrain[y]?.[x];
+      // COORDINATE FIX: Flip Y-axis to match P5.js [y][x] grid
+      // P5.js: origin top-left, Y increases downward
+      // Three.js PlaneGeometry: origin bottom-left, Y increases upward
+      const flippedY = size - 1 - y;
+      
+      const cell = world.terrain[flippedY]?.[x];
       if (cell) {
         // Base height from ALREADY CURVED elevation
         let height = cell.elevation * heightScale;
@@ -199,19 +211,20 @@ interface BridgesProps {
 }
 
 export function Bridges({ world }: BridgesProps) {
-  const heightScale = 35; // Match updated height scale
+  const heightScale = WORLD_HEIGHT_SCALE;
   const bridges = useMemo(() => {
     const items: { x: number; z: number; waterLevel: number }[] = [];
-    // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
-    const waterLevel = (world.vars[4] ?? 50) / 100 * 0.50 + 0.15;
+    const waterLevel = getWaterLevel(world.vars);
     
     for (let y = 0; y < world.gridSize; y++) {
       for (let x = 0; x < world.gridSize; x++) {
         const cell = world.terrain[y][x];
         if (cell.type === 'bridge') {
+          // COORDINATE FIX: Flip Y for Three.js positioning
+          const flippedZ = world.gridSize - 1 - y;
           items.push({
             x,
-            z: y,
+            z: flippedZ,
             waterLevel: waterLevel * heightScale
           });
         }
@@ -219,7 +232,7 @@ export function Bridges({ world }: BridgesProps) {
     }
     
     return items;
-  }, [world]);
+  }, [world, heightScale]);
   
   return (
     <group>
@@ -231,7 +244,7 @@ export function Bridges({ world }: BridgesProps) {
 }
 
 function BridgePlank({ x, z, waterLevel }: { x: number; z: number; waterLevel: number }) {
-  const bridgeHeight = waterLevel + 0.5;
+  const bridgeHeight = waterLevel + BRIDGE_HEIGHT_OFFSET;
   
   return (
     <group position={[x, bridgeHeight, z]}>
@@ -257,8 +270,13 @@ interface PlantedObjectProps {
 }
 
 export function PlantedObject({ world, isDiscovered }: PlantedObjectProps) {
-  const { x, y, z, type } = world.plantedObject;
+  const { x, y: gridY, type } = world.plantedObject;
   const glowIntensity = isDiscovered ? 2 : 0.5;
+  
+  // Get proper elevation from terrain using getElevationAt
+  // COORDINATE FIX: Use flipped Z coordinate for Three.js positioning
+  const flippedZ = world.gridSize - 1 - gridY;
+  const terrainY = getElevationAt(world, x, flippedZ);
   
   const ObjectMesh = () => {
     switch (type) {
@@ -358,7 +376,7 @@ export function PlantedObject({ world, isDiscovered }: PlantedObjectProps) {
   };
   
   return (
-    <group position={[x, y, z]}>
+    <group position={[x, terrainY, flippedZ]}>
       <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[1.5, 32]} />
         <meshBasicMaterial 
@@ -417,16 +435,16 @@ export function GridOverlay({ world }: GridOverlayProps) {
 // ============================================
 
 export function WaterPlane({ world }: { world: WorldData }) {
-  const heightScale = 35;
-  // Water level mapping: VAR[4] 0=0.15, 50=0.40, 100=0.65
-  const waterLevel = (world.vars[4] ?? 50) / 100 * 0.50 + 0.15;
+  const heightScale = WORLD_HEIGHT_SCALE;
+  const waterLevel = getWaterLevel(world.vars);
+  const waterThresholdHeight = waterLevel * heightScale;
   
-  // Calculate water plane height from actual water cells only
-  // This ensures water stays in oceans/lakes and doesn't flood terrain
+  // Calculate water plane height based on actual water cells
+  // Use waterThresholdHeight as the base, clamped to prevent flooding terrain
   const waterPlaneHeight = useMemo(() => {
-    let waterCellCount = 0;
+    let minNonWaterElevation = Infinity;
     let avgWaterElevation = 0;
-    let maxNonWaterElevation = 0;
+    let waterCellCount = 0;
     
     for (const row of world.terrain) {
       for (const cell of row) {
@@ -434,28 +452,26 @@ export function WaterPlane({ world }: { world: WorldData }) {
           avgWaterElevation += cell.elevation;
           waterCellCount++;
         } else if (cell.type !== 'bridge') {
-          // Track lowest non-water elevation for clamping
-          if (maxNonWaterElevation === 0 || cell.elevation < maxNonWaterElevation) {
-            maxNonWaterElevation = cell.elevation;
+          // Track minimum non-water elevation
+          const cellHeight = cell.elevation * heightScale;
+          if (cellHeight < minNonWaterElevation) {
+            minNonWaterElevation = cellHeight;
           }
         }
       }
     }
     
     if (waterCellCount === 0) {
-      // No water in world - place plane below all terrain
-      return maxNonWaterElevation * heightScale - 2;
+      // No water in world - place plane well below terrain
+      return minNonWaterElevation - 2;
     }
     
-    avgWaterElevation = avgWaterElevation / waterCellCount;
+    // Water plane at the VAR[4] threshold height
+    // Clamped to never exceed the lowest non-water terrain (minus offset)
+    const maxSafeHeight = minNonWaterElevation - 0.3;
     
-    // Water plane at average water cell elevation
-    // Clamped to never exceed the lowest non-water terrain
-    const baseHeight = avgWaterElevation * heightScale;
-    const maxHeight = maxNonWaterElevation * heightScale - 0.5;
-    
-    return Math.min(baseHeight, maxHeight);
-  }, [world.terrain, heightScale]);
+    return Math.min(waterThresholdHeight, maxSafeHeight);
+  }, [world.terrain, heightScale, waterThresholdHeight]);
   
   return (
     <mesh 
