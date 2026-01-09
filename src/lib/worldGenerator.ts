@@ -32,7 +32,7 @@ function setup() {
   
   var pathPoints = [];
   var numPaths = floor(2 + pathDensityVal * 6);
-  var pathWidth = 1.0 + pathDensityVal * 0.4;
+  var pathWidth = 1.2;
   var flowScale = 0.06 + pathDensityVal * 0.02;
   var flowStrength = 0.8 + pathDensityVal * 0.4;
   
