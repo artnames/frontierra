@@ -225,7 +225,7 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
   useFrame((_, delta) => {
     if (!enabled) return;
     
-    const speed = 8 * delta;
+    const speed = 3 * delta; // Slower walking speed for realistic scale
     const { forward, backward, left, right, up, down } = moveState.current;
     const { yaw, pitch } = rotationState.current;
 

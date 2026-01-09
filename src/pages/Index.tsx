@@ -86,8 +86,10 @@ const Index = () => {
     }
     
     setInteractionMode(mode);
-    // Show sidebar in editor mode, hide in explore mode
-    setShowSidebar(mode === 'editor');
+    // Only auto-open sidebar when switching TO editor mode
+    if (mode === 'editor') {
+      setShowSidebar(true);
+    }
   }, [isOtherPlayerLand, toast]);
   
   // Initialize multiplayer land on first load
