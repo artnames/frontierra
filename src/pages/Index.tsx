@@ -17,6 +17,7 @@ import {
   ReplayFrame
 } from '@/lib/worldContract';
 import { WorldExplorer, InteractionMode } from '@/components/WorldExplorer';
+import { setCameraForLandTransition } from '@/hooks/useFirstPersonControls';
 import { WorldMap2D } from '@/components/WorldMap2D';
 import { WorldContractPanel } from '@/components/WorldContractPanel';
 import { ReplayControls } from '@/components/ReplayControls';
@@ -60,10 +61,16 @@ const Index = () => {
     randomizeSeed
   } = useWorldParams();
 
+  // Handle land transition - reposition camera at entry point
+  const handleLandTransition = useCallback((entryPosition: { x: number; z: number }) => {
+    setCameraForLandTransition(entryPosition.x, entryPosition.z);
+  }, []);
+  
   // Multiplayer world management - use authenticated user ID
   const multiplayer = useMultiplayerWorld({
     autoCreate: worldMode === 'multiplayer' && isAuthenticated,
-    initialPlayerId: user?.id
+    initialPlayerId: user?.id,
+    onLandTransition: handleLandTransition
   });
   
   // Check if we're on someone else's land (multiplayer)
@@ -237,7 +244,11 @@ const Index = () => {
   
   const handlePositionUpdate = useCallback((pos: { x: number; y: number; z: number }) => {
     setPlayerPosition(pos);
-  }, []);
+    // Update multiplayer position tracking for edge transitions
+    if (worldMode === 'multiplayer') {
+      multiplayer.updatePlayerPosition(pos.x, pos.z);
+    }
+  }, [worldMode, multiplayer.updatePlayerPosition]);
 
   const isInvalid = deterministicTest && !deterministicTest.isValid;
 

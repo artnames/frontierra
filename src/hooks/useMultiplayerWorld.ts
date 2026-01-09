@@ -30,6 +30,7 @@ interface MultiplayerWorldState {
 interface UseMultiplayerWorldOptions {
   initialPlayerId?: string;
   autoCreate?: boolean;  // Auto-create land if player doesn't have one
+  onLandTransition?: (entryPosition: { x: number; z: number }) => void;  // Called when transitioning to new land
 }
 
 export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
@@ -91,6 +92,8 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
       }));
       // Force regenerate world with new land's parameters
       forceRegenerate();
+      // Notify parent to reposition camera
+      options.onLandTransition?.(entryPosition);
     } else {
       // No land at edge - push player back
       setState(prev => ({
@@ -101,9 +104,10 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
         }
       }));
     }
-  }, [forceRegenerate]);
+  }, [forceRegenerate, options.onLandTransition]);
   
   const edgeTransition = useEdgeTransition({
+    playerId: state.playerId,
     onTransitionComplete: handleTransitionComplete,
     onTransitionFailed: (error) => {
       console.error('[MultiplayerWorld] Transition failed:', error);
