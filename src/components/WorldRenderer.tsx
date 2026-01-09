@@ -180,35 +180,14 @@ function BridgePlank({ x, z, waterLevel }: { x: number; z: number; waterLevel: n
   
   return (
     <group position={[x, bridgeHeight, z]}>
-      {/* Main plank */}
+      {/* Simple flat plank - no barriers */}
       <mesh>
-        <boxGeometry args={[0.95, 0.1, 0.95]} />
+        <boxGeometry args={[1.0, 0.15, 1.0]} />
         <meshLambertMaterial color="#6b4423" />
       </mesh>
-      {/* Side rails */}
-      <mesh position={[-0.4, 0.15, 0]}>
-        <boxGeometry args={[0.05, 0.2, 0.9]} />
-        <meshLambertMaterial color="#5a3a1a" />
-      </mesh>
-      <mesh position={[0.4, 0.15, 0]}>
-        <boxGeometry args={[0.05, 0.2, 0.9]} />
-        <meshLambertMaterial color="#5a3a1a" />
-      </mesh>
-      {/* Support posts at corners */}
-      <mesh position={[-0.4, -0.3, -0.4]}>
-        <cylinderGeometry args={[0.04, 0.04, 0.5, 6]} />
-        <meshLambertMaterial color="#4a2a10" />
-      </mesh>
-      <mesh position={[0.4, -0.3, -0.4]}>
-        <cylinderGeometry args={[0.04, 0.04, 0.5, 6]} />
-        <meshLambertMaterial color="#4a2a10" />
-      </mesh>
-      <mesh position={[-0.4, -0.3, 0.4]}>
-        <cylinderGeometry args={[0.04, 0.04, 0.5, 6]} />
-        <meshLambertMaterial color="#4a2a10" />
-      </mesh>
-      <mesh position={[0.4, -0.3, 0.4]}>
-        <cylinderGeometry args={[0.04, 0.04, 0.5, 6]} />
+      {/* Subtle support beam underneath */}
+      <mesh position={[0, -0.2, 0]}>
+        <boxGeometry args={[0.15, 0.25, 0.8]} />
         <meshLambertMaterial color="#4a2a10" />
       </mesh>
     </group>
