@@ -66,14 +66,12 @@ const Index = () => {
   // Force explore mode when on someone else's land
   const effectiveInteractionMode: InteractionMode = isOtherPlayerLand ? 'explore' : interactionMode;
 
-  // Ensure the panel opens when switching into editor mode
+  // Ensure the panel opens when switching into editor mode (but don't auto-close in explore)
   useEffect(() => {
     if (effectiveInteractionMode === 'editor') {
       setShowSidebar(true);
     }
-    if (effectiveInteractionMode === 'explore') {
-      setShowSidebar(false);
-    }
+    // Don't auto-close in explore mode - let user control sidebar visibility
   }, [effectiveInteractionMode]);
   
   // Handle mode changes
@@ -328,17 +326,15 @@ const Index = () => {
           </div>
           
           <div className="flex items-center gap-2">
-            {effectiveInteractionMode === 'editor' && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowSidebar(!showSidebar)}
-                className="text-xs gap-1"
-              >
-                <Settings className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{showSidebar ? 'Hide' : 'Show'} Panel</span>
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="text-xs gap-1"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{showSidebar ? 'Hide' : 'Show'} Panel</span>
+            </Button>
             <Button
               variant="outline"
               size="sm"

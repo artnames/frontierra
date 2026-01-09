@@ -55,7 +55,7 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
         const spawnX = world.spawnPoint.x;
         const spawnZ = world.spawnPoint.y; // world y -> Three.js z
         const terrainHeight = getElevationAt(world, spawnX, spawnZ);
-        const eyeHeight = 1.8;
+        const eyeHeight = 0.7; // Lowered 60% from 1.8 for realistic tree scale
         
         position.current.set(spawnX, terrainHeight + eyeHeight, spawnZ);
         manualHeightOffset.current = 0;
@@ -266,17 +266,17 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
 
         // Update height based on terrain + manual offset
         const terrainHeight = getElevationAt(world, newX, newZ);
-        position.current.y = terrainHeight + 1.8 + manualHeightOffset.current;
+        position.current.y = terrainHeight + 0.7 + manualHeightOffset.current;
       } else if (inBounds) {
         // Explore mode: try sliding along obstacles (water edges)
         if (isWalkable(world, newX, position.current.z)) {
           position.current.x = newX;
           const terrainHeight = getElevationAt(world, newX, position.current.z);
-          position.current.y = terrainHeight + 1.8 + manualHeightOffset.current;
+          position.current.y = terrainHeight + 0.7 + manualHeightOffset.current;
         } else if (isWalkable(world, position.current.x, newZ)) {
           position.current.z = newZ;
           const terrainHeight = getElevationAt(world, position.current.x, newZ);
-          position.current.y = terrainHeight + 1.8 + manualHeightOffset.current;
+          position.current.y = terrainHeight + 0.7 + manualHeightOffset.current;
         }
       }
     }
@@ -289,13 +289,13 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
       if (down) {
         manualHeightOffset.current = Math.max(-1, manualHeightOffset.current - speed);
         const terrainHeight = getElevationAt(world, position.current.x, position.current.z);
-        position.current.y = Math.max(terrainHeight + 0.5, terrainHeight + 1.8 + manualHeightOffset.current);
+        position.current.y = Math.max(terrainHeight + 0.3, terrainHeight + 0.7 + manualHeightOffset.current);
       }
       
       // Apply current height with offset
       if (up || down) {
         const terrainHeight = getElevationAt(world, position.current.x, position.current.z);
-        position.current.y = terrainHeight + 1.8 + manualHeightOffset.current;
+        position.current.y = terrainHeight + 0.7 + manualHeightOffset.current;
       }
     } else {
       // Ground-locked mode - always snap to terrain
