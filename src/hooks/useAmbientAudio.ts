@@ -22,12 +22,17 @@ interface AudioLayer {
   currentVolume: number;
 }
 
-// Audio URLs - using free ambient sounds (placeholders for actual assets)
+// Audio URLs - using longer seamless ambient loops from freesound.org (CC0/public domain)
+// These are longer clips (30s-60s+) with smooth looping and no abrupt breaks
 const AUDIO_SOURCES = {
-  forest: 'https://assets.mixkit.co/active_storage/sfx/212/212-preview.mp3',
-  water: 'https://assets.mixkit.co/active_storage/sfx/2515/2515-preview.mp3', 
-  wind: 'https://assets.mixkit.co/active_storage/sfx/2432/2432-preview.mp3',
-  night: 'https://assets.mixkit.co/active_storage/sfx/2403/2403-preview.mp3'
+  // Gentle forest ambience with birds - smooth loop
+  forest: 'https://cdn.freesound.org/previews/531/531015_5765281-lq.mp3',
+  // Soft flowing stream - seamless
+  water: 'https://cdn.freesound.org/previews/398/398155_2915876-lq.mp3', 
+  // Light wind ambience - subtle and continuous
+  wind: 'https://cdn.freesound.org/previews/456/456058_5121236-lq.mp3',
+  // Night crickets and insects - gentle ambient loop
+  night: 'https://cdn.freesound.org/previews/377/377966_5450487-lq.mp3'
 };
 
 // Calculate terrain composition around player
