@@ -219,8 +219,9 @@ export function ForestTrees({ world, useRichMaterials = false, worldX = 0, world
 }
 
 // Ground offset to sink vegetation into terrain for better connection
-const TREE_GROUND_OFFSET = -0.15; // Trees sink slightly into ground
-const SMALL_VEG_GROUND_OFFSET = -0.05; // Small plants sink less
+// Increased offsets to handle steep slopes where elevation varies within a cell
+const TREE_GROUND_OFFSET = -0.35; // Trees sink deeper into ground for slope stability
+const SMALL_VEG_GROUND_OFFSET = -0.12; // Small plants also need more offset on slopes
 
 // Main vegetation component that renders the appropriate type
 function Vegetation({ x, y, z, scale, type, colorVariant, rotation }: VegetationItem) {
