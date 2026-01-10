@@ -89,11 +89,11 @@ function FirstPersonScene({
       
       {/* Textured terrain when enabled, fallback to vertex colors */}
       {useTextures ? (
-        <TexturedTerrainMesh 
-          world={world} 
-          worldX={worldX} 
+        <TexturedTerrainMesh
+          world={world}
+          worldX={worldX}
           worldY={worldY}
-          texturesEnabled={true} 
+          texturesEnabled={true}
         />
       ) : (
         <TerrainMesh world={world} />
