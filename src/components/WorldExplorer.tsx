@@ -103,7 +103,7 @@ function FirstPersonScene({
       
       <TimeAwareWaterPlane world={world} worldX={worldX} worldY={worldY} />
       <Bridges world={world} />
-      {showVegetation && <ForestTrees world={world} />}
+      {showVegetation && <ForestTrees world={world} useRichMaterials={useTextures} />}
       <PlantedObject world={world} isDiscovered={isDiscovered} />
       {/* Grid overlay hidden by default in explore mode */}
       {interactionMode === 'editor' && <GridOverlay world={world} />}
