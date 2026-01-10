@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy, Check, RefreshCw, Shuffle } from 'lucide-react';
+import { Copy, Check, RefreshCw, Shuffle, Music, Volume2 } from 'lucide-react';
 import { WorldParams, VAR_LABELS } from '@/lib/worldGenerator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +28,18 @@ export function ControlPanel({
 }: ControlPanelProps) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
-  const { materialRichness, toggleMaterialRichness, showVegetation, toggleVegetation } = useVisualSettings();
+  const { 
+    materialRichness, 
+    toggleMaterialRichness, 
+    showVegetation, 
+    toggleVegetation,
+    musicEnabled,
+    toggleMusic,
+    sfxEnabled,
+    toggleSfx,
+    masterVolume,
+    setMasterVolume
+  } = useVisualSettings();
 
   const handleCopyLink = async () => {
     const url = getShareUrl();
@@ -124,7 +135,7 @@ export function ControlPanel({
                 Material richness
               </Label>
               <p className="text-xs text-muted-foreground">
-                Enables detailed terrain textures.
+                Detailed terrain textures.
               </p>
             </div>
             <Switch
@@ -140,13 +151,69 @@ export function ControlPanel({
                 Vegetation
               </Label>
               <p className="text-xs text-muted-foreground">
-                Shows trees, flowers, and plants.
+                Trees, flowers, and plants.
               </p>
             </div>
             <Switch
               id="show-vegetation"
               checked={showVegetation}
               onCheckedChange={toggleVegetation}
+            />
+          </div>
+        </div>
+        
+        {/* Audio Settings */}
+        <div className="space-y-3 pt-2 border-t border-border">
+          <div className="data-label flex items-center gap-2">
+            <Volume2 className="w-3.5 h-3.5" />
+            Audio Settings
+          </div>
+          
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="music-enabled" className="text-sm font-medium cursor-pointer flex items-center gap-1.5">
+                <Music className="w-3.5 h-3.5" />
+                Ambient Music
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Cinematic background music.
+              </p>
+            </div>
+            <Switch
+              id="music-enabled"
+              checked={musicEnabled}
+              onCheckedChange={toggleMusic}
+            />
+          </div>
+          
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="sfx-enabled" className="text-sm font-medium cursor-pointer">
+                Environment SFX
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Wind, water, and nature sounds.
+              </p>
+            </div>
+            <Switch
+              id="sfx-enabled"
+              checked={sfxEnabled}
+              onCheckedChange={toggleSfx}
+            />
+          </div>
+          
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-center">
+              <Label className="text-xs text-muted-foreground">Master Volume</Label>
+              <span className="text-xs font-mono text-foreground">{Math.round(masterVolume * 100)}%</span>
+            </div>
+            <Slider
+              value={[masterVolume * 100]}
+              onValueChange={([v]) => setMasterVolume(v / 100)}
+              min={0}
+              max={100}
+              step={5}
+              className="w-full"
             />
           </div>
         </div>

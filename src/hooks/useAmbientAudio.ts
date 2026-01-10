@@ -1,4 +1,4 @@
-// Ambient Audio System - Terrain-based soundscape
+// Ambient Audio System - Cinematic music + environmental SFX
 // Client-only, no syncing, no gameplay impact
 
 import { useEffect, useRef, useMemo, useCallback } from 'react';
@@ -12,6 +12,8 @@ interface AmbientAudioOptions {
   worldX?: number;
   worldY?: number;
   enabled?: boolean;
+  musicEnabled?: boolean;
+  sfxEnabled?: boolean;
   masterVolume?: number;
 }
 
@@ -20,19 +22,27 @@ interface AudioLayer {
   audio: HTMLAudioElement | null;
   targetVolume: number;
   currentVolume: number;
+  category: 'music' | 'sfx';
 }
 
-// Audio URLs - using reliable public domain ambient loops
-// These are actual nature ambient sounds for immersive experience
-const AUDIO_SOURCES = {
-  // Gentle wind through grass/trees
-  wind: 'https://upload.wikimedia.org/wikipedia/commons/4/4f/Wind_noise_sound_effect.ogg',
-  // Forest birds chirping  
-  forest: 'https://upload.wikimedia.org/wikipedia/commons/7/7d/Bird_singing.ogg',
-  // Flowing stream/brook
-  water: 'https://upload.wikimedia.org/wikipedia/commons/4/4f/Stream_in_the_woods.ogg',
-  // Night crickets/insects
-  night: 'https://upload.wikimedia.org/wikipedia/commons/0/03/Crickets_at_night.ogg',
+// Cinematic ambient music - royalty-free atmospheric tracks
+const MUSIC_SOURCES = {
+  // Atmospheric ambient exploration music
+  ambient: 'https://cdn.pixabay.com/audio/2022/10/25/audio_52d3d90ffc.mp3',
+  // Calm cinematic underscore
+  cinematic: 'https://cdn.pixabay.com/audio/2023/09/04/audio_9f8e251f1d.mp3',
+};
+
+// Environmental SFX - nature sounds
+const SFX_SOURCES = {
+  // Wind ambience
+  wind: 'https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a73467.mp3',
+  // Water/stream sounds
+  water: 'https://cdn.pixabay.com/audio/2021/08/09/audio_dc39bba3b8.mp3',
+  // Forest birds
+  forest: 'https://cdn.pixabay.com/audio/2022/02/07/audio_5f5d6687f1.mp3',
+  // Night crickets
+  night: 'https://cdn.pixabay.com/audio/2021/04/06/audio_844c5c7d2b.mp3',
 };
 
 // Calculate terrain composition around player
@@ -97,7 +107,9 @@ export function useAmbientAudio({
   worldX = 0,
   worldY = 0,
   enabled = true,
-  masterVolume = 0.3,
+  musicEnabled = true,
+  sfxEnabled = true,
+  masterVolume = 0.4,
 }: AmbientAudioOptions) {
   const audioLayersRef = useRef<Map<string, AudioLayer>>(new Map());
   const fadeIntervalRef = useRef<number | null>(null);
@@ -124,13 +136,10 @@ export function useAmbientAudio({
         const a = layer.audio;
         if (!a) return;
         a.muted = false;
-        a.play().catch(() => {
-          // Intentionally ignored (autoplay policies / network blockers)
-        });
+        a.play().catch(() => {});
       });
     };
 
-    // Be generous: different browsers treat different events as "user gesture".
     window.addEventListener('pointerdown', handleInteraction, { once: true, capture: true });
     window.addEventListener('click', handleInteraction, { once: true, capture: true });
     window.addEventListener('keydown', handleInteraction, { once: true, capture: true });
@@ -144,28 +153,26 @@ export function useAmbientAudio({
     };
   }, []);
 
-  // Initialize audio layers
-  const initializeLayer = useCallback((id: string, src: string) => {
+  // Initialize audio layer
+  const initializeLayer = useCallback((id: string, src: string, category: 'music' | 'sfx') => {
     if (audioLayersRef.current.has(id)) return;
 
     const audio = new Audio();
     audio.loop = true;
     audio.volume = 0;
     audio.preload = 'auto';
-    
-    // Error handling for audio load failures
+    audio.crossOrigin = 'anonymous';
+
     audio.onerror = () => {
       console.warn(`[AmbientAudio] Failed to load: ${id}`);
     };
-    
+
     audio.oncanplaythrough = () => {
-      console.log(`[AmbientAudio] Ready: ${id}`);
       if (hasUserInteracted.current) {
         audio.play().catch(() => {});
       }
     };
-    
-    // Set source after event handlers
+
     audio.src = src;
 
     audioLayersRef.current.set(id, {
@@ -173,13 +180,20 @@ export function useAmbientAudio({
       audio,
       targetVolume: 0,
       currentVolume: 0,
+      category,
     });
   }, []);
 
   // Initialize all layers on mount
   useEffect(() => {
-    Object.entries(AUDIO_SOURCES).forEach(([id, src]) => {
-      initializeLayer(id, src);
+    // Music layers
+    Object.entries(MUSIC_SOURCES).forEach(([id, src]) => {
+      initializeLayer(`music_${id}`, src, 'music');
+    });
+    
+    // SFX layers
+    Object.entries(SFX_SOURCES).forEach(([id, src]) => {
+      initializeLayer(`sfx_${id}`, src, 'sfx');
     });
 
     // Fade loop for smooth transitions
@@ -188,7 +202,7 @@ export function useAmbientAudio({
         if (!layer.audio) return;
 
         const diff = layer.targetVolume - layer.currentVolume;
-        const step = diff * 0.05; // Smooth fade
+        const step = diff * 0.03; // Smooth fade
 
         if (Math.abs(diff) > 0.001) {
           layer.currentVolume += step;
@@ -211,7 +225,7 @@ export function useAmbientAudio({
     };
   }, [initializeLayer]);
 
-  // Update volumes based on terrain and time
+  // Update volumes based on terrain, time, and settings
   useEffect(() => {
     if (!enabled || !world || !world.gridSize) {
       audioLayersRef.current.forEach((layer) => {
@@ -222,32 +236,51 @@ export function useAmbientAudio({
 
     const composition = getTerrainComposition(world, playerPosition.x, playerPosition.y);
 
-    // Forest sounds
-    const forestLayer = audioLayersRef.current.get('forest');
-    if (forestLayer) {
-      forestLayer.targetVolume = composition.forest * masterVolume * (night ? 0.5 : 1.0);
+    // --- MUSIC LAYERS ---
+    const musicVolume = musicEnabled ? masterVolume : 0;
+    
+    // Main ambient music - always playing at base level
+    const ambientLayer = audioLayersRef.current.get('music_ambient');
+    if (ambientLayer) {
+      ambientLayer.targetVolume = musicVolume * 0.6;
+    }
+    
+    // Cinematic layer - slightly lower, adds depth
+    const cinematicLayer = audioLayersRef.current.get('music_cinematic');
+    if (cinematicLayer) {
+      cinematicLayer.targetVolume = musicVolume * 0.35;
     }
 
-    // Water sounds
-    const waterLayer = audioLayersRef.current.get('water');
-    if (waterLayer) {
-      waterLayer.targetVolume = composition.water * masterVolume * 1.2;
-    }
+    // --- SFX LAYERS ---
+    const sfxVolume = sfxEnabled ? masterVolume : 0;
 
-    // Wind (mountains) + a tiny baseline so the world is never totally silent
-    const windLayer = audioLayersRef.current.get('wind');
+    // Wind - base layer, stronger in mountains
+    const windLayer = audioLayersRef.current.get('sfx_wind');
     if (windLayer) {
-      const baseline = 0.08; // subtle bed layer
-      windLayer.targetVolume = (baseline + composition.mountain * 0.8) * masterVolume;
+      const windBase = 0.15;
+      const mountainBoost = composition.mountain * 0.4;
+      windLayer.targetVolume = (windBase + mountainBoost) * sfxVolume;
     }
 
-    // Night insects/ambient
-    const nightLayer = audioLayersRef.current.get('night');
+    // Water - near rivers/water
+    const waterLayer = audioLayersRef.current.get('sfx_water');
+    if (waterLayer) {
+      waterLayer.targetVolume = composition.water * sfxVolume * 0.8;
+    }
+
+    // Forest birds - in forests, daytime
+    const forestLayer = audioLayersRef.current.get('sfx_forest');
+    if (forestLayer) {
+      forestLayer.targetVolume = composition.forest * sfxVolume * (night ? 0.1 : 0.6);
+    }
+
+    // Night crickets - at night
+    const nightLayer = audioLayersRef.current.get('sfx_night');
     if (nightLayer) {
-      nightLayer.targetVolume = night ? masterVolume * 0.6 : 0;
+      nightLayer.targetVolume = night ? sfxVolume * 0.5 : 0;
     }
 
-    // If user already interacted, keep trying to start any layer that has audible target volume.
+    // Start playing any layers that should be audible
     if (hasUserInteracted.current) {
       audioLayersRef.current.forEach((layer) => {
         const a = layer.audio;
@@ -257,7 +290,7 @@ export function useAmbientAudio({
         }
       });
     }
-  }, [world, playerPosition, night, enabled, masterVolume]);
+  }, [world, playerPosition, night, enabled, musicEnabled, sfxEnabled, masterVolume]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -270,4 +303,3 @@ export function useAmbientAudio({
     };
   }, []);
 }
-
