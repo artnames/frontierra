@@ -2,7 +2,7 @@
 // Replaces flat vertex colors with rich, deterministic textures.
 // CRITICAL: All textures are deterministic - same inputs = same output.
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { WorldData, TerrainCell } from '@/lib/worldData';
 import {
