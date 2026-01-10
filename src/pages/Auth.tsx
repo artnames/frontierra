@@ -8,8 +8,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Globe, User, Lock, Mail, Loader2, ArrowRight } from 'lucide-react';
+import { User, Lock, Mail, Loader2, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import frontierraLogo from '@/assets/frontierra-logo.png';
 
 // Validation schemas
 const emailSchema = z.string().email('Invalid email address');
@@ -124,24 +125,25 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
+      {/* Header with Logo */}
       <header className="border-b border-border bg-card/80 backdrop-blur-sm">
-        <div className="px-6 py-4 flex items-center gap-3">
-          <Globe className="w-6 h-6 text-primary" />
-          <div>
-            <h1 className="font-display text-lg font-bold text-foreground glow-text">
-              Frontierra <span className="text-xs font-normal text-muted-foreground">by Nexart</span>
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Claim Your Land
-            </p>
-          </div>
+        <div className="px-6 py-4 flex items-center justify-center">
+          <img 
+            src={frontierraLogo} 
+            alt="Frontierra" 
+            className="h-16 sm:h-20 object-contain"
+          />
         </div>
       </header>
 
       {/* Main Content */}
       <main className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-md">
+          {/* Tagline */}
+          <p className="text-center text-muted-foreground text-sm mb-6">
+            <span className="text-primary">by Nexart</span> — Claim Your Land
+          </p>
+          
           {/* Auth Card */}
           <div className="bg-card border border-border rounded-lg p-6 shadow-xl">
             {/* Mode Toggle */}
