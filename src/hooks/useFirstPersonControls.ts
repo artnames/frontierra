@@ -21,6 +21,22 @@ const globalCameraState = {
   pendingTransition: null as { x: number; z: number } | null  // Pending position for land transition
 };
 
+// Global mobile movement state - can be set from outside the hook
+export const mobileMovement = {
+  forward: false,
+  backward: false,
+  left: false,
+  right: false
+};
+
+// Function to update mobile movement from MobileControls component
+export function setMobileMovement(forward: boolean, backward: boolean, left: boolean, right: boolean) {
+  mobileMovement.forward = forward;
+  mobileMovement.backward = backward;
+  mobileMovement.left = left;
+  mobileMovement.right = right;
+}
+
 export function useFirstPersonControls({ world, onPositionChange, preservePosition = true, enabled = true, allowVerticalMovement = true }: FirstPersonControlsProps) {
   const { camera, gl } = useThree();
   const moveState = useRef({
@@ -255,7 +271,12 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
     }
     
     const speed = 3 * delta; // Slower walking speed for realistic scale
-    const { forward, backward, left, right, up, down } = moveState.current;
+    // Merge keyboard and mobile joystick input
+    const forward = moveState.current.forward || mobileMovement.forward;
+    const backward = moveState.current.backward || mobileMovement.backward;
+    const left = moveState.current.left || mobileMovement.left;
+    const right = moveState.current.right || mobileMovement.right;
+    const { up, down } = moveState.current;
     const { yaw, pitch } = rotationState.current;
 
     // Calculate movement direction in XZ plane (ground plane)
