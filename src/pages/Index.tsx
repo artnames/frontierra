@@ -4,8 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useWorldParams } from '@/hooks/useWorldParams';
 import { useAuth } from '@/hooks/useAuth';
+import { useVisualSettings } from '@/hooks/useVisualSettings';
 import { VAR_LABELS } from '@/lib/worldGenerator';
 import { generateWorldData } from '@/lib/worldData';
 import { 
@@ -50,6 +53,9 @@ const Index = () => {
   
   // Authentication
   const { user, isAuthenticated, isLoading: isAuthLoading, signOut } = useAuth();
+  
+  // Visual settings (localStorage only)
+  const { materialRichness, toggleMaterialRichness } = useVisualSettings();
   
   const [searchParams, setSearchParams] = useSearchParams();
   
@@ -433,6 +439,10 @@ const Index = () => {
               replayFrame={replayFrame}
               interactionMode={effectiveInteractionMode}
               onModeChange={handleInteractionModeChange}
+              worldContext={worldMode === 'multiplayer' && multiplayer.currentLand ? {
+                worldX: multiplayer.currentLand.pos_x,
+                worldY: multiplayer.currentLand.pos_y
+              } : undefined}
             />
           ) : (
             <div className="w-full h-full flex bg-background">
@@ -653,6 +663,27 @@ const Index = () => {
                       You can only edit your own land
                     </p>
                   )}
+                  
+                  {/* Visual Settings */}
+                  <div className="pt-3 mt-3 border-t border-border space-y-3">
+                    <div className="data-label text-[10px]">Visual Settings</div>
+                    
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-0.5 flex-1">
+                        <Label htmlFor="material-richness" className="text-xs font-medium cursor-pointer">
+                          Material richness
+                        </Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">
+                          Detailed textures. Turn off for performance.
+                        </p>
+                      </div>
+                      <Switch
+                        id="material-richness"
+                        checked={materialRichness}
+                        onCheckedChange={toggleMaterialRichness}
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
