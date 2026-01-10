@@ -32,6 +32,9 @@ const MATERIAL_KINDS: MaterialKind[] = [
   'sand',
 ];
 
+// UV scale for world-aligned textures (smaller = more repetition = more visible texture)
+const UV_SCALE = 0.25;
+
 // Fallback colors when textures aren't ready
 const FALLBACK_COLORS: Record<string, { r: number; g: number; b: number }> = {
   ground: { r: 0.50, g: 0.44, b: 0.28 },
@@ -165,10 +168,12 @@ export function TexturedTerrainMesh({
       colors[i * 3 + 1] = g;
       colors[i * 3 + 2] = b;
 
-      // UV coordinates - tile each cell with world-space offset for variety
-      const tileScale = 4;
-      uvs[i * 2] = (x + worldX * size) / tileScale;
-      uvs[i * 2 + 1] = (flippedY + worldY * size) / tileScale;
+      // WORLD-ALIGNED UV coordinates
+      // Use absolute world coordinates so textures tile seamlessly across land boundaries
+      const worldAbsX = x + worldX * size;
+      const worldAbsZ = flippedY + worldY * size;
+      uvs[i * 2] = worldAbsX * UV_SCALE;
+      uvs[i * 2 + 1] = worldAbsZ * UV_SCALE;
     }
 
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -239,10 +244,20 @@ export function TexturedTerrainMesh({
 
     const mats = MATERIAL_KINDS.map((kind) => {
       const tex = textures.get(kind)!;
+      
+      // Configure texture for proper tiling
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.needsUpdate = true;
+      
       const isWater = kind === 'water';
 
+      // CRITICAL: vertexColors = false, color = white to let texture shine through
       return new THREE.MeshStandardMaterial({
         map: tex,
+        color: 0xffffff,
         vertexColors: false,
         side: THREE.DoubleSide,
         roughness: isWater ? 0.35 : 0.85,
