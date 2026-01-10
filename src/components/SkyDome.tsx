@@ -93,36 +93,83 @@ function SkySphereMesh({ zenithColor, horizonColor }: { zenithColor: string; hor
   );
 }
 
-// Sun mesh - billboard that faces camera
+// Sun mesh - multi-layered glow with natural falloff
 function SunMesh({ angle, color, isNightTime }: { angle: number; color: string; isNightTime: boolean }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const glowRef = useRef<THREE.Mesh>(null);
+  const groupRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
   
   // Compute sun position on the sky arc
   const sunPosition = useMemo(() => {
     // Sun rises in east (negative X), sets in west (positive X)
-    // Arc goes from east to west through south
     const x = Math.cos(angle) * SUN_DISTANCE;
-    const y = Math.sin(angle) * SUN_DISTANCE * 0.8; // Slightly flatten the arc
-    const z = -SUN_DISTANCE * 0.3; // Offset south
+    const y = Math.sin(angle) * SUN_DISTANCE * 0.8;
+    const z = -SUN_DISTANCE * 0.3;
     return new THREE.Vector3(x, y, z);
   }, [angle]);
   
-  const sunColor = useMemo(() => hexToColor(color), [color]);
-  const sunSize = isNightTime ? 15 : 25;
-  const glowSize = isNightTime ? 40 : 80;
+  // Create gradient glow material for natural sun
+  const glowMaterial = useMemo(() => {
+    const baseColor = hexToColor(color);
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        sunColor: { value: baseColor },
+        isNight: { value: isNightTime ? 1.0 : 0.0 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 sunColor;
+        uniform float isNight;
+        varying vec2 vUv;
+        
+        void main() {
+          vec2 center = vUv - 0.5;
+          float dist = length(center) * 2.0;
+          
+          // Multi-layer glow falloff
+          float core = 1.0 - smoothstep(0.0, 0.15, dist);
+          float inner = (1.0 - smoothstep(0.1, 0.4, dist)) * 0.7;
+          float outer = (1.0 - smoothstep(0.2, 1.0, dist)) * 0.3;
+          
+          float glow = core + inner + outer;
+          
+          // Core is white-hot, edges take sun color
+          vec3 coreColor = mix(vec3(1.0, 1.0, 0.98), sunColor, smoothstep(0.0, 0.3, dist));
+          
+          // Moon is cooler, dimmer
+          if (isNight > 0.5) {
+            coreColor = mix(vec3(0.95, 0.95, 1.0), sunColor * 0.8, smoothstep(0.0, 0.25, dist));
+            glow *= 0.6;
+          }
+          
+          gl_FragColor = vec4(coreColor, glow);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+  }, [color, isNightTime]);
+  
+  // Update uniforms
+  useMemo(() => {
+    glowMaterial.uniforms.sunColor.value = hexToColor(color);
+    glowMaterial.uniforms.isNight.value = isNightTime ? 1.0 : 0.0;
+  }, [glowMaterial, color, isNightTime]);
+  
+  const sunSize = isNightTime ? 50 : 100;
   
   // Update position relative to camera
   useFrame(() => {
-    if (meshRef.current && glowRef.current) {
+    if (groupRef.current) {
       const worldPos = sunPosition.clone().add(camera.position);
-      meshRef.current.position.copy(worldPos);
-      glowRef.current.position.copy(worldPos);
-      
-      // Billboard - always face camera
-      meshRef.current.lookAt(camera.position);
-      glowRef.current.lookAt(camera.position);
+      groupRef.current.position.copy(worldPos);
+      groupRef.current.lookAt(camera.position);
     }
   });
   
@@ -132,27 +179,12 @@ function SunMesh({ angle, color, isNightTime }: { angle: number; color: string; 
   }
   
   return (
-    <>
-      {/* Glow */}
-      <mesh ref={glowRef} renderOrder={-999}>
-        <circleGeometry args={[glowSize, 32]} />
-        <meshBasicMaterial 
-          color={sunColor} 
-          transparent 
-          opacity={isNightTime ? 0.15 : 0.25}
-          depthWrite={false}
-        />
+    <group ref={groupRef}>
+      <mesh renderOrder={-998}>
+        <planeGeometry args={[sunSize, sunSize]} />
+        <primitive object={glowMaterial} attach="material" />
       </mesh>
-      
-      {/* Core */}
-      <mesh ref={meshRef} renderOrder={-998}>
-        <circleGeometry args={[sunSize, 32]} />
-        <meshBasicMaterial 
-          color={isNightTime ? '#e8e8f0' : '#fffef0'} 
-          depthWrite={false}
-        />
-      </mesh>
-    </>
+    </group>
   );
 }
 
