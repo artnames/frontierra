@@ -23,6 +23,7 @@ import {
 import { ForestTrees } from '@/components/ForestTrees';
 import { PlacedBeaconMesh } from '@/components/ActionSystem';
 import { SkyRenderer } from '@/components/SkyRenderer';
+import { TimeOfDayHUD } from '@/components/TimeOfDayHUD';
 import * as THREE from 'three';
 import { useThree, useFrame } from '@react-three/fiber';
 
@@ -220,7 +221,10 @@ export function WorldExplorer({
   }
   
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full overflow-hidden">
+      {/* Sky background layer - renders BEHIND the 3D canvas */}
+      <SkyRenderer worldX={worldX} worldY={worldY} className="z-0" />
+      
       {/* Verifying overlay (non-blocking) */}
       {isVerifying && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
@@ -247,10 +251,11 @@ export function WorldExplorer({
         </div>
       )}
       
+      {/* 3D Canvas with transparent background to show sky */}
       <Canvas
         camera={{ fov: 45, near: 0.1, far: 200 }}
-        gl={{ antialias: true, alpha: false }}
-        style={{ background: '#0a1520' }}
+        gl={{ antialias: true, alpha: true }}
+        style={{ position: 'absolute', inset: 0, zIndex: 1 }}
       >
         <FirstPersonScene 
           world={world} 
@@ -264,9 +269,6 @@ export function WorldExplorer({
           worldY={worldY}
         />
       </Canvas>
-      
-      {/* Sky background layer */}
-      <SkyRenderer worldX={worldX} worldY={worldY} />
       
       {/* Replay mode indicator */}
       {isReplaying && (
@@ -339,15 +341,20 @@ export function WorldExplorer({
         </div>
       )}
       
-      {/* Proximity indicator */}
-      {!isDiscovered && !isReplaying && (
-        <div className="absolute top-4 right-4 terminal-panel p-3 pointer-events-none">
-          <div className="text-xs">
-            <span className="text-muted-foreground">DISTANCE TO OBJECT:</span>
-            <div className="data-value text-lg font-mono mt-1">
-              {distanceToObject(world, position.x, position.y).toFixed(1)}
+      {/* Time of Day + Proximity indicator */}
+      {!isReplaying && (
+        <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+          <TimeOfDayHUD worldX={worldX} worldY={worldY} />
+          {!isDiscovered && (
+            <div className="terminal-panel p-3 pointer-events-none">
+              <div className="text-xs">
+                <span className="text-muted-foreground">DISTANCE TO OBJECT:</span>
+                <div className="data-value text-lg font-mono mt-1">
+                  {distanceToObject(world, position.x, position.y).toFixed(1)}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

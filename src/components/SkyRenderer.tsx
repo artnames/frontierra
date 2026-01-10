@@ -193,7 +193,6 @@ export function SkyRenderer({
       ref={canvasRef}
       className={`absolute inset-0 w-full h-full pointer-events-none ${className}`}
       style={{ 
-        zIndex: -1,
         objectFit: 'cover'
       }}
     />
