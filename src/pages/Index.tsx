@@ -31,6 +31,7 @@ import { MultiplayerHUD } from '@/components/MultiplayerHUD';
 import { WorldAMap } from '@/components/WorldAMap';
 import { SocialPanel } from '@/components/social/SocialPanel';
 import { UnclaimedLandModal } from '@/components/UnclaimedLandModal';
+import { ClaimLandModal } from '@/components/ClaimLandModal';
 import { useMultiplayerWorld } from '@/hooks/useMultiplayerWorld';
 import { useToast } from '@/hooks/use-toast';
 import { useSearchParams } from 'react-router-dom';
@@ -51,6 +52,8 @@ const Index = () => {
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayFrame, setReplayFrame] = useState<ReplayFrame | null>(null);
   const [playerPosition, setPlayerPosition] = useState({ x: 32, y: 32, z: 0 });
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  const [pendingMultiplayerSwitch, setPendingMultiplayerSwitch] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -128,14 +131,46 @@ const Index = () => {
     }
   }, [isOtherPlayerLand, toast]);
   
-  // Initialize and navigate to player's claimed land when switching to multiplayer
-  useEffect(() => {
-    if (worldMode === 'multiplayer' && isAuthenticated && user?.id) {
-      if (!multiplayer.currentLand && !multiplayer.isLoading) {
-        multiplayer.initializePlayerLand(user.id);
-      }
+  // Handle multiplayer switch - check if player has land or needs to claim
+  const handleMultiplayerClick = useCallback(async () => {
+    if (!isAuthenticated) {
+      navigate('/auth');
+      return;
     }
-  }, [worldMode, isAuthenticated, user?.id, multiplayer.currentLand, multiplayer.isLoading, multiplayer.initializePlayerLand]);
+    
+    if (!user?.id) return;
+    
+    // Check if player already has a land
+    setPendingMultiplayerSwitch(true);
+    const existingLand = await import('@/lib/multiplayer/landRegistry').then(
+      m => m.getLandByPlayerId(user.id)
+    );
+    
+    if (existingLand) {
+      // Player has land - switch to multiplayer and navigate to their land
+      setWorldMode('multiplayer');
+      multiplayer.initializePlayerLand(user.id);
+    } else {
+      // Player has no land - show claim modal
+      setShowClaimModal(true);
+    }
+    setPendingMultiplayerSwitch(false);
+  }, [isAuthenticated, user?.id, navigate, multiplayer]);
+
+  // Handle land claimed from modal
+  const handleLandClaimed = useCallback((land: import('@/lib/multiplayer/types').PlayerLand) => {
+    setShowClaimModal(false);
+    setWorldMode('multiplayer');
+    // Re-initialize to load the newly claimed land
+    if (user?.id) {
+      multiplayer.initializePlayerLand(user.id);
+    }
+    toast({
+      title: 'Land Claimed!',
+      description: `You now own land at position (${land.pos_x}, ${land.pos_y})`,
+    });
+  }, [user?.id, multiplayer, toast]);
+  
   
   // Handle sign out
   const handleSignOut = useCallback(async () => {
@@ -320,18 +355,12 @@ const Index = () => {
               <Button
                 variant={worldMode === 'multiplayer' ? 'default' : 'ghost'}
                 size="sm"
-                onClick={() => {
-                  if (!isAuthenticated) {
-                    navigate('/auth');
-                  } else {
-                    setWorldMode('multiplayer');
-                  }
-                }}
+                onClick={handleMultiplayerClick}
                 className="gap-1.5 h-7 text-xs"
-                disabled={isReplaying}
+                disabled={isReplaying || pendingMultiplayerSwitch}
               >
                 <Users className="w-3.5 h-3.5" />
-                {isAuthenticated ? 'Multiplayer' : 'Login'}
+                {pendingMultiplayerSwitch ? 'Loading...' : isAuthenticated ? 'Multiplayer' : 'Login'}
               </Button>
             </div>
             
@@ -462,17 +491,14 @@ const Index = () => {
                 variant={worldMode === 'multiplayer' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => {
-                  if (!isAuthenticated) {
-                    navigate('/auth');
-                  } else {
-                    setWorldMode('multiplayer');
-                  }
+                  handleMultiplayerClick();
                   setShowMobileMenu(false);
                 }}
                 className="flex-1 gap-1.5"
+                disabled={pendingMultiplayerSwitch}
               >
                 <Users className="w-4 h-4" />
-                {isAuthenticated ? 'Multiplayer' : 'Login'}
+                {pendingMultiplayerSwitch ? 'Loading...' : isAuthenticated ? 'Multiplayer' : 'Login'}
               </Button>
             </div>
             
@@ -572,6 +598,16 @@ const Index = () => {
               onClose={multiplayer.dismissUnclaimedAttempt}
               direction={multiplayer.unclaimedAttempt.direction}
               gridPosition={multiplayer.unclaimedAttempt.gridPosition}
+            />
+          )}
+          
+          {/* Claim Land Modal - shown when entering multiplayer without a land */}
+          {user?.id && (
+            <ClaimLandModal
+              open={showClaimModal}
+              onClose={() => setShowClaimModal(false)}
+              onClaimed={handleLandClaimed}
+              playerId={user.id}
             />
           )}
           {/* Multiplayer HUD */}
