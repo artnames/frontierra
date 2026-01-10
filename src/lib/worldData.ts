@@ -336,8 +336,12 @@ export function isWalkable(world: WorldData, worldX: number, worldY: number): bo
 }
 
 export function distanceToObject(world: WorldData, worldX: number, worldY: number): number {
+  // COORDINATE FIX: The player moves in Three.js space where Y is flipped
+  // The planted object is stored in grid coordinates, so we flip it to match player space
+  const objectFlippedY = world.gridSize - 1 - world.plantedObject.y;
+  
   const dx = worldX - world.plantedObject.x;
-  const dy = worldY - world.plantedObject.y;
+  const dy = worldY - objectFlippedY;
   return Math.sqrt(dx * dx + dy * dy);
 }
 
