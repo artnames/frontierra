@@ -2,6 +2,7 @@ import { useCallback, useState, useMemo, useEffect } from 'react';
 import { Eye, Map, Copy, Check, Shuffle, Settings, ChevronLeft, Users, Globe, Compass, Pencil, LogIn, LogOut, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
+import frontierraLogoHeader from '@/assets/frontierra-logo-header.png';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
@@ -279,15 +280,17 @@ const Index = () => {
         <div className="px-3 sm:px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Logo - always visible */}
-            <div className="min-w-0">
-              <h1 className="font-display text-base sm:text-lg font-bold text-foreground glow-text truncate">
-                Frontierra
-              </h1>
-              <p className="text-[10px] sm:text-xs text-muted-foreground truncate max-w-[120px] sm:max-w-none">
+            <div className="min-w-0 flex items-center gap-2">
+              <img 
+                src={frontierraLogoHeader} 
+                alt="Frontierra" 
+                className="h-8 sm:h-10 object-contain"
+              />
+              <p className="text-[10px] sm:text-xs text-muted-foreground truncate max-w-[100px] sm:max-w-none hidden sm:block">
                 {worldMode === 'multiplayer' && multiplayer.currentLand ? (
                   <>
                     <span className="text-primary font-mono">{multiplayer.currentLand.seed}</span>
-                    <span className="hidden sm:inline ml-2">
+                    <span className="hidden md:inline ml-2">
                       Grid: <span className="text-accent font-mono">
                         ({multiplayer.currentLand.pos_x}, {multiplayer.currentLand.pos_y})
                       </span>
