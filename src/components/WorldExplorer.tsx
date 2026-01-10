@@ -10,7 +10,7 @@ import {
   ReplayFrame,
   DeterminismTest,
 } from '@/lib/worldContract';
-import { useFirstPersonControls, setCameraToEditorView, setCameraToExploreView } from '@/hooks/useFirstPersonControls';
+import { useFirstPersonControls, setCameraToEditorView, setCameraToExploreView, setMobileMovement } from '@/hooks/useFirstPersonControls';
 import { 
   TerrainMesh, 
   PlantedObject, 
@@ -26,8 +26,10 @@ import { PlacedBeaconMesh } from '@/components/ActionSystem';
 import { SkyDome } from '@/components/SkyDome';
 import { TimeOfDayHUD } from '@/components/TimeOfDayHUD';
 import { DiscoveryToast } from '@/components/DiscoveryToast';
+import { MobileControls } from '@/components/MobileControls';
 import { useAmbientAudio } from '@/hooks/useAmbientAudio';
 import { useVisualSettings } from '@/hooks/useVisualSettings';
+import { useIsMobile } from '@/hooks/use-mobile';
 import * as THREE from 'three';
 import { useThree, useFrame } from '@react-three/fiber';
 
@@ -170,6 +172,14 @@ export function WorldExplorer({
   const [isDiscovered, setIsDiscovered] = useState(false);
   const [showDiscoveryBanner, setShowDiscoveryBanner] = useState(false);
   const [actions, setActions] = useState<WorldAction[]>(initialActions);
+  
+  // Mobile detection
+  const isMobile = useIsMobile();
+  
+  // Handle mobile joystick movement
+  const handleMobileMove = useCallback((forward: boolean, backward: boolean, left: boolean, right: boolean) => {
+    setMobileMovement(forward, backward, left, right);
+  }, []);
   
   // Visual settings (localStorage only, no server sync)
   const { materialRichness, showVegetation, musicEnabled, sfxEnabled, masterVolume } = useVisualSettings();
@@ -393,6 +403,13 @@ export function WorldExplorer({
               </div>
             </div>
           )}
+        </div>
+      )}
+      
+      {/* Mobile Controls - Virtual Joystick */}
+      {isMobile && !isReplaying && interactionMode === 'explore' && (
+        <div className="absolute bottom-6 left-6 z-20">
+          <MobileControls onMove={handleMobileMove} />
         </div>
       )}
     </div>

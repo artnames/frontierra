@@ -1,6 +1,7 @@
 import { useCallback, useState, useMemo, useEffect } from 'react';
-import { Eye, Map, Copy, Check, Shuffle, Settings, ChevronLeft, Users, Globe, Compass, Pencil, LogIn, LogOut } from 'lucide-react';
+import { Eye, Map, Copy, Check, Shuffle, Settings, ChevronLeft, Users, Globe, Compass, Pencil, LogIn, LogOut, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
@@ -43,6 +44,7 @@ const Index = () => {
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('explore');
   const [copied, setCopied] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false); // Default hidden in explore mode
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('worldmap');
   const [deterministicTest, setDeterministicTest] = useState<DeterminismTest | null>(null);
   const [isReplaying, setIsReplaying] = useState(false);
@@ -50,6 +52,7 @@ const Index = () => {
   const [playerPosition, setPlayerPosition] = useState({ x: 32, y: 32, z: 0 });
   const { toast } = useToast();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   
   // Authentication
   const { user, isAuthenticated, isLoading: isAuthLoading, signOut } = useAuth();
@@ -273,17 +276,18 @@ const Index = () => {
     <div className={`h-screen bg-background flex flex-col overflow-hidden ${isInvalid ? 'border-4 border-destructive' : ''}`}>
       {/* Compact Header */}
       <header className={`relative z-50 border-b ${isInvalid ? 'border-destructive bg-destructive/10' : 'border-border bg-card/80'} backdrop-blur-sm flex-shrink-0`}>
-        <div className="px-4 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div>
-             <h1 className="font-display text-lg font-bold text-foreground glow-text">
+        <div className="px-3 sm:px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Logo - always visible */}
+            <div className="min-w-0">
+              <h1 className="font-display text-base sm:text-lg font-bold text-foreground glow-text truncate">
                 Frontierra
               </h1>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[10px] sm:text-xs text-muted-foreground truncate max-w-[120px] sm:max-w-none">
                 {worldMode === 'multiplayer' && multiplayer.currentLand ? (
                   <>
-                    Land: <span className="text-primary font-mono">{multiplayer.currentLand.seed}</span>
-                    <span className="ml-2">
+                    <span className="text-primary font-mono">{multiplayer.currentLand.seed}</span>
+                    <span className="hidden sm:inline ml-2">
                       Grid: <span className="text-accent font-mono">
                         ({multiplayer.currentLand.pos_x}, {multiplayer.currentLand.pos_y})
                       </span>
@@ -292,16 +296,12 @@ const Index = () => {
                 ) : (
                   <>
                     Seed: <span className="text-primary font-mono">{activeParams.seed}</span>
-                    {actions.length > 0 && (
-                      <span className="ml-2">
-                        Actions: <span className="text-accent font-mono">{actions.length}</span>
-                      </span>
-                    )}
                   </>
                 )}
               </p>
             </div>
             
+            {/* Desktop Controls - hidden on mobile */}
             {/* World Mode Toggle */}
             <div className="hidden md:flex items-center gap-1 bg-secondary/50 rounded p-1">
               <Button
@@ -332,8 +332,8 @@ const Index = () => {
               </Button>
             </div>
             
-            {/* View Mode Toggle */}
-            <div className="hidden sm:flex items-center gap-1 bg-secondary rounded p-1">
+            {/* View Mode Toggle - hidden on small screens */}
+            <div className="hidden lg:flex items-center gap-1 bg-secondary rounded p-1">
               <Button
                 variant={viewMode === 'firstperson' ? 'default' : 'ghost'}
                 size="sm"
@@ -356,8 +356,8 @@ const Index = () => {
               </Button>
             </div>
             
-            {/* Interaction Mode Toggle */}
-            <div className="hidden sm:flex items-center gap-1 bg-secondary rounded p-1">
+            {/* Interaction Mode Toggle - hidden on small screens */}
+            <div className="hidden lg:flex items-center gap-1 bg-secondary rounded p-1">
               <Button
                 variant={effectiveInteractionMode === 'explore' ? 'default' : 'ghost'}
                 size="sm"
@@ -382,52 +382,143 @@ const Index = () => {
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          {/* Right side controls */}
+          <div className="flex items-center gap-1 sm:gap-2">
+            {/* Desktop-only buttons */}
             <Button
               variant="outline"
               size="sm"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => setShowSidebar((s) => !s)}
-              className="text-xs gap-1"
+              className="hidden sm:flex text-xs gap-1"
             >
               <Settings className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{showSidebar ? 'Hide' : 'Show'} Panel</span>
+              <span className="hidden md:inline">{showSidebar ? 'Hide' : 'Show'} Panel</span>
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={handleCopyLink}
-              className="gap-1.5"
+              className="gap-1.5 px-2 sm:px-3"
             >
               {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">{copied ? 'Copied!' : 'Share'}</span>
             </Button>
             
-            {/* Auth Button */}
+            {/* Auth Button - simplified on mobile */}
             {isAuthenticated ? (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleSignOut}
-                className="gap-1.5 text-muted-foreground hover:text-foreground"
+                className="hidden sm:flex gap-1.5 text-muted-foreground hover:text-foreground"
                 title={user?.email}
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Sign Out</span>
+                <span className="hidden md:inline">Sign Out</span>
               </Button>
             ) : (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => navigate('/auth')}
-                className="gap-1.5"
+                className="hidden sm:flex gap-1.5"
               >
                 <LogIn className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Login</span>
+                <span className="hidden md:inline">Login</span>
+              </Button>
+            )}
+            
+            {/* Mobile Menu Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className="sm:hidden p-2"
+            >
+              <Menu className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+        
+        {/* Mobile Menu Dropdown */}
+        {showMobileMenu && isMobile && (
+          <div className="absolute top-full left-0 right-0 bg-card/95 backdrop-blur-sm border-b border-border z-50 p-3 space-y-3">
+            {/* World Mode */}
+            <div className="flex gap-2">
+              <Button
+                variant={worldMode === 'solo' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => { setWorldMode('solo'); setShowMobileMenu(false); }}
+                className="flex-1 gap-1.5"
+              >
+                <Globe className="w-4 h-4" />
+                Solo
+              </Button>
+              <Button
+                variant={worldMode === 'multiplayer' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    navigate('/auth');
+                  } else {
+                    setWorldMode('multiplayer');
+                  }
+                  setShowMobileMenu(false);
+                }}
+                className="flex-1 gap-1.5"
+              >
+                <Users className="w-4 h-4" />
+                {isAuthenticated ? 'Multiplayer' : 'Login'}
+              </Button>
+            </div>
+            
+            {/* View Mode */}
+            <div className="flex gap-2">
+              <Button
+                variant={viewMode === 'firstperson' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => { setViewMode('firstperson'); setShowMobileMenu(false); }}
+                className="flex-1 gap-1.5"
+              >
+                <Eye className="w-4 h-4" />
+                3D View
+              </Button>
+              <Button
+                variant={viewMode === 'map' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => { setViewMode('map'); setShowMobileMenu(false); }}
+                className="flex-1 gap-1.5"
+              >
+                <Map className="w-4 h-4" />
+                2D Map
+              </Button>
+            </div>
+            
+            {/* Auth */}
+            {isAuthenticated ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { handleSignOut(); setShowMobileMenu(false); }}
+                className="w-full gap-1.5"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign Out ({user?.email?.split('@')[0]})
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/auth')}
+                className="w-full gap-1.5"
+              >
+                <LogIn className="w-4 h-4" />
+                Login / Sign Up
               </Button>
             )}
           </div>
-        </div>
+        )}
       </header>
 
       {/* Main Content */}
