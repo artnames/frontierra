@@ -3,11 +3,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { 
-  MaterialKind, 
-  TextureSet,
-  clearTextureCache 
-} from '@/lib/materialRegistry';
+import { MaterialKind } from '@/lib/materialRegistry';
 import { generateWorldTextures } from '@/lib/uiTextures';
 import { WORLD_A_ID } from '@/lib/worldContext';
 
@@ -26,6 +22,37 @@ export interface UseWorldTexturesOptions {
   enabled?: boolean;
 }
 
+const REQUIRED_KINDS: MaterialKind[] = [
+  'ground',
+  'forest',
+  'mountain',
+  'snow',
+  'water',
+  'path',
+  'rock',
+  'sand',
+];
+
+function hasAllRequiredTextures(map: Map<MaterialKind, THREE.CanvasTexture>) {
+  return REQUIRED_KINDS.every((k) => map.has(k));
+}
+
+function isCanvasNonEmpty(canvas: HTMLCanvasElement): boolean {
+  if (!canvas || canvas.width <= 0 || canvas.height <= 0) return false;
+  // A fully transparent canvas will effectively turn the material black.
+  // Use a tiny sample to detect that common failure mode.
+  try {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return true;
+    const d = ctx.getImageData(0, 0, 1, 1).data;
+    // If alpha is 0 it's almost certainly an unrendered canvas.
+    return d[3] !== 0;
+  } catch {
+    // If sampling fails (tainted canvas shouldn’t happen here), assume ok.
+    return true;
+  }
+}
+
 // Convert canvas textures to Three.js textures
 function canvasToThreeTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
@@ -33,6 +60,7 @@ function canvasToThreeTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   texture.wrapT = THREE.RepeatWrapping;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
 }
@@ -42,56 +70,57 @@ export function useWorldTextures({
   worldY,
   seed,
   vars,
-  enabled = true
+  enabled = true,
 }: UseWorldTexturesOptions): WorldTextureState {
   const [textureMap, setTextureMap] = useState<Map<MaterialKind, THREE.CanvasTexture>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Keep track of previous textures to avoid flickering during reload
   const prevTexturesRef = useRef<Map<MaterialKind, THREE.CanvasTexture>>(new Map());
-  
+
   // Stable key for dependency tracking
   const textureKey = useMemo(() => {
-    const varsHash = vars.slice(0, 10).map(v => Math.floor(v)).join('-');
+    const varsHash = vars.slice(0, 10).map((v) => Math.floor(v)).join('-');
     return `${worldX}_${worldY}_${seed}_${varsHash}`;
   }, [worldX, worldY, seed, vars]);
-  
+
   // Generate textures when inputs change
   useEffect(() => {
     if (!enabled) {
       // Keep existing textures when disabled (don't clear them)
       return;
     }
-    
+
     let cancelled = false;
-    
+
     const loadTextures = async () => {
       setIsLoading(true);
       setError(null);
-      
+
       try {
-        const textureSets = await generateWorldTextures(
-          WORLD_A_ID,
-          worldX,
-          worldY,
-          seed,
-          vars
-        );
-        
+        const textureSets = await generateWorldTextures(WORLD_A_ID, worldX, worldY, seed, vars);
         if (cancelled) return;
-        
-        // Convert to Three.js textures
+
         const threeTextures = new Map<MaterialKind, THREE.CanvasTexture>();
-        
+
         textureSets.forEach((textureSet, kind) => {
           const threeTexture = canvasToThreeTexture(textureSet.diffuse);
+          // Guard against "blank" canvases that would render as black.
+          if (threeTexture.image instanceof HTMLCanvasElement) {
+            if (!isCanvasNonEmpty(threeTexture.image)) return;
+          }
           threeTextures.set(kind, threeTexture);
         });
-        
-        // Store in ref before updating state
+
+        if (!hasAllRequiredTextures(threeTextures)) {
+          // Don’t swap into a partial set (causes "good for a moment then black" artifacts)
+          throw new Error('Incomplete texture set generated');
+        }
+
+        // Store in ref before updating state (stable during future reloads)
         prevTexturesRef.current = threeTextures;
-        
+
         setTextureMap(threeTextures);
         setIsLoading(false);
       } catch (err) {
@@ -101,31 +130,30 @@ export function useWorldTextures({
         setIsLoading(false);
       }
     };
-    
+
     loadTextures();
-    
+
     return () => {
       cancelled = true;
     };
   }, [textureKey, enabled]);
-  
-  // Return previous textures if currently loading (prevents flicker)
-  const stableTextures = isLoading && prevTexturesRef.current.size > 0 
-    ? prevTexturesRef.current 
-    : textureMap;
-  
+
+  // Prefer current textures; fall back to previous stable textures if we have them.
+  const stableTextures = textureMap.size > 0 ? textureMap : prevTexturesRef.current;
+
   return {
     textures: stableTextures,
     isLoading,
-    isReady: stableTextures.size > 0,
-    error
+    isReady: hasAllRequiredTextures(stableTextures),
+    error,
   };
 }
 
 // Hook to get a specific texture
 export function useTerrainTexture(
   textures: Map<MaterialKind, THREE.CanvasTexture>,
-  kind: MaterialKind
+  kind: MaterialKind,
 ): THREE.CanvasTexture | null {
   return textures.get(kind) ?? null;
 }
+
