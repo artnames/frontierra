@@ -27,6 +27,7 @@ import { SkyDome } from '@/components/SkyDome';
 import { TimeOfDayHUD } from '@/components/TimeOfDayHUD';
 import { DiscoveryToast } from '@/components/DiscoveryToast';
 import { useAmbientAudio } from '@/hooks/useAmbientAudio';
+import { useVisualSettings } from '@/hooks/useVisualSettings';
 import * as THREE from 'three';
 import { useThree, useFrame } from '@react-three/fiber';
 
@@ -165,6 +166,9 @@ export function WorldExplorer({
   const [actions, setActions] = useState<WorldAction[]>(initialActions);
   const [audioEnabled, setAudioEnabled] = useState(true);
   
+  // Visual settings (localStorage only, no server sync)
+  const { materialRichness } = useVisualSettings();
+  
   // Use debounced NexArt generation hook
   const { world, isLoading, isVerifying, error } = useNexArtWorld({
     seed,
@@ -298,6 +302,7 @@ export function WorldExplorer({
           interactionMode={interactionMode}
           worldX={worldX}
           worldY={worldY}
+          useTextures={materialRichness}
         />
       </Canvas>
       
