@@ -245,8 +245,9 @@ const Index = () => {
   const handlePositionUpdate = useCallback((pos: { x: number; y: number; z: number }) => {
     setPlayerPosition(pos);
     // Update multiplayer position tracking for edge transitions
+    // NOTE: WorldExplorer reports (x, y=groundZ, z=altitude)
     if (worldMode === 'multiplayer') {
-      multiplayer.updatePlayerPosition(pos.x, pos.z);
+      multiplayer.updatePlayerPosition(pos.x, pos.y);
     }
   }, [worldMode, multiplayer.updatePlayerPosition]);
 
