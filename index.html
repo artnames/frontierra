@@ -23,7 +23,55 @@
 </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot-fallback" style="padding:16px;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e6fffb;">
+        Loading Frontierra…
+      </div>
+      <noscript>
+        <div style="padding:16px;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#ff6b6b;">
+          This app requires JavaScript to run.
+        </div>
+      </noscript>
+    </div>
+
+    <script>
+      (function () {
+        var root = document.getElementById('root');
+        if (!root) return;
+
+        function showBootError(title, detail) {
+          var msg = document.createElement('div');
+          msg.style.cssText = 'margin:16px;padding:16px;border:1px solid rgba(255,107,107,.5);border-radius:8px;background:rgba(255,107,107,.08);color:#ff6b6b;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;';
+          msg.innerHTML =
+            '<div style="font-weight:700;margin-bottom:6px;">' + title + '</div>' +
+            '<pre style="white-space:pre-wrap;margin:0;opacity:.9;">' + (detail || '') + '</pre>';
+          root.appendChild(msg);
+        }
+
+        window.addEventListener('error', function (e) {
+          try {
+            showBootError('Startup error', (e && (e.message || (e.error && e.error.message))) || String(e));
+          } catch (_) {}
+        });
+
+        window.addEventListener('unhandledrejection', function (e) {
+          try {
+            var reason = e && e.reason ? (e.reason.message || String(e.reason)) : 'Unknown promise rejection';
+            showBootError('Unhandled rejection', reason);
+          } catch (_) {}
+        });
+
+        // If the module script never runs, this stays visible.
+        setTimeout(function () {
+          var fallback = document.getElementById('boot-fallback');
+          if (fallback) {
+            fallback.textContent = 'Still loading… If this persists, the app bundle may not be loading.';
+            fallback.style.opacity = '0.85';
+          }
+        }, 6000);
+      })();
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
