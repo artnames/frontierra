@@ -348,8 +348,11 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
         position.current.y = terrainHeight + 0.7 + manualHeightOffset.current;
       }
     } else {
-      // Ground-locked mode - always snap to terrain
+      // Ground-locked mode - always snap to terrain every frame
+      // This ensures camera never clips through on steep slopes
       manualHeightOffset.current = 0;
+      const terrainHeight = getElevationAt(world, position.current.x, position.current.z);
+      position.current.y = terrainHeight + 0.7;
     }
 
     // Apply position and rotation to camera
