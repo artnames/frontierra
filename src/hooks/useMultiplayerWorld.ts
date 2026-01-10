@@ -3,7 +3,7 @@
 // Integrates with World A shared macro geography via worldContext
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { PlayerLand, LAND_GRID_SIZE, WORLD_A_GRID_WIDTH, WORLD_A_GRID_HEIGHT } from '@/lib/multiplayer/types';
+import { PlayerLand, LAND_GRID_SIZE, WORLD_A_GRID_WIDTH, WORLD_A_GRID_HEIGHT, EdgeCrossing, getNeighborPosition } from '@/lib/multiplayer/types';
 import { 
   getLandByPlayerId, 
   getLandAtPosition,
@@ -25,6 +25,10 @@ interface MultiplayerWorldState {
   isLoading: boolean;
   error: string | null;
   isVisitingOtherLand: boolean; // True when on someone else's land
+  unclaimedAttempt: {
+    direction: string;
+    gridPosition: { x: number; y: number };
+  } | null;
 }
 
 interface UseMultiplayerWorldOptions {
@@ -41,7 +45,8 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     playerPosition: { x: LAND_GRID_SIZE / 2, z: LAND_GRID_SIZE / 2 },
     isLoading: true,
     error: null,
-    isVisitingOtherLand: false
+    isVisitingOtherLand: false,
+    unclaimedAttempt: null
   });
 
   // Always keep the latest camera/ground position (avoids stale state during transitions)
@@ -86,13 +91,15 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
   // Edge transition handling
   const handleTransitionComplete = useCallback((
     newLand: PlayerLand | null,
-    entryPosition: { x: number; z: number }
+    entryPosition: { x: number; z: number },
+    crossing?: EdgeCrossing
   ) => {
     if (newLand) {
       setState(prev => ({
         ...prev,
         currentLand: newLand,
         playerPosition: entryPosition,
+        unclaimedAttempt: null,
         // Keep visiting-state in sync for gating editor/params reliably
         isVisitingOtherLand: prev.playerId ? newLand.player_id !== prev.playerId : false
       }));
@@ -107,11 +114,29 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
         z: Math.max(2, Math.min(LAND_GRID_SIZE - 2, latestPositionRef.current.z))
       };
 
-      setState(prev => ({ ...prev, playerPosition: pushed }));
+      // Track the unclaimed attempt for the modal
+      let unclaimedInfo: MultiplayerWorldState['unclaimedAttempt'] = null;
+      if (crossing && state.currentLand) {
+        const neighborPos = getNeighborPosition(
+          state.currentLand.pos_x,
+          state.currentLand.pos_y,
+          crossing.direction
+        );
+        unclaimedInfo = {
+          direction: crossing.direction,
+          gridPosition: neighborPos
+        };
+      }
+
+      setState(prev => ({ 
+        ...prev, 
+        playerPosition: pushed,
+        unclaimedAttempt: unclaimedInfo
+      }));
       // Also snap the actual camera away from the edge to stop re-trigger loops
       options.onLandTransition?.(pushed);
     }
-  }, [forceRegenerate, options.onLandTransition]);
+  }, [forceRegenerate, options.onLandTransition, state.currentLand]);
   
   const edgeTransition = useEdgeTransition({
     playerId: state.playerId,
@@ -258,6 +283,11 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     return unsubscribe;
   }, []);
   
+  // Dismiss unclaimed land modal
+  const dismissUnclaimedAttempt = useCallback(() => {
+    setState(prev => ({ ...prev, unclaimedAttempt: null }));
+  }, []);
+
   return {
     // State
     playerId: state.playerId,
@@ -265,6 +295,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     neighborLands: state.neighborLands,
     playerPosition: state.playerPosition,
     isVisitingOtherLand: state.isVisitingOtherLand,
+    unclaimedAttempt: state.unclaimedAttempt,
     
     // World A context (for shared macro geography)
     worldContext,
@@ -285,6 +316,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     visitLand,
     updatePlayerPosition,
     updateLandParams,
-    forceRegenerate
+    forceRegenerate,
+    dismissUnclaimedAttempt
   };
 }
