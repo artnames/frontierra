@@ -1,13 +1,17 @@
 // Forest Trees & Vegetation - 3D objects placed on terrain from NexArt
 
-import { useMemo } from 'react';
+import { useMemo, createContext, useContext } from 'react';
 import * as THREE from 'three';
 import { WorldData, getElevationAt } from '@/lib/worldData';
 import { WORLD_HEIGHT_SCALE } from '@/lib/worldConstants';
 
 interface ForestTreesProps {
   world: WorldData;
+  useRichMaterials?: boolean; // When true, use enhanced materials for visual richness
 }
+
+// Context to pass material richness setting to all vegetation components
+const VegetationRichnessContext = createContext(false);
 
 // Vegetation types enum for variety
 type VegetationType = 'pine' | 'deciduous' | 'bush' | 'birch' | 'willow' | 'deadTree' | 'flower' | 'rock' | 'grassClump' | 'mushroom' | 'fern';
@@ -28,7 +32,7 @@ function seededRandom(x: number, y: number, seedOffset: number): number {
   return n - Math.floor(n);
 }
 
-export function ForestTrees({ world }: ForestTreesProps) {
+export function ForestTrees({ world, useRichMaterials = false }: ForestTreesProps) {
   const vegetation = useMemo(() => {
     const items: VegetationItem[] = [];
     const seed = world.seed || 0;
@@ -186,11 +190,13 @@ export function ForestTrees({ world }: ForestTreesProps) {
   }, [world]);
 
   return (
-    <group>
-      {vegetation.map((item, i) => (
-        <Vegetation key={i} {...item} />
-      ))}
-    </group>
+    <VegetationRichnessContext.Provider value={useRichMaterials}>
+      <group>
+        {vegetation.map((item, i) => (
+          <Vegetation key={i} {...item} />
+        ))}
+      </group>
+    </VegetationRichnessContext.Provider>
   );
 }
 
@@ -242,8 +248,37 @@ interface VegProps {
   rotation: number;
 }
 
+// Enhanced material component that uses MeshStandardMaterial when richness is enabled
+function VegMaterial({ color, isRich }: { color: string; isRich: boolean }) {
+  if (isRich) {
+    return (
+      <meshStandardMaterial
+        color={color}
+        roughness={0.7}
+        metalness={0.05}
+      />
+    );
+  }
+  return <meshLambertMaterial color={color} />;
+}
+
+// Bark material with enhanced properties
+function BarkMaterial({ color, isRich }: { color: string; isRich: boolean }) {
+  if (isRich) {
+    return (
+      <meshStandardMaterial
+        color={color}
+        roughness={0.95}
+        metalness={0}
+      />
+    );
+  }
+  return <meshLambertMaterial color={color} />;
+}
+
 // Pine tree - tall conifer
 function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const isRich = useContext(VegetationRichnessContext);
   const greenShift = Math.floor(colorVariant * 30) - 15;
   const baseGreen = 74 + greenShift;
   
@@ -251,19 +286,19 @@ function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
       <mesh position={[0, 0.4, 0]}>
         <cylinderGeometry args={[0.06, 0.1, 0.8, 6]} />
-        <meshLambertMaterial color="#4a3020" />
+        <BarkMaterial color="#4a3020" isRich={isRich} />
       </mesh>
       <mesh position={[0, 1.0, 0]}>
         <coneGeometry args={[0.4, 0.8, 6]} />
-        <meshLambertMaterial color={`rgb(26, ${baseGreen}, 26)`} />
+        <VegMaterial color={`rgb(26, ${baseGreen}, 26)`} isRich={isRich} />
       </mesh>
       <mesh position={[0, 1.5, 0]}>
         <coneGeometry args={[0.3, 0.6, 6]} />
-        <meshLambertMaterial color={`rgb(31, ${baseGreen + 11}, 32)`} />
+        <VegMaterial color={`rgb(31, ${baseGreen + 11}, 32)`} isRich={isRich} />
       </mesh>
       <mesh position={[0, 1.9, 0]}>
         <coneGeometry args={[0.2, 0.5, 6]} />
-        <meshLambertMaterial color={`rgb(37, ${baseGreen + 22}, 40)`} />
+        <VegMaterial color={`rgb(37, ${baseGreen + 22}, 40)`} isRich={isRich} />
       </mesh>
     </group>
   );
@@ -271,6 +306,7 @@ function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 
 // Deciduous tree - round leafy tree
 function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const isRich = useContext(VegetationRichnessContext);
   const greenShift = Math.floor(colorVariant * 40) - 20;
   const baseGreen = 90 + greenShift;
   
@@ -278,19 +314,19 @@ function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
       <mesh position={[0, 0.5, 0]}>
         <cylinderGeometry args={[0.08, 0.12, 1.0, 6]} />
-        <meshLambertMaterial color="#3d2517" />
+        <BarkMaterial color="#3d2517" isRich={isRich} />
       </mesh>
       <mesh position={[0, 1.4, 0]}>
         <sphereGeometry args={[0.55, 8, 6]} />
-        <meshLambertMaterial color={`rgb(42, ${baseGreen}, 37)`} />
+        <VegMaterial color={`rgb(42, ${baseGreen}, 37)`} isRich={isRich} />
       </mesh>
       <mesh position={[0.25, 1.2, 0.15]}>
         <sphereGeometry args={[0.35, 6, 5]} />
-        <meshLambertMaterial color={`rgb(50, ${baseGreen + 11}, 48)`} />
+        <VegMaterial color={`rgb(50, ${baseGreen + 11}, 48)`} isRich={isRich} />
       </mesh>
       <mesh position={[-0.2, 1.3, -0.1]}>
         <sphereGeometry args={[0.3, 6, 5]} />
-        <meshLambertMaterial color={`rgb(40, ${baseGreen - 5}, 34)`} />
+        <VegMaterial color={`rgb(40, ${baseGreen - 5}, 34)`} isRich={isRich} />
       </mesh>
     </group>
   );
@@ -298,6 +334,7 @@ function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 
 // Bush - small shrub
 function Bush({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const isRich = useContext(VegetationRichnessContext);
   const greenShift = Math.floor(colorVariant * 35) - 15;
   const baseGreen = 106 + greenShift;
   
@@ -305,15 +342,15 @@ function Bush({ x, y, z, scale, colorVariant, rotation }: VegProps) {
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
       <mesh position={[0, 0.15, 0]}>
         <cylinderGeometry args={[0.03, 0.05, 0.3, 5]} />
-        <meshLambertMaterial color="#5a4030" />
+        <BarkMaterial color="#5a4030" isRich={isRich} />
       </mesh>
       <mesh position={[0, 0.4, 0]}>
         <sphereGeometry args={[0.3, 7, 5]} />
-        <meshLambertMaterial color={`rgb(58, ${baseGreen}, 53)`} />
+        <VegMaterial color={`rgb(58, ${baseGreen}, 53)`} isRich={isRich} />
       </mesh>
       <mesh position={[0.12, 0.35, 0.08]}>
         <sphereGeometry args={[0.18, 5, 4]} />
-        <meshLambertMaterial color={`rgb(69, ${baseGreen + 6}, 64)`} />
+        <VegMaterial color={`rgb(69, ${baseGreen + 6}, 64)`} isRich={isRich} />
       </mesh>
     </group>
   );
@@ -321,6 +358,7 @@ function Bush({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 
 // Birch tree - white bark, slender
 function BirchTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const isRich = useContext(VegetationRichnessContext);
   const greenShift = Math.floor(colorVariant * 30) - 10;
   const baseGreen = 140 + greenShift;
   
@@ -328,24 +366,24 @@ function BirchTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
       <mesh position={[0, 0.6, 0]}>
         <cylinderGeometry args={[0.05, 0.07, 1.2, 6]} />
-        <meshLambertMaterial color="#e8e0d0" />
+        <BarkMaterial color="#e8e0d0" isRich={isRich} />
       </mesh>
       {/* Dark bark marks */}
       <mesh position={[0.03, 0.4, 0.04]}>
         <boxGeometry args={[0.02, 0.08, 0.01]} />
-        <meshLambertMaterial color="#2a2a2a" />
+        <BarkMaterial color="#2a2a2a" isRich={isRich} />
       </mesh>
       <mesh position={[-0.02, 0.7, -0.03]}>
         <boxGeometry args={[0.015, 0.06, 0.01]} />
-        <meshLambertMaterial color="#3a3a3a" />
+        <BarkMaterial color="#3a3a3a" isRich={isRich} />
       </mesh>
       <mesh position={[0, 1.4, 0]}>
         <sphereGeometry args={[0.45, 7, 6]} />
-        <meshLambertMaterial color={`rgb(100, ${baseGreen}, 60)`} />
+        <VegMaterial color={`rgb(100, ${baseGreen}, 60)`} isRich={isRich} />
       </mesh>
       <mesh position={[0.2, 1.5, 0.1]}>
         <sphereGeometry args={[0.25, 6, 5]} />
-        <meshLambertMaterial color={`rgb(120, ${baseGreen + 15}, 70)`} />
+        <VegMaterial color={`rgb(120, ${baseGreen + 15}, 70)`} isRich={isRich} />
       </mesh>
     </group>
   );
@@ -353,6 +391,7 @@ function BirchTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 
 // Willow tree - drooping branches
 function WillowTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const isRich = useContext(VegetationRichnessContext);
   const greenShift = Math.floor(colorVariant * 25);
   const baseGreen = 130 + greenShift;
   
@@ -360,25 +399,25 @@ function WillowTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
       <mesh position={[0, 0.5, 0]}>
         <cylinderGeometry args={[0.1, 0.15, 1.0, 6]} />
-        <meshLambertMaterial color="#4a3828" />
+        <BarkMaterial color="#4a3828" isRich={isRich} />
       </mesh>
       {/* Drooping foliage */}
       <mesh position={[0, 1.2, 0]}>
         <sphereGeometry args={[0.5, 8, 6]} />
-        <meshLambertMaterial color={`rgb(80, ${baseGreen}, 50)`} />
+        <VegMaterial color={`rgb(80, ${baseGreen}, 50)`} isRich={isRich} />
       </mesh>
       {/* Hanging branches */}
       <mesh position={[0.35, 0.8, 0]}>
         <cylinderGeometry args={[0.15, 0.05, 0.8, 5]} />
-        <meshLambertMaterial color={`rgb(70, ${baseGreen - 10}, 45)`} />
+        <VegMaterial color={`rgb(70, ${baseGreen - 10}, 45)`} isRich={isRich} />
       </mesh>
       <mesh position={[-0.3, 0.75, 0.2]}>
         <cylinderGeometry args={[0.12, 0.04, 0.7, 5]} />
-        <meshLambertMaterial color={`rgb(75, ${baseGreen - 5}, 48)`} />
+        <VegMaterial color={`rgb(75, ${baseGreen - 5}, 48)`} isRich={isRich} />
       </mesh>
       <mesh position={[0.1, 0.7, -0.35]}>
         <cylinderGeometry args={[0.1, 0.03, 0.6, 5]} />
-        <meshLambertMaterial color={`rgb(85, ${baseGreen + 5}, 55)`} />
+        <VegMaterial color={`rgb(85, ${baseGreen + 5}, 55)`} isRich={isRich} />
       </mesh>
     </group>
   );
@@ -386,6 +425,7 @@ function WillowTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 
 // Dead tree - bare branches
 function DeadTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const isRich = useContext(VegetationRichnessContext);
   const grayShift = Math.floor(colorVariant * 20);
   const baseGray = 60 + grayShift;
   
@@ -393,20 +433,20 @@ function DeadTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
       <mesh position={[0, 0.5, 0]}>
         <cylinderGeometry args={[0.06, 0.1, 1.0, 5]} />
-        <meshLambertMaterial color={`rgb(${baseGray}, ${baseGray - 10}, ${baseGray - 20})`} />
+        <BarkMaterial color={`rgb(${baseGray}, ${baseGray - 10}, ${baseGray - 20})`} isRich={isRich} />
       </mesh>
       {/* Bare branches */}
       <mesh position={[0.15, 0.9, 0]} rotation={[0, 0, -0.5]}>
         <cylinderGeometry args={[0.02, 0.03, 0.4, 4]} />
-        <meshLambertMaterial color={`rgb(${baseGray - 5}, ${baseGray - 15}, ${baseGray - 25})`} />
+        <BarkMaterial color={`rgb(${baseGray - 5}, ${baseGray - 15}, ${baseGray - 25})`} isRich={isRich} />
       </mesh>
       <mesh position={[-0.12, 1.0, 0.05]} rotation={[0.2, 0, 0.6]}>
         <cylinderGeometry args={[0.015, 0.025, 0.35, 4]} />
-        <meshLambertMaterial color={`rgb(${baseGray - 8}, ${baseGray - 18}, ${baseGray - 28})`} />
+        <BarkMaterial color={`rgb(${baseGray - 8}, ${baseGray - 18}, ${baseGray - 28})`} isRich={isRich} />
       </mesh>
       <mesh position={[0.05, 1.1, -0.1]} rotation={[-0.3, 0, 0.2]}>
         <cylinderGeometry args={[0.01, 0.02, 0.25, 4]} />
-        <meshLambertMaterial color={`rgb(${baseGray - 3}, ${baseGray - 13}, ${baseGray - 23})`} />
+        <BarkMaterial color={`rgb(${baseGray - 3}, ${baseGray - 13}, ${baseGray - 23})`} isRich={isRich} />
       </mesh>
     </group>
   );
@@ -414,6 +454,7 @@ function DeadTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 
 // Flower - colorful small plant
 function Flower({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const isRich = useContext(VegetationRichnessContext);
   // Different flower colors based on variant
   const flowerColors = [
     '#ff6b8a', // Pink
@@ -432,17 +473,17 @@ function Flower({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       {/* Stem */}
       <mesh position={[0, 0.15, 0]}>
         <cylinderGeometry args={[0.015, 0.02, 0.3, 4]} />
-        <meshLambertMaterial color="#228b22" />
+        <VegMaterial color="#228b22" isRich={isRich} />
       </mesh>
       {/* Flower head */}
       <mesh position={[0, 0.35, 0]}>
         <sphereGeometry args={[0.08, 6, 5]} />
-        <meshLambertMaterial color={flowerColor} />
+        <VegMaterial color={flowerColor} isRich={isRich} />
       </mesh>
       {/* Center */}
       <mesh position={[0, 0.38, 0.05]}>
         <sphereGeometry args={[0.03, 4, 4]} />
-        <meshLambertMaterial color="#ffd700" />
+        <VegMaterial color="#ffd700" isRich={isRich} />
       </mesh>
     </group>
   );
@@ -450,18 +491,19 @@ function Flower({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 
 // Rock - natural stone
 function Rock({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const isRich = useContext(VegetationRichnessContext);
   const grayBase = 90 + Math.floor(colorVariant * 40);
   
   return (
     <group position={[x, y, z]} scale={scale * 0.6} rotation={[0, rotation, colorVariant * 0.3]}>
       <mesh position={[0, 0.12, 0]}>
         <dodecahedronGeometry args={[0.2, 0]} />
-        <meshLambertMaterial color={`rgb(${grayBase}, ${grayBase - 5}, ${grayBase - 10})`} />
+        <BarkMaterial color={`rgb(${grayBase}, ${grayBase - 5}, ${grayBase - 10})`} isRich={isRich} />
       </mesh>
       {colorVariant > 0.5 && (
         <mesh position={[0.15, 0.08, 0.1]}>
           <dodecahedronGeometry args={[0.1, 0]} />
-          <meshLambertMaterial color={`rgb(${grayBase - 15}, ${grayBase - 20}, ${grayBase - 25})`} />
+          <BarkMaterial color={`rgb(${grayBase - 15}, ${grayBase - 20}, ${grayBase - 25})`} isRich={isRich} />
         </mesh>
       )}
     </group>
@@ -470,6 +512,7 @@ function Rock({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 
 // Grass clump - tall grass
 function GrassClump({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const isRich = useContext(VegetationRichnessContext);
   const greenShift = Math.floor(colorVariant * 40) - 20;
   const baseGreen = 140 + greenShift;
   
@@ -478,7 +521,7 @@ function GrassClump({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       {[0, 0.4, 0.8, 1.2, 1.6].map((angle, i) => (
         <mesh key={i} position={[Math.sin(angle) * 0.05, 0.15 + i * 0.02, Math.cos(angle) * 0.05]} rotation={[0.1 - i * 0.02, angle, 0]}>
           <boxGeometry args={[0.02, 0.3 + colorVariant * 0.1, 0.005]} />
-          <meshLambertMaterial color={`rgb(${80 + i * 5}, ${baseGreen + i * 3}, ${50 + i * 3})`} />
+          <VegMaterial color={`rgb(${80 + i * 5}, ${baseGreen + i * 3}, ${50 + i * 3})`} isRich={isRich} />
         </mesh>
       ))}
     </group>
@@ -487,6 +530,7 @@ function GrassClump({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 
 // Mushroom - forest floor fungus
 function Mushroom({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const isRich = useContext(VegetationRichnessContext);
   const mushroomColors = [
     { cap: '#8b4513', spots: '#f5deb3' }, // Brown
     { cap: '#dc143c', spots: '#ffffff' }, // Red with white spots
@@ -501,23 +545,23 @@ function Mushroom({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       {/* Stem */}
       <mesh position={[0, 0.1, 0]}>
         <cylinderGeometry args={[0.04, 0.05, 0.2, 6]} />
-        <meshLambertMaterial color="#f5f5dc" />
+        <VegMaterial color="#f5f5dc" isRich={isRich} />
       </mesh>
       {/* Cap */}
       <mesh position={[0, 0.22, 0]}>
         <sphereGeometry args={[0.12, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshLambertMaterial color={colors.cap} />
+        <VegMaterial color={colors.cap} isRich={isRich} />
       </mesh>
       {/* Spots */}
       {colorVariant > 0.3 && (
         <>
           <mesh position={[0.05, 0.28, 0.03]}>
             <sphereGeometry args={[0.02, 4, 4]} />
-            <meshLambertMaterial color={colors.spots} />
+            <VegMaterial color={colors.spots} isRich={isRich} />
           </mesh>
           <mesh position={[-0.04, 0.26, -0.05]}>
             <sphereGeometry args={[0.015, 4, 4]} />
-            <meshLambertMaterial color={colors.spots} />
+            <VegMaterial color={colors.spots} isRich={isRich} />
           </mesh>
         </>
       )}
@@ -527,6 +571,7 @@ function Mushroom({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 
 // Fern - forest understory plant
 function Fern({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const isRich = useContext(VegetationRichnessContext);
   const greenShift = Math.floor(colorVariant * 30);
   const baseGreen = 120 + greenShift;
   
@@ -540,7 +585,7 @@ function Fern({ x, y, z, scale, colorVariant, rotation }: VegProps) {
           <group key={i} rotation={[tilt, angle, 0]}>
             <mesh position={[0, 0.15, 0.1]}>
               <boxGeometry args={[0.08, 0.02, 0.25]} />
-              <meshLambertMaterial color={`rgb(${50 + i * 5}, ${baseGreen + i * 2}, ${40 + i * 3})`} />
+              <VegMaterial color={`rgb(${50 + i * 5}, ${baseGreen + i * 2}, ${40 + i * 3})`} isRich={isRich} />
             </mesh>
           </group>
         );
