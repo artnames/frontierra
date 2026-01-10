@@ -74,55 +74,56 @@ export function getMaterialKind(
   }
 }
 
-// Color palettes for each material kind (deterministic)
+// HIGH-CONTRAST Color palettes for each material kind (deterministic)
+// These palettes are designed for MAXIMUM visual distinction between materials
 export const MATERIAL_PALETTES: Record<MaterialKind, { base: string; accent: string; dark: string; light: string }> = {
   ground: {
-    base: '#6b5c44',
-    accent: '#8b7355',
-    dark: '#4a3d2a',
-    light: '#a89070'
+    base: '#8b7355',    // Warm earth brown
+    accent: '#a08060',
+    dark: '#5a4a35',    // Deep shadow
+    light: '#c4a882'    // Sunlit soil
   },
   forest: {
-    base: '#2d4a28',
-    accent: '#3d6a38',
-    dark: '#1a2d18',
-    light: '#4d8a48'
+    base: '#2d5a28',    // Rich forest green
+    accent: '#3d7a38',
+    dark: '#152814',    // Deep shadow green
+    light: '#5dad48'    // Bright canopy
   },
   mountain: {
-    base: '#5a5a5a',
-    accent: '#7a7a7a',
-    dark: '#3a3a3a',
-    light: '#9a9a9a'
+    base: '#6a6872',    // Cool blue-grey rock
+    accent: '#8a8895',
+    dark: '#3a3842',    // Deep crevice
+    light: '#a5a3b0'    // Sunlit stone
   },
   snow: {
-    base: '#e8e8f0',
-    accent: '#f0f0ff',
-    dark: '#c8c8d8',
-    light: '#ffffff'
+    base: '#e8eaf0',    // Blue-white snow
+    accent: '#f5f7ff',
+    dark: '#b8c0d5',    // Shadow blue
+    light: '#ffffff'    // Pure white
   },
   water: {
-    base: '#2a5a6a',
-    accent: '#3a7a8a',
-    dark: '#1a3a4a',
-    light: '#4a9aaa'
+    base: '#2a5a7a',    // Deep ocean blue
+    accent: '#3a7a9a',
+    dark: '#183448',    // Depths
+    light: '#5aadca'    // Surface shimmer
   },
   path: {
-    base: '#7a6a50',
-    accent: '#9a8a70',
-    dark: '#5a4a30',
-    light: '#baaa90'
+    base: '#9a8a70',    // Worn earth tan
+    accent: '#b5a590',
+    dark: '#6a5a40',    // Compacted shadow
+    light: '#d5c5a5'    // Dusty surface
   },
   rock: {
-    base: '#6a6a6a',
-    accent: '#8a8a8a',
-    dark: '#4a4a4a',
-    light: '#aaaaaa'
+    base: '#7a7a7a',    // Neutral grey
+    accent: '#9a9a9a',
+    dark: '#4a4a4a',    // Deep crack
+    light: '#bababa'    // Lit surface
   },
   sand: {
-    base: '#c4a060',
-    accent: '#d4b070',
-    dark: '#a48040',
-    light: '#e4c080'
+    base: '#d4b870',    // Golden sand
+    accent: '#e4c890',
+    dark: '#a48850',    // Shadow dune
+    light: '#f4e0a0'    // Bright crest
   }
 };
 
