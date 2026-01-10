@@ -22,17 +22,17 @@ interface AudioLayer {
   currentVolume: number;
 }
 
-// Audio URLs - using longer seamless ambient loops from freesound.org (CC0/public domain)
-// These are longer clips (30s-60s+) with smooth looping and no abrupt breaks
+// Audio URLs - using reliable CDN sources for ambient loops (CC0/public domain)
+// Switched to more reliable sources that work across browsers
 const AUDIO_SOURCES = {
-  // Gentle forest ambience with birds - smooth loop
-  forest: 'https://cdn.freesound.org/previews/531/531015_5765281-lq.mp3',
-  // Soft flowing stream - seamless
-  water: 'https://cdn.freesound.org/previews/398/398155_2915876-lq.mp3',
-  // Light wind ambience - subtle and continuous
-  wind: 'https://cdn.freesound.org/previews/456/456058_5121236-lq.mp3',
-  // Night crickets and insects - gentle ambient loop
-  night: 'https://cdn.freesound.org/previews/377/377966_5450487-lq.mp3',
+  // Wind ambience - reliable source
+  wind: 'https://assets.mixkit.co/active_storage/sfx/212/212-preview.mp3',
+  // Forest birds - reliable source  
+  forest: 'https://assets.mixkit.co/active_storage/sfx/2515/2515-preview.mp3',
+  // Water/stream - reliable source
+  water: 'https://assets.mixkit.co/active_storage/sfx/2514/2514-preview.mp3',
+  // Night crickets - reliable source
+  night: 'https://assets.mixkit.co/active_storage/sfx/2513/2513-preview.mp3',
 };
 
 // Calculate terrain composition around player
@@ -148,11 +148,25 @@ export function useAmbientAudio({
   const initializeLayer = useCallback((id: string, src: string) => {
     if (audioLayersRef.current.has(id)) return;
 
-    const audio = new Audio(src);
+    const audio = new Audio();
     audio.loop = true;
     audio.volume = 0;
     audio.preload = 'auto';
-    audio.crossOrigin = 'anonymous';
+    
+    // Error handling for audio load failures
+    audio.onerror = () => {
+      console.warn(`[AmbientAudio] Failed to load: ${id}`);
+    };
+    
+    audio.oncanplaythrough = () => {
+      console.log(`[AmbientAudio] Ready: ${id}`);
+      if (hasUserInteracted.current) {
+        audio.play().catch(() => {});
+      }
+    };
+    
+    // Set source after event handlers
+    audio.src = src;
 
     audioLayersRef.current.set(id, {
       id,
@@ -160,10 +174,6 @@ export function useAmbientAudio({
       targetVolume: 0,
       currentVolume: 0,
     });
-
-    if (hasUserInteracted.current) {
-      audio.play().catch(() => {});
-    }
   }, []);
 
   // Initialize all layers on mount
