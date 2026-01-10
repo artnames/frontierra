@@ -56,10 +56,6 @@ const Index = () => {
   
   // Visual settings (localStorage only)
   const {
-    materialRichness,
-    toggleMaterialRichness,
-    showVegetation,
-    toggleVegetation,
     musicEnabled,
     toggleMusic,
     sfxEnabled,
@@ -675,44 +671,8 @@ const Index = () => {
                     </p>
                   )}
                   
-                  {/* Visual Settings */}
+                  {/* Audio Settings */}
                   <div className="pt-3 mt-3 border-t border-border space-y-3">
-                    <div className="data-label text-[10px]">Visual Settings</div>
-
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="space-y-0.5 flex-1">
-                        <Label htmlFor="material-richness" className="text-xs font-medium cursor-pointer">
-                          Material richness
-                        </Label>
-                        <p className="text-[10px] text-muted-foreground leading-tight">
-                          Rich textures for ground, mountains, rivers and paths.
-                        </p>
-                      </div>
-                      <Switch
-                        id="material-richness"
-                        checked={materialRichness}
-                        onCheckedChange={toggleMaterialRichness}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="space-y-0.5 flex-1">
-                        <Label htmlFor="show-vegetation" className="text-xs font-medium cursor-pointer">
-                          Vegetation
-                        </Label>
-                        <p className="text-[10px] text-muted-foreground leading-tight">
-                          Trees, flowers, rocks and plants.
-                        </p>
-                      </div>
-                      <Switch
-                        id="show-vegetation"
-                        checked={showVegetation}
-                        onCheckedChange={toggleVegetation}
-                      />
-                    </div>
-
-                    {/* Audio Settings */}
-                    <div className="pt-3 mt-2 border-t border-border space-y-3">
                       <div className="data-label text-[10px]">Audio</div>
 
                       <div className="flex items-center justify-between gap-2">
@@ -762,7 +722,6 @@ const Index = () => {
                         />
                       </div>
                     </div>
-                  </div>
 
                 </div>
               )}

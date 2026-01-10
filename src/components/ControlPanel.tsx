@@ -29,10 +29,6 @@ export function ControlPanel({
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
   const { 
-    materialRichness, 
-    toggleMaterialRichness, 
-    showVegetation, 
-    toggleVegetation,
     musicEnabled,
     toggleMusic,
     sfxEnabled,
@@ -125,42 +121,6 @@ export function ControlPanel({
           ))}
         </div>
         
-        {/* Visual Settings */}
-        <div className="space-y-3 pt-2 border-t border-border">
-          <div className="data-label">Visual Settings</div>
-          
-          <div className="flex items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <Label htmlFor="material-richness" className="text-sm font-medium cursor-pointer">
-                Material richness
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Detailed terrain textures.
-              </p>
-            </div>
-            <Switch
-              id="material-richness"
-              checked={materialRichness}
-              onCheckedChange={toggleMaterialRichness}
-            />
-          </div>
-          
-          <div className="flex items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <Label htmlFor="show-vegetation" className="text-sm font-medium cursor-pointer">
-                Vegetation
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Trees, flowers, and plants.
-              </p>
-            </div>
-            <Switch
-              id="show-vegetation"
-              checked={showVegetation}
-              onCheckedChange={toggleVegetation}
-            />
-          </div>
-        </div>
         
         {/* Audio Settings */}
         <div className="space-y-3 pt-2 border-t border-border">
