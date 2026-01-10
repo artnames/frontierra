@@ -37,7 +37,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useSearchParams } from 'react-router-dom';
 
 type ViewMode = 'map' | 'firstperson';
-type SidebarTab = 'parameters' | 'contract' | 'actions' | 'replay' | 'worldmap' | 'social';
+type SidebarTab = 'parameters' | 'contract' | 'actions' | 'worldmap' | 'social';
 type WorldMode = 'solo' | 'multiplayer';
 
 const Index = () => {
@@ -639,8 +639,8 @@ const Index = () => {
             <div className="flex border-b border-border bg-secondary/30">
               {/* Show worldmap and social tabs only in multiplayer mode */}
               {(worldMode === 'multiplayer' 
-                ? (['worldmap', 'social', 'contract', 'actions', 'replay', 'parameters'] as SidebarTab[])
-                : (['contract', 'actions', 'replay', 'parameters'] as SidebarTab[])
+                ? (['worldmap', 'social', 'contract', 'actions', 'parameters'] as SidebarTab[])
+                : (['contract', 'actions', 'parameters'] as SidebarTab[])
               ).map(tab => (
                 <button
                   key={tab}
@@ -699,17 +699,7 @@ const Index = () => {
                 </div>
               )}
               
-              {sidebarTab === 'replay' && (
-                <ReplayControls
-                  world={world}
-                  actions={actions}
-                  isReplaying={isReplaying}
-                  onReplayStart={handleReplayStart}
-                  onReplayStop={handleReplayStop}
-                  onReplayFrame={handleReplayFrame}
-                  onReplayComplete={handleReplayComplete}
-                />
-              )}
+              
               
               {sidebarTab === 'parameters' && (
                 <div className="space-y-4">
