@@ -1,41 +1,29 @@
 // Soundscape Configuration - Deterministic Ambient + Cinematic Audio
-// Client-only, no syncing, no gameplay impact, royalty-free only
-// IMPORTANT: uses local Pixabay audio files in /public/audio/**
-// If a file is missing, playback fails silently.
+// Client-only, no syncing, no gameplay impact
+// LOCAL AUDIO FILES ONLY - no external URLs, no CDN, no fallbacks
 
 // Ambient SFX layers (looping environmental sounds)
 export const AMBIENT_SOURCES = {
-  // Base wind layer (always present at low volume)
-  wind: '/audio/ambient/wind-soft.mp3',
-  // Forest birds/leaves
-  forest: '/audio/ambient/forest-birds.mp3',
-  // Water/stream sounds
-  water: '/audio/ambient/water-stream.mp3',
-  // Night insects/crickets
-  night: '/audio/ambient/night-crickets.mp3',
-  // Mountain wind rumble
-  mountain: '/audio/ambient/mountain-wind.mp3',
+  wind: '/audio/ambient/wind.mp3',
+  forest: '/audio/ambient/forest.mp3',
+  water: '/audio/ambient/water.mp3',
+  night: '/audio/ambient/night.mp3',
 } as const;
 
-// Cinematic music tracks (sparse, emotional, non-looping by default)
+// Cinematic music tracks (non-looping, rare triggers)
 export const MUSIC_TRACKS = {
-  // Slow evolving ambient pads
-  exploration: '/audio/music/exploration-ambient.mp3',
-  // Calm cinematic underscore
-  discovery: '/audio/music/discovery-theme.mp3',
-  // Peaceful travel music
-  journey: '/audio/music/journey-calm.mp3',
+  travel_01: '/audio/music/travel_01.mp3',
+  travel_02: '/audio/music/travel_02.mp3',
 } as const;
 
 // Volume presets
 export const VOLUME_PRESETS = {
   // Ambient SFX volumes (relative to master)
   ambient: {
-    wind: 0.12,       // Always present baseline
-    forest: 0.45,     // Bird songs when in forest
-    water: 0.55,      // Water when near rivers
+    wind: 0.15,       // Always present baseline
+    forest: 0.40,     // Bird songs when in forest
+    water: 0.50,      // Water when near rivers
     night: 0.35,      // Night insects
-    mountain: 0.25,   // Mountain wind rumble
   },
   // Music volumes (relative to master)
   music: {
@@ -51,7 +39,7 @@ export const VOLUME_PRESETS = {
 } as const;
 
 // Terrain type to ambient layer mapping
-export type TerrainAmbient = 'wind' | 'forest' | 'water' | 'night' | 'mountain';
+export type TerrainAmbient = keyof typeof AMBIENT_SOURCES;
 
 export function getTerrainAmbients(
   terrainComposition: { forest: number; water: number; mountain: number; ground: number },
@@ -60,16 +48,14 @@ export function getTerrainAmbients(
   const { forest, water, mountain } = terrainComposition;
 
   return {
-    // Wind is always present as baseline, boosted in mountains
-    wind: 0.3 + mountain * 0.5,
-    // Forest birds during day, reduced at night
+    // Wind is always present as baseline, boosted in mountains/open areas
+    wind: 0.25 + mountain * 0.5 + (1 - forest) * 0.2,
+    // Forest sounds during day, reduced at night
     forest: forest * (isNight ? 0.15 : 1.0),
     // Water near rivers/lakes
     water: water,
-    // Night insects only at night
+    // Night ambience only at night
     night: isNight ? 0.7 : 0,
-    // Mountain rumble in highlands
-    mountain: mountain * 0.8,
   };
 }
 
@@ -88,4 +74,3 @@ export function shouldTriggerExplorationMusic(
   // 15% chance per check after minimum interval
   return Math.random() < 0.15;
 }
-
