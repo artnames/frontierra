@@ -55,7 +55,18 @@ const Index = () => {
   const { user, isAuthenticated, isLoading: isAuthLoading, signOut } = useAuth();
   
   // Visual settings (localStorage only)
-  const { materialRichness, toggleMaterialRichness } = useVisualSettings();
+  const {
+    materialRichness,
+    toggleMaterialRichness,
+    showVegetation,
+    toggleVegetation,
+    musicEnabled,
+    toggleMusic,
+    sfxEnabled,
+    toggleSfx,
+    masterVolume,
+    setMasterVolume,
+  } = useVisualSettings();
   
   const [searchParams, setSearchParams] = useSearchParams();
   
