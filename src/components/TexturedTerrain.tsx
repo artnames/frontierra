@@ -174,10 +174,10 @@ export function TexturedTerrainMesh({
     return { geometry, materialIndices };
   }, [world, heightScale, waterHeight, riverDepth, pathMaxHeight, worldX, worldY]);
   
-  // Create combined material with texture blending
+  // Create material - textures OR vertex colors, never both (multiplying causes dark/black)
   const material = useMemo(() => {
-    if (!isReady || !texturesEnabled) {
-      // Fallback: vertex colors only
+    // If textures disabled or not ready, use vertex colors only
+    if (!texturesEnabled || !isReady) {
       return new THREE.MeshStandardMaterial({
         vertexColors: true,
         side: THREE.DoubleSide,
@@ -188,10 +188,9 @@ export function TexturedTerrainMesh({
     
     // Get primary terrain texture (ground as base)
     const groundTexture = textures.get('ground');
-    const forestTexture = textures.get('forest');
-    const mountainTexture = textures.get('mountain');
     
     if (!groundTexture) {
+      // Fallback to vertex colors if texture failed
       return new THREE.MeshStandardMaterial({
         vertexColors: true,
         side: THREE.DoubleSide,
@@ -200,10 +199,10 @@ export function TexturedTerrainMesh({
       });
     }
     
-    // Blend textures with vertex colors for rich appearance
+    // Use texture ONLY (no vertex colors) - this prevents black multiplication
     return new THREE.MeshStandardMaterial({
       map: groundTexture,
-      vertexColors: true,
+      vertexColors: false, // CRITICAL: Don't multiply with vertex colors
       side: THREE.DoubleSide,
       roughness: 0.85,
       metalness: 0.05
