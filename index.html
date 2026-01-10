@@ -50,7 +50,12 @@
 
         window.addEventListener('error', function (e) {
           try {
-            showBootError('Startup error', (e && (e.message || (e.error && e.error.message))) || String(e));
+            var msg = (e && (e.message || (e.error && e.error.message))) || String(e);
+            // Ignore errors from browser extensions (wallet extensions, etc.)
+            if (msg && (msg.indexOf('ethereum') !== -1 || msg.indexOf('solana') !== -1 || msg.indexOf('phantom') !== -1)) {
+              return;
+            }
+            showBootError('Startup error', msg);
           } catch (_) {}
         });
 
