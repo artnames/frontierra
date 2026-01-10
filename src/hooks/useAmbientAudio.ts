@@ -28,11 +28,11 @@ const AUDIO_SOURCES = {
   // Gentle forest ambience with birds - smooth loop
   forest: 'https://cdn.freesound.org/previews/531/531015_5765281-lq.mp3',
   // Soft flowing stream - seamless
-  water: 'https://cdn.freesound.org/previews/398/398155_2915876-lq.mp3', 
+  water: 'https://cdn.freesound.org/previews/398/398155_2915876-lq.mp3',
   // Light wind ambience - subtle and continuous
   wind: 'https://cdn.freesound.org/previews/456/456058_5121236-lq.mp3',
   // Night crickets and insects - gentle ambient loop
-  night: 'https://cdn.freesound.org/previews/377/377966_5450487-lq.mp3'
+  night: 'https://cdn.freesound.org/previews/377/377966_5450487-lq.mp3',
 };
 
 // Calculate terrain composition around player
@@ -42,28 +42,28 @@ function getTerrainComposition(world: WorldData, x: number, z: number, radius: n
     water: 0,
     mountain: 0,
     ground: 0,
-    total: 0
+    total: 0,
   };
-  
+
   const gridX = Math.floor(x);
   const gridZ = Math.floor(z);
   const flippedY = world.gridSize - 1 - gridZ;
-  
+
   for (let dy = -radius; dy <= radius; dy++) {
     for (let dx = -radius; dx <= radius; dx++) {
       const checkX = gridX + dx;
       const checkY = flippedY + dy;
-      
+
       if (checkX < 0 || checkX >= world.gridSize || checkY < 0 || checkY >= world.gridSize) continue;
-      
+
       const cell = world.terrain[checkY]?.[checkX];
       if (!cell) continue;
-      
+
       const distance = Math.sqrt(dx * dx + dy * dy);
       const weight = Math.max(0, 1 - distance / radius);
-      
+
       composition.total += weight;
-      
+
       switch (cell.type) {
         case 'forest':
           composition.forest += weight;
@@ -79,7 +79,7 @@ function getTerrainComposition(world: WorldData, x: number, z: number, radius: n
       }
     }
   }
-  
+
   // Normalize
   if (composition.total > 0) {
     composition.forest /= composition.total;
@@ -87,7 +87,7 @@ function getTerrainComposition(world: WorldData, x: number, z: number, radius: n
     composition.mountain /= composition.total;
     composition.ground /= composition.total;
   }
-  
+
   return composition;
 }
 
@@ -97,89 +97,101 @@ export function useAmbientAudio({
   worldX = 0,
   worldY = 0,
   enabled = true,
-  masterVolume = 0.3
+  masterVolume = 0.3,
 }: AmbientAudioOptions) {
   const audioLayersRef = useRef<Map<string, AudioLayer>>(new Map());
   const fadeIntervalRef = useRef<number | null>(null);
   const hasUserInteracted = useRef(false);
-  
+
   // Get time of day
-  const timeContext = useMemo<TimeOfDayContext>(() => ({
-    worldId: WORLD_A_ID,
-    worldX,
-    worldY
-  }), [worldX, worldY]);
-  
+  const timeContext = useMemo<TimeOfDayContext>(
+    () => ({
+      worldId: WORLD_A_ID,
+      worldX,
+      worldY,
+    }),
+    [worldX, worldY]
+  );
+
   const night = useMemo(() => isNight(getTimeOfDay(timeContext)), [timeContext]);
-  
+
   // Handle user interaction to enable audio (browser policy)
   useEffect(() => {
     const handleInteraction = () => {
       hasUserInteracted.current = true;
-      // Try to resume audio contexts
-      audioLayersRef.current.forEach(layer => {
-        if (layer.audio) {
-          layer.audio.play().catch(() => {});
-        }
+      // Try to start any layers that should be playing
+      audioLayersRef.current.forEach((layer) => {
+        const a = layer.audio;
+        if (!a) return;
+        a.muted = false;
+        a.play().catch(() => {
+          // Intentionally ignored (autoplay policies / network blockers)
+        });
       });
     };
-    
-    window.addEventListener('click', handleInteraction, { once: true });
-    window.addEventListener('keydown', handleInteraction, { once: true });
-    
+
+    // Be generous: different browsers treat different events as "user gesture".
+    window.addEventListener('pointerdown', handleInteraction, { once: true, capture: true });
+    window.addEventListener('click', handleInteraction, { once: true, capture: true });
+    window.addEventListener('keydown', handleInteraction, { once: true, capture: true });
+    window.addEventListener('touchstart', handleInteraction, { once: true, capture: true });
+
     return () => {
-      window.removeEventListener('click', handleInteraction);
-      window.removeEventListener('keydown', handleInteraction);
+      window.removeEventListener('pointerdown', handleInteraction, { capture: true } as any);
+      window.removeEventListener('click', handleInteraction, { capture: true } as any);
+      window.removeEventListener('keydown', handleInteraction, { capture: true } as any);
+      window.removeEventListener('touchstart', handleInteraction, { capture: true } as any);
     };
   }, []);
-  
+
   // Initialize audio layers
   const initializeLayer = useCallback((id: string, src: string) => {
     if (audioLayersRef.current.has(id)) return;
-    
+
     const audio = new Audio(src);
     audio.loop = true;
     audio.volume = 0;
     audio.preload = 'auto';
-    
+    audio.crossOrigin = 'anonymous';
+
     audioLayersRef.current.set(id, {
       id,
       audio,
       targetVolume: 0,
-      currentVolume: 0
+      currentVolume: 0,
     });
-    
+
     if (hasUserInteracted.current) {
       audio.play().catch(() => {});
     }
   }, []);
-  
+
   // Initialize all layers on mount
   useEffect(() => {
     Object.entries(AUDIO_SOURCES).forEach(([id, src]) => {
       initializeLayer(id, src);
     });
-    
+
     // Fade loop for smooth transitions
     fadeIntervalRef.current = window.setInterval(() => {
-      audioLayersRef.current.forEach(layer => {
+      audioLayersRef.current.forEach((layer) => {
         if (!layer.audio) return;
-        
+
         const diff = layer.targetVolume - layer.currentVolume;
         const step = diff * 0.05; // Smooth fade
-        
+
         if (Math.abs(diff) > 0.001) {
           layer.currentVolume += step;
           layer.audio.volume = Math.max(0, Math.min(1, layer.currentVolume));
         }
       });
     }, 50);
-    
+
     return () => {
       if (fadeIntervalRef.current) {
         clearInterval(fadeIntervalRef.current);
       }
-      audioLayersRef.current.forEach(layer => {
+      audioLayersRef.current.forEach((layer) => {
         if (layer.audio) {
           layer.audio.pause();
           layer.audio.src = '';
@@ -188,47 +200,59 @@ export function useAmbientAudio({
       audioLayersRef.current.clear();
     };
   }, [initializeLayer]);
-  
+
   // Update volumes based on terrain and time
   useEffect(() => {
     if (!enabled || !world || !world.gridSize) {
-      audioLayersRef.current.forEach(layer => {
+      audioLayersRef.current.forEach((layer) => {
         layer.targetVolume = 0;
       });
       return;
     }
-    
+
     const composition = getTerrainComposition(world, playerPosition.x, playerPosition.y);
-    
+
     // Forest sounds
     const forestLayer = audioLayersRef.current.get('forest');
     if (forestLayer) {
       forestLayer.targetVolume = composition.forest * masterVolume * (night ? 0.5 : 1.0);
     }
-    
+
     // Water sounds
     const waterLayer = audioLayersRef.current.get('water');
     if (waterLayer) {
       waterLayer.targetVolume = composition.water * masterVolume * 1.2;
     }
-    
-    // Wind (mountains)
+
+    // Wind (mountains) + a tiny baseline so the world is never totally silent
     const windLayer = audioLayersRef.current.get('wind');
     if (windLayer) {
-      windLayer.targetVolume = composition.mountain * masterVolume * 0.8;
+      const baseline = 0.08; // subtle bed layer
+      windLayer.targetVolume = (baseline + composition.mountain * 0.8) * masterVolume;
     }
-    
+
     // Night insects/ambient
     const nightLayer = audioLayersRef.current.get('night');
     if (nightLayer) {
       nightLayer.targetVolume = night ? masterVolume * 0.6 : 0;
     }
+
+    // If user already interacted, keep trying to start any layer that has audible target volume.
+    if (hasUserInteracted.current) {
+      audioLayersRef.current.forEach((layer) => {
+        const a = layer.audio;
+        if (!a) return;
+        if (layer.targetVolume > 0.001 && a.paused) {
+          a.play().catch(() => {});
+        }
+      });
+    }
   }, [world, playerPosition, night, enabled, masterVolume]);
-  
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      audioLayersRef.current.forEach(layer => {
+      audioLayersRef.current.forEach((layer) => {
         if (layer.audio) {
           layer.audio.pause();
         }
@@ -236,3 +260,4 @@ export function useAmbientAudio({
     };
   }, []);
 }
+
