@@ -194,31 +194,40 @@ export function ForestTrees({ world }: ForestTreesProps) {
   );
 }
 
+// Ground offset to sink vegetation into terrain for better connection
+const TREE_GROUND_OFFSET = -0.15; // Trees sink slightly into ground
+const SMALL_VEG_GROUND_OFFSET = -0.05; // Small plants sink less
+
 // Main vegetation component that renders the appropriate type
 function Vegetation({ x, y, z, scale, type, colorVariant, rotation }: VegetationItem) {
+  // Apply ground offset based on vegetation type
+  const isTree = ['pine', 'deciduous', 'birch', 'willow', 'deadTree'].includes(type);
+  const groundOffset = isTree ? TREE_GROUND_OFFSET : SMALL_VEG_GROUND_OFFSET;
+  const adjustedY = y + groundOffset;
+  
   switch (type) {
     case 'pine':
-      return <PineTree x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <PineTree x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
     case 'deciduous':
-      return <DeciduousTree x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <DeciduousTree x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
     case 'bush':
-      return <Bush x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <Bush x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
     case 'birch':
-      return <BirchTree x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <BirchTree x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
     case 'willow':
-      return <WillowTree x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <WillowTree x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
     case 'deadTree':
-      return <DeadTree x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <DeadTree x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
     case 'flower':
-      return <Flower x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <Flower x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
     case 'rock':
-      return <Rock x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <Rock x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
     case 'grassClump':
-      return <GrassClump x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <GrassClump x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
     case 'mushroom':
-      return <Mushroom x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <Mushroom x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
     case 'fern':
-      return <Fern x={x} y={y} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <Fern x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
     default:
       return null;
   }
