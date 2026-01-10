@@ -20,6 +20,7 @@ import {
   Bridges,
   TimeAwareWaterPlane
 } from '@/components/WorldRenderer';
+import { TexturedTerrainMesh } from '@/components/TexturedTerrain';
 import { ForestTrees } from '@/components/ForestTrees';
 import { PlacedBeaconMesh } from '@/components/ActionSystem';
 import { SkyDome } from '@/components/SkyDome';
@@ -41,6 +42,7 @@ interface FirstPersonSceneProps {
   interactionMode: InteractionMode;
   worldX?: number;
   worldY?: number;
+  useTextures?: boolean;
 }
 
 function FirstPersonScene({ 
@@ -52,7 +54,8 @@ function FirstPersonScene({
   isReplaying,
   interactionMode,
   worldX = 0,
-  worldY = 0
+  worldY = 0,
+  useTextures = true
 }: FirstPersonSceneProps) {
   const [isDiscovered, setIsDiscovered] = useState(false);
   
@@ -82,7 +85,19 @@ function FirstPersonScene({
       <SkyDome worldX={worldX} worldY={worldY} />
       
       <Atmosphere worldX={worldX} worldY={worldY} />
-      <TerrainMesh world={world} />
+      
+      {/* Textured terrain when enabled, fallback to vertex colors */}
+      {useTextures ? (
+        <TexturedTerrainMesh 
+          world={world} 
+          worldX={worldX} 
+          worldY={worldY}
+          texturesEnabled={true} 
+        />
+      ) : (
+        <TerrainMesh world={world} />
+      )}
+      
       <TimeAwareWaterPlane world={world} worldX={worldX} worldY={worldY} />
       <Bridges world={world} />
       <ForestTrees world={world} />
