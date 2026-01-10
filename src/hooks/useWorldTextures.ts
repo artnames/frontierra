@@ -58,8 +58,10 @@ function canvasToThreeTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
-  texture.magFilter = THREE.LinearFilter;
+  // Sharper default filtering so the generated detail doesn't get blurred away.
+  texture.minFilter = THREE.NearestMipmapNearestFilter;
+  texture.magFilter = THREE.NearestFilter;
+  texture.anisotropy = 4;
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
