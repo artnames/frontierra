@@ -17,10 +17,12 @@ import {
   GridOverlay, 
   WaterPlane,
   Atmosphere,
-  Bridges
+  Bridges,
+  TimeAwareWaterPlane
 } from '@/components/WorldRenderer';
 import { ForestTrees } from '@/components/ForestTrees';
 import { PlacedBeaconMesh } from '@/components/ActionSystem';
+import { SkyRenderer } from '@/components/SkyRenderer';
 import * as THREE from 'three';
 import { useThree, useFrame } from '@react-three/fiber';
 
@@ -34,6 +36,8 @@ interface FirstPersonSceneProps {
   replayFrame?: ReplayFrame | null;
   isReplaying: boolean;
   interactionMode: InteractionMode;
+  worldX?: number;
+  worldY?: number;
 }
 
 function FirstPersonScene({ 
@@ -43,7 +47,9 @@ function FirstPersonScene({
   onDiscovery,
   replayFrame,
   isReplaying,
-  interactionMode
+  interactionMode,
+  worldX = 0,
+  worldY = 0
 }: FirstPersonSceneProps) {
   const [isDiscovered, setIsDiscovered] = useState(false);
   
@@ -69,9 +75,9 @@ function FirstPersonScene({
   
   return (
     <>
-      <Atmosphere />
+      <Atmosphere worldX={worldX} worldY={worldY} />
       <TerrainMesh world={world} />
-      <WaterPlane world={world} />
+      <TimeAwareWaterPlane world={world} worldX={worldX} worldY={worldY} />
       <Bridges world={world} />
       <ForestTrees world={world} />
       <PlantedObject world={world} isDiscovered={isDiscovered} />
@@ -111,6 +117,7 @@ interface WorldExplorerProps {
   replayFrame?: ReplayFrame | null;
   interactionMode?: InteractionMode;
   onModeChange?: (mode: InteractionMode) => void;
+  worldContext?: { worldX: number; worldY: number };
 }
 
 export function WorldExplorer({ 
@@ -123,8 +130,11 @@ export function WorldExplorer({
   isReplaying = false,
   replayFrame,
   interactionMode = 'explore',
-  onModeChange
+  onModeChange,
+  worldContext
 }: WorldExplorerProps) {
+  const worldX = worldContext?.worldX ?? 0;
+  const worldY = worldContext?.worldY ?? 0;
   const [position, setPosition] = useState({ x: 0, y: 0, z: 0 });
   const [isDiscovered, setIsDiscovered] = useState(false);
   const [showDiscoveryBanner, setShowDiscoveryBanner] = useState(false);
@@ -250,8 +260,13 @@ export function WorldExplorer({
           replayFrame={replayFrame}
           isReplaying={isReplaying}
           interactionMode={interactionMode}
+          worldX={worldX}
+          worldY={worldY}
         />
       </Canvas>
+      
+      {/* Sky background layer */}
+      <SkyRenderer worldX={worldX} worldY={worldY} />
       
       {/* Replay mode indicator */}
       {isReplaying && (

@@ -12,6 +12,14 @@ import {
   PATH_HEIGHT_OFFSET, 
   BRIDGE_FIXED_HEIGHT 
 } from '@/lib/worldConstants';
+import { 
+  getTimeOfDay, 
+  getLightingParams,
+  isNight,
+  isTwilight,
+  TimeOfDayContext
+} from '@/lib/timeOfDay';
+import { WORLD_A_ID } from '@/lib/worldContext';
 
 // ============================================
 // TERRAIN MESH - Derived from NexArt elevation
@@ -486,16 +494,159 @@ export function WaterPlane({ world }: { world: WorldData }) {
 }
 
 // ============================================
-// ATMOSPHERE
+// ATMOSPHERE - Time-of-Day Aware
 // ============================================
 
-export function Atmosphere() {
+interface AtmosphereProps {
+  worldX?: number;
+  worldY?: number;
+}
+
+export function Atmosphere({ worldX = 0, worldY = 0 }: AtmosphereProps) {
+  // Get deterministic time of day
+  const timeContext: TimeOfDayContext = useMemo(() => ({
+    worldId: WORLD_A_ID,
+    worldX,
+    worldY
+  }), [worldX, worldY]);
+  
+  const timeOfDay = useMemo(() => getTimeOfDay(timeContext), [timeContext]);
+  const lighting = useMemo(() => getLightingParams(timeOfDay), [timeOfDay]);
+  
+  // Calculate sun position from angle
+  const sunPosition = useMemo(() => {
+    const angle = lighting.sunAngle;
+    const radius = 80;
+    const height = Math.sin(angle) * radius;
+    const horizontal = Math.cos(angle) * radius;
+    return [horizontal + 32, Math.max(10, height), 32] as [number, number, number];
+  }, [lighting.sunAngle]);
+  
+  // Convert colors to Three.js format
+  const fogColor = useMemo(() => 
+    new THREE.Color(lighting.fogColor.r, lighting.fogColor.g, lighting.fogColor.b),
+    [lighting.fogColor]
+  );
+  
+  const sunColor = useMemo(() => 
+    new THREE.Color(lighting.sunColor.r, lighting.sunColor.g, lighting.sunColor.b),
+    [lighting.sunColor]
+  );
+  
+  const ambientColor = useMemo(() => 
+    new THREE.Color(lighting.ambientColor.r, lighting.ambientColor.g, lighting.ambientColor.b),
+    [lighting.ambientColor]
+  );
+  
+  const night = isNight(timeOfDay);
+  const twilight = isTwilight(timeOfDay);
+  
+  // Hemisphere light colors
+  const skyColor = useMemo(() => {
+    if (night) return '#1a2040';
+    if (twilight) return '#665588';
+    return '#88aacc';
+  }, [night, twilight]);
+  
+  const groundColor = useMemo(() => {
+    if (night) return '#101520';
+    if (twilight) return '#443344';
+    return '#334455';
+  }, [night, twilight]);
+  
   return (
     <>
-      <fog attach="fog" args={['#1a2a3a', 40, 150]} />
-      <ambientLight intensity={0.35} />
-      <directionalLight position={[60, 80, 30]} intensity={1.0} castShadow />
-      <hemisphereLight args={['#88aacc', '#334455', 0.5]} />
+      <fog attach="fog" args={[fogColor, lighting.fogNear, lighting.fogFar]} />
+      <ambientLight color={ambientColor} intensity={lighting.ambientIntensity} />
+      <directionalLight 
+        position={sunPosition} 
+        color={sunColor}
+        intensity={lighting.sunIntensity} 
+        castShadow 
+      />
+      <hemisphereLight args={[skyColor, groundColor, night ? 0.2 : 0.5]} />
     </>
+  );
+}
+
+// ============================================
+// TIME-AWARE WATER PLANE
+// ============================================
+
+interface TimeAwareWaterPlaneProps {
+  world: WorldData;
+  worldX?: number;
+  worldY?: number;
+}
+
+export function TimeAwareWaterPlane({ world, worldX = 0, worldY = 0 }: TimeAwareWaterPlaneProps) {
+  const heightScale = WORLD_HEIGHT_SCALE;
+  const waterLevel = getWaterLevel(world.vars);
+  const waterThresholdHeight = waterLevel * heightScale;
+  
+  // Get time of day for water effects
+  const timeContext: TimeOfDayContext = useMemo(() => ({
+    worldId: WORLD_A_ID,
+    worldX,
+    worldY
+  }), [worldX, worldY]);
+  
+  const timeOfDay = useMemo(() => getTimeOfDay(timeContext), [timeContext]);
+  const night = isNight(timeOfDay);
+  
+  // Water appearance based on time
+  const waterColor = useMemo(() => {
+    if (night) return '#0a2535'; // Darker at night
+    return '#1a4a6a';
+  }, [night]);
+  
+  const waterOpacity = useMemo(() => {
+    return night ? 0.75 : 0.65; // More opaque at night
+  }, [night]);
+  
+  const waterMetalness = useMemo(() => {
+    return night ? 0.35 : 0.15; // More reflective at night
+  }, [night]);
+  
+  // Calculate water plane height
+  const waterPlaneHeight = useMemo(() => {
+    let minNonWaterElevation = Infinity;
+    let waterCellCount = 0;
+    
+    for (const row of world.terrain) {
+      for (const cell of row) {
+        if (cell.type === 'water') {
+          waterCellCount++;
+        } else if (cell.type !== 'bridge') {
+          const cellHeight = cell.elevation * heightScale;
+          if (cellHeight < minNonWaterElevation) {
+            minNonWaterElevation = cellHeight;
+          }
+        }
+      }
+    }
+    
+    if (waterCellCount === 0) {
+      return minNonWaterElevation - 2;
+    }
+    
+    const maxSafeHeight = minNonWaterElevation - 0.3;
+    return Math.min(waterThresholdHeight, maxSafeHeight);
+  }, [world.terrain, heightScale, waterThresholdHeight]);
+  
+  return (
+    <mesh 
+      position={[world.gridSize / 2, waterPlaneHeight, world.gridSize / 2]} 
+      rotation={[-Math.PI / 2, 0, 0]}
+    >
+      <planeGeometry args={[world.gridSize, world.gridSize]} />
+      <meshStandardMaterial 
+        color={waterColor} 
+        transparent 
+        opacity={waterOpacity}
+        metalness={waterMetalness}
+        roughness={night ? 0.15 : 0.25}
+      />
+    </mesh>
   );
 }
