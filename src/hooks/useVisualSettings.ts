@@ -48,11 +48,18 @@ export function useVisualSettings() {
     updateSetting('materialRichness', !settings.materialRichness);
   }, [settings.materialRichness, updateSetting]);
 
+  // Toggle vegetation visibility
+  const toggleVegetation = useCallback(() => {
+    updateSetting('showVegetation', !settings.showVegetation);
+  }, [settings.showVegetation, updateSetting]);
+
   return {
     settings,
     isLoaded: true,
     materialRichness: settings.materialRichness,
+    showVegetation: settings.showVegetation,
     toggleMaterialRichness,
+    toggleVegetation,
     updateSetting,
   };
 }

@@ -3,10 +3,12 @@
 
 export interface VisualSettings {
   materialRichness: boolean;
+  showVegetation: boolean;
 }
 
 export const defaultVisualSettings: VisualSettings = {
-  materialRichness: true
+  materialRichness: true,
+  showVegetation: true
 };
 
 const STORAGE_KEY = 'nexart-visual-settings';
