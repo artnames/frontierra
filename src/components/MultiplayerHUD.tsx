@@ -35,7 +35,7 @@ export function MultiplayerHUD({
   }
   
   return (
-    <div className="absolute top-4 right-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg border border-border/50 min-w-[200px]">
+    <div className="absolute top-36 right-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg border border-border/50 min-w-[200px] z-10">
       {/* Land Info */}
       <div className="mb-3 pb-2 border-b border-border/30">
         <div className="text-xs text-muted-foreground">Current Land</div>
