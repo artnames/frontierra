@@ -213,8 +213,13 @@ export function useAmbientAudio({
           layer.audio.volume = layer.currentVolume;
         }
 
-        // Pause when fully faded out
-        if (layer.currentVolume < 0.001 && !layer.audio.paused && layer.targetVolume < 0.001) {
+        // Pause only music layers when fully faded out (ambient loops stay running to avoid restart clicks)
+        if (
+          layer.category === 'music' &&
+          layer.currentVolume < 0.001 &&
+          !layer.audio.paused &&
+          layer.targetVolume < 0.001
+        ) {
           layer.audio.pause();
         }
       });
@@ -246,7 +251,7 @@ export function useAmbientAudio({
 
       // Start all ambient layers
       layersRef.current.forEach((layer) => {
-        if (layer.category === 'ambient' && layer.loaded) {
+        if (layer.category === 'ambient') {
           layer.audio.play().catch((e) => {
             console.warn('[Soundscape] Play failed:', layer.id, e);
           });
@@ -279,8 +284,7 @@ export function useAmbientAudio({
     const track = tracks[Math.floor(Math.random() * tracks.length)];
     const layer = layersRef.current.get(`music_${track}`);
 
-    if (!layer || !layer.loaded) {
-      console.log('[Soundscape] Music not ready:', track);
+    if (!layer) {
       musicActiveRef.current = false;
       return;
     }
@@ -301,14 +305,18 @@ export function useAmbientAudio({
     }, 120000);
   }, [masterVolume, musicEnabled]);
 
-  // Trigger music on land entry
   useEffect(() => {
     if (!musicEnabled || !hasInteractedRef.current) return;
-    
-    if (lastLandRef.current !== null && lastLandRef.current !== currentLandKey) {
-      console.log('[Soundscape] Land transition detected, triggering music');
+
+    const prev = lastLandRef.current;
+    const isFirstEntry = prev === null;
+    const changed = prev !== currentLandKey;
+
+    if (isFirstEntry || changed) {
+      // Treat initial land as "land entry" too.
       triggerMusic();
     }
+
     lastLandRef.current = currentLandKey;
   }, [currentLandKey, musicEnabled, triggerMusic]);
 
@@ -345,11 +353,12 @@ export function useAmbientAudio({
       if (!layer) return;
 
       const baseVolume = VOLUME_PRESETS.ambient[key as TerrainAmbient] || 0.2;
-      const targetVol = sfxEnabled ? intensity * baseVolume * masterVolume : 0;
+      const duck = musicEnabled && musicActiveRef.current ? 0.75 : 1;
+      const targetVol = sfxEnabled ? intensity * baseVolume * masterVolume * duck : 0;
       layer.targetVolume = targetVol;
 
       // Start playing if needed and loaded
-      if (hasInteractedRef.current && targetVol > 0.01 && layer.audio.paused && layer.loaded) {
+      if (hasInteractedRef.current && targetVol > 0.01 && layer.audio.paused) {
         layer.audio.play().catch(() => {});
       }
     });
