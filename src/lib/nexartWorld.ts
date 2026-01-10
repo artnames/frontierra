@@ -134,6 +134,11 @@ export async function generateNexArtWorld(params: WorldParams): Promise<NexArtWo
   }
   
   try {
+    // Check if we're in a browser environment with canvas support
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return createFailedWorld(input.seed, input.vars, 'NexArt requires browser environment');
+    }
+    
     const { executeCodeMode } = await import('@nexart/codemode-sdk');
     
     const timeoutPromise = new Promise<never>((_, reject) => {
