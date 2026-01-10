@@ -41,17 +41,19 @@ export function useEdgeTransition(options: UseEdgeTransitionOptions = {}) {
   }, []);
   
   // Check if position is at edge of land
+  // Note: We check ALL edges, not just one direction
   const checkEdgeCrossing = useCallback((
     playerX: number,
     playerZ: number,
     landSize: number = LAND_GRID_SIZE
   ): EdgeDirection | null => {
-    const margin = 0.5;
+    const margin = 1.0; // Detection margin for crossing
     
-    if (playerZ < margin) return 'north';
-    if (playerZ > landSize - margin) return 'south';
-    if (playerX > landSize - margin) return 'east';
-    if (playerX < margin) return 'west';
+    // Check all four edges
+    if (playerZ <= margin) return 'north';  // z=0 is north edge
+    if (playerZ >= landSize - margin) return 'south';  // z=max is south edge
+    if (playerX >= landSize - margin) return 'east';  // x=max is east edge
+    if (playerX <= margin) return 'west';  // x=0 is west edge
     
     return null;
   }, []);
