@@ -4,14 +4,21 @@ import { useMemo, createContext, useContext } from 'react';
 import * as THREE from 'three';
 import { WorldData, getElevationAt } from '@/lib/worldData';
 import { WORLD_HEIGHT_SCALE } from '@/lib/worldConstants';
+import { useWorldTextures } from '@/hooks/useWorldTextures';
+import { MaterialKind } from '@/lib/materialRegistry';
 
 interface ForestTreesProps {
   world: WorldData;
   useRichMaterials?: boolean; // When true, use enhanced materials for visual richness
+  worldX?: number;
+  worldY?: number;
 }
 
 // Context to pass material richness setting to all vegetation components
 const VegetationRichnessContext = createContext(false);
+
+// Context to provide procedural textures to vegetation (when richness is enabled)
+const VegetationTexturesContext = createContext<Map<MaterialKind, THREE.CanvasTexture> | null>(null);
 
 // Vegetation types enum for variety
 type VegetationType = 'pine' | 'deciduous' | 'bush' | 'birch' | 'willow' | 'deadTree' | 'flower' | 'rock' | 'grassClump' | 'mushroom' | 'fern';
@@ -32,7 +39,16 @@ function seededRandom(x: number, y: number, seedOffset: number): number {
   return n - Math.floor(n);
 }
 
-export function ForestTrees({ world, useRichMaterials = false }: ForestTreesProps) {
+export function ForestTrees({ world, useRichMaterials = false, worldX = 0, worldY = 0 }: ForestTreesProps) {
+  // When material richness is enabled, reuse the same deterministic procedural textures as terrain.
+  const { textures, isReady } = useWorldTextures({
+    worldX,
+    worldY,
+    seed: world.seed,
+    vars: world.vars,
+    enabled: useRichMaterials,
+  });
+
   const vegetation = useMemo(() => {
     const items: VegetationItem[] = [];
     const seed = world.seed || 0;
@@ -191,11 +207,13 @@ export function ForestTrees({ world, useRichMaterials = false }: ForestTreesProp
 
   return (
     <VegetationRichnessContext.Provider value={useRichMaterials}>
-      <group>
-        {vegetation.map((item, i) => (
-          <Vegetation key={i} {...item} />
-        ))}
-      </group>
+      <VegetationTexturesContext.Provider value={useRichMaterials && isReady ? textures : null}>
+        <group>
+          {vegetation.map((item, i) => (
+            <Vegetation key={i} {...item} />
+          ))}
+        </group>
+      </VegetationTexturesContext.Provider>
     </VegetationRichnessContext.Provider>
   );
 }
@@ -249,27 +267,38 @@ interface VegProps {
 }
 
 // Enhanced material component that uses MeshStandardMaterial when richness is enabled
+// When rich, we add deterministic surface detail via bump maps sourced from the procedural terrain textures.
 function VegMaterial({ color, isRich }: { color: string; isRich: boolean }) {
+  const textures = useContext(VegetationTexturesContext);
+  const bumpMap = isRich ? textures?.get('forest') ?? undefined : undefined;
+
   if (isRich) {
     return (
       <meshStandardMaterial
         color={color}
         roughness={0.7}
         metalness={0.05}
+        bumpMap={bumpMap}
+        bumpScale={bumpMap ? 0.25 : 0}
       />
     );
   }
   return <meshLambertMaterial color={color} />;
 }
 
-// Bark material with enhanced properties
+// Bark/wood/stone material with enhanced properties
 function BarkMaterial({ color, isRich }: { color: string; isRich: boolean }) {
+  const textures = useContext(VegetationTexturesContext);
+  const bumpMap = isRich ? (textures?.get('path') ?? textures?.get('rock') ?? undefined) : undefined;
+
   if (isRich) {
     return (
       <meshStandardMaterial
         color={color}
         roughness={0.95}
         metalness={0}
+        bumpMap={bumpMap}
+        bumpScale={bumpMap ? 0.35 : 0}
       />
     );
   }

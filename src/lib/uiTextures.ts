@@ -753,18 +753,23 @@ export async function generateMaterialTexture(
   }
   
   // Create canvas for texture
+  // NOTE: previewSystem().destroy() clears the canvas; render to a scratch canvas and copy out.
   const canvas = document.createElement('canvas');
   canvas.width = TEXTURE_SIZE;
   canvas.height = TEXTURE_SIZE;
-  
+
+  const renderCanvas = document.createElement('canvas');
+  renderCanvas.width = TEXTURE_SIZE;
+  renderCanvas.height = TEXTURE_SIZE;
+
   // Generate sketch source
   const source = generateTextureSketch(kind, ctx);
-  
+
   // Compute deterministic seed from context
   const textureSeed = Math.abs(
     (ctx.seed * 1000 + ctx.worldX * 100 + ctx.worldY) % 100000
   );
-  
+
   try {
     const system = createSystem({
       type: 'code',
@@ -775,9 +780,13 @@ export async function generateMaterialTexture(
       vars: ctx.vars.slice(0, 10),
       source
     });
-    
-    const renderer = previewSystem(system, canvas, { showBadge: false });
+
+    const renderer = previewSystem(system, renderCanvas, { showBadge: false });
     renderer.render();
+
+    const out2d = canvas.getContext('2d');
+    if (out2d) out2d.drawImage(renderCanvas, 0, 0);
+
     renderer.destroy();
     
     const textureSet: TextureSet = {

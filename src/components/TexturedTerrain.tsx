@@ -248,8 +248,10 @@ export function TexturedTerrainMesh({
       // Configure texture for proper tiling
       tex.wrapS = THREE.RepeatWrapping;
       tex.wrapT = THREE.RepeatWrapping;
-      tex.minFilter = THREE.LinearMipmapLinearFilter;
-      tex.magFilter = THREE.LinearFilter;
+      // Sharper look so the procedural "sketch" detail is actually perceivable.
+      tex.minFilter = THREE.NearestMipmapNearestFilter;
+      tex.magFilter = THREE.NearestFilter;
+      tex.anisotropy = 4;
       tex.needsUpdate = true;
       
       const isWater = kind === 'water';
