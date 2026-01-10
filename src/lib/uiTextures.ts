@@ -24,9 +24,43 @@ function hexToRGB(hex: string): { r: number; g: number; b: number } {
   };
 }
 
+// Common helper functions to inject into sketches for isotropic patterns
+const SKETCH_HELPERS = `
+  // Domain rotation helpers
+  function rotX(x, y, a) { return x * Math.cos(a) - y * Math.sin(a); }
+  function rotY(x, y, a) { return x * Math.sin(a) + y * Math.cos(a); }
+  
+  // Fractal Brownian Motion - multi-octave noise for natural patterns
+  function fbm(x, y) {
+    var f = 0;
+    var amp = 0.5;
+    var freq = 1;
+    for (var k = 0; k < 5; k = k + 1) {
+      f = f + amp * noise(x * freq, y * freq);
+      freq = freq * 2;
+      amp = amp * 0.5;
+    }
+    return f;
+  }
+  
+  // Domain warp using fbm for organic distortion
+  function warpX(x, y, strength) {
+    return x + (fbm(x * 0.02, y * 0.02) - 0.5) * strength;
+  }
+  function warpY(x, y, strength) {
+    return y + (fbm(x * 0.02 + 100, y * 0.02 + 100) - 0.5) * strength;
+  }
+  
+  // Ridge noise for dune/wave patterns (isotropic)
+  function ridge(x, y, scale) {
+    var n = noise(x * scale, y * scale);
+    return 1 - Math.abs(2 * n - 1);
+  }
+`;
+
 // ============================================================================
-// HIGH-IMPACT MATERIAL SKETCHES
-// Each material has a DISTINCT visual identity with strong mid-frequency structure
+// ISOTROPIC MATERIAL SKETCHES
+// Each material uses noise-based patterns to avoid axis-aligned striping
 // ============================================================================
 
 function generateGroundSketch(ctx: MaterialContext): string {
@@ -34,79 +68,72 @@ function generateGroundSketch(ctx: MaterialContext): string {
   const base = hexToRGB(palette.base);
   const dark = hexToRGB(palette.dark);
   const light = hexToRGB(palette.light);
-  const offsetX = Math.abs((ctx.worldX * 127 + ctx.seed) % 1000);
-  const offsetY = Math.abs((ctx.worldY * 131 + ctx.seed) % 1000);
+  const textureSeed = Math.abs((ctx.seed * 1000 + ctx.worldX * 100 + ctx.worldY) % 100000);
 
-  // GROUND: Sediment layers with erosion streaks and geological bands
+  // GROUND: FBM-based soil with scattered pebbles and organic blotches
   return `
     function setup() {
-      noStroke();
+      var SEED = ${textureSeed};
+      randomSeed(SEED);
+      noiseSeed(SEED);
+      ${SKETCH_HELPERS}
+      
       var baseR = ${base.r}; var baseG = ${base.g}; var baseB = ${base.b};
       var darkR = ${dark.r}; var darkG = ${dark.g}; var darkB = ${dark.b};
       var lightR = ${light.r}; var lightG = ${light.g}; var lightB = ${light.b};
-      var offX = ${offsetX}; var offY = ${offsetY};
       
       // Base fill
       background(baseR, baseG, baseB);
-      
-      // SEDIMENT BANDS - horizontal geological strata
-      for (var band = 0; band < 12; band = band + 1) {
-        var bandY = band * (height / 12);
-        var bandHeight = height / 12 + noise(band * 0.5 + offX * 0.01, 0) * 15;
-        var bandShift = (noise(band * 0.3, offY * 0.01) - 0.5) * 40;
-        
-        // Alternate between lighter and darker strata
-        if (band % 2 == 0) {
-          fill(darkR - 15 + bandShift, darkG - 10 + bandShift, darkB - 5 + bandShift, 120);
-        } else {
-          fill(lightR + bandShift, lightG + bandShift, lightB + bandShift, 80);
-        }
-        rect(0, bandY, width, bandHeight);
-      }
-      
-      // EROSION CHANNELS - diagonal flow patterns
-      stroke(darkR - 30, darkG - 25, darkB - 20, 100);
-      strokeWeight(2);
-      for (var ch = 0; ch < 8; ch = ch + 1) {
-        var startX = noise(ch * 7 + offX, 0) * width;
-        var startY = 0;
-        var px = startX;
-        var py = startY;
-        for (var step = 0; step < 20; step = step + 1) {
-          var angle = PI * 0.4 + noise(px * 0.02 + offX * 0.01, py * 0.02 + offY * 0.01) * PI * 0.3;
-          var nx = px + cos(angle) * 15;
-          var ny = py + sin(angle) * 15;
-          line(px, py, nx, ny);
-          px = nx;
-          py = ny;
-          if (py > height) break;
-        }
-      }
       noStroke();
       
-      // SOIL CLUMPS - chunky irregular patches
-      for (var i = 0; i < 40; i = i + 1) {
-        var cx = noise(i * 13 + offX, 0) * width;
-        var cy = noise(0, i * 13 + offY) * height;
-        var clumpSize = 8 + noise(i * 3, i * 3) * 20;
-        fill(darkR - 20, darkG - 15, darkB - 10, 100);
+      // FBM-based soil variation (isotropic)
+      for (var py = 0; py < height; py = py + 2) {
+        for (var px = 0; px < width; px = px + 2) {
+          var wx = warpX(px, py, 30);
+          var wy = warpY(px, py, 30);
+          var n = fbm(wx * 0.025, wy * 0.025);
+          
+          if (n > 0.55) {
+            fill(lightR, lightG, lightB, (n - 0.55) * 200);
+            rect(px, py, 2, 2);
+          } else if (n < 0.45) {
+            fill(darkR, darkG, darkB, (0.45 - n) * 180);
+            rect(px, py, 2, 2);
+          }
+        }
+      }
+      
+      // Organic blotches using warped coordinates
+      for (var blob = 0; blob < 25; blob = blob + 1) {
+        var bx = random(width);
+        var by = random(height);
+        var bsize = 15 + random(30);
+        fill(darkR - 15, darkG - 10, darkB - 5, 60);
         
-        // Irregular blob shape
         beginShape();
-        for (var a = 0; a < TWO_PI; a = a + 0.5) {
-          var r = clumpSize * (0.6 + noise(i + a, offX * 0.01) * 0.8);
-          vertex(cx + cos(a) * r, cy + sin(a) * r);
+        for (var a = 0; a < TWO_PI; a = a + 0.4) {
+          var r = bsize * (0.6 + noise(blob * 5 + a * 2, SEED * 0.001) * 0.8);
+          vertex(bx + cos(a) * r, by + sin(a) * r);
         }
         endShape(CLOSE);
       }
       
-      // PEBBLE SCATTER
-      for (var p = 0; p < 60; p = p + 1) {
-        var px = noise(p * 11 + offX, 100) * width;
-        var py = noise(100, p * 11 + offY) * height;
-        var psize = 3 + noise(p, p) * 6;
-        fill(darkR - 25, darkG - 20, darkB - 15, 150);
-        ellipse(px, py, psize, psize * 0.7);
+      // Scattered pebbles (random placement, not grid)
+      for (var p = 0; p < 80; p = p + 1) {
+        var px = random(width);
+        var py = random(height);
+        var psize = 2 + random(5);
+        var shade = random(-20, 10);
+        fill(darkR + shade, darkG + shade, darkB + shade, 140);
+        ellipse(px, py, psize, psize * (0.6 + random(0.4)));
+      }
+      
+      // Subtle highlight specks
+      for (var h = 0; h < 40; h = h + 1) {
+        var hx = random(width);
+        var hy = random(height);
+        fill(lightR + 20, lightG + 15, lightB + 10, 80);
+        ellipse(hx, hy, 1 + random(2), 1 + random(2));
       }
     }
   `;
@@ -117,90 +144,80 @@ function generateForestSketch(ctx: MaterialContext): string {
   const base = hexToRGB(palette.base);
   const dark = hexToRGB(palette.dark);
   const light = hexToRGB(palette.light);
-  const offsetX = Math.abs((ctx.worldX * 127 + ctx.seed) % 1000);
-  const offsetY = Math.abs((ctx.worldY * 131 + ctx.seed) % 1000);
+  const textureSeed = Math.abs((ctx.seed * 1000 + ctx.worldX * 100 + ctx.worldY) % 100000);
 
-  // FOREST: Flow-field canopy with layered organic filaments and leaf mass
+  // FOREST: High contrast leaf litter with multi-scale speckles
   return `
     function setup() {
+      var SEED = ${textureSeed};
+      randomSeed(SEED);
+      noiseSeed(SEED);
+      ${SKETCH_HELPERS}
+      
       var baseR = ${base.r}; var baseG = ${base.g}; var baseB = ${base.b};
       var darkR = ${dark.r}; var darkG = ${dark.g}; var darkB = ${dark.b};
       var lightR = ${light.r}; var lightG = ${light.g}; var lightB = ${light.b};
-      var offX = ${offsetX}; var offY = ${offsetY};
       
       // Deep shadow base
-      background(darkR - 10, darkG - 5, darkB - 10);
-      
-      // CANOPY MASS LAYER - large organic blobs of foliage
-      noStroke();
-      for (var blob = 0; blob < 15; blob = blob + 1) {
-        var bx = noise(blob * 17 + offX, 0) * width;
-        var by = noise(0, blob * 17 + offY) * height;
-        var bsize = 40 + noise(blob * 3, blob * 3) * 80;
-        
-        // Gradient from center to edge
-        for (var ring = 0; ring < 5; ring = ring + 1) {
-          var ringSize = bsize * (1 - ring * 0.18);
-          var greenShift = ring * 8;
-          fill(baseR + greenShift, baseG + 15 + greenShift, baseB + greenShift, 60);
-          ellipse(bx, by, ringSize, ringSize * 0.85);
-        }
-      }
-      
-      // FLOW-FIELD FILAMENTS - vein-like organic streams
-      stroke(lightR, lightG + 30, lightB, 80);
-      strokeWeight(1);
-      for (var f = 0; f < 200; f = f + 1) {
-        var fx = noise(f * 7 + offX, 500) * width;
-        var fy = noise(500, f * 7 + offY) * height;
-        var px = fx;
-        var py = fy;
-        
-        for (var step = 0; step < 12; step = step + 1) {
-          var flowAngle = noise(px * 0.015 + offX * 0.005, py * 0.015 + offY * 0.005) * TWO_PI * 2;
-          var nx = px + cos(flowAngle) * 6;
-          var ny = py + sin(flowAngle) * 6;
-          line(px, py, nx, ny);
-          px = nx;
-          py = ny;
-        }
-      }
-      
-      // SECONDARY DARKER VEINS
-      stroke(darkR, darkG + 10, darkB, 60);
-      for (var v = 0; v < 80; v = v + 1) {
-        var vx = noise(v * 11 + offX, 800) * width;
-        var vy = noise(800, v * 11 + offY) * height;
-        var px = vx;
-        var py = vy;
-        
-        for (var step = 0; step < 8; step = step + 1) {
-          var flowAngle = noise(px * 0.02, py * 0.02) * TWO_PI * 1.5 + PI;
-          var nx = px + cos(flowAngle) * 8;
-          var ny = py + sin(flowAngle) * 8;
-          line(px, py, nx, ny);
-          px = nx;
-          py = ny;
-        }
-      }
+      background(darkR, darkG, darkB);
       noStroke();
       
-      // LEAF HIGHLIGHTS - scattered bright spots
-      for (var leaf = 0; leaf < 100; leaf = leaf + 1) {
-        var lx = noise(leaf * 5 + offX, 200) * width;
-        var ly = noise(200, leaf * 5 + offY) * height;
-        var lsize = 2 + noise(leaf, leaf) * 5;
-        fill(lightR + 20, lightG + 40, lightB + 20, 120);
-        ellipse(lx, ly, lsize, lsize);
+      // Large organic shadow masses
+      for (var mass = 0; mass < 12; mass = mass + 1) {
+        var mx = random(width);
+        var my = random(height);
+        var msize = 40 + random(60);
+        
+        for (var ring = 4; ring >= 0; ring = ring - 1) {
+          var ringSize = msize * (0.3 + ring * 0.18);
+          var greenBoost = (4 - ring) * 12;
+          fill(baseR + greenBoost, baseG + 20 + greenBoost, baseB + greenBoost, 80);
+          
+          beginShape();
+          for (var a = 0; a < TWO_PI; a = a + 0.3) {
+            var r = ringSize * (0.7 + noise(mass * 7 + a, ring * 3) * 0.6);
+            vertex(mx + cos(a) * r, my + sin(a) * r);
+          }
+          endShape(CLOSE);
+        }
       }
       
-      // DAPPLED LIGHT PATCHES
-      for (var d = 0; d < 25; d = d + 1) {
-        var dx = noise(d * 19 + offX, 300) * width;
-        var dy = noise(300, d * 19 + offY) * height;
-        var dsize = 15 + noise(d * 2, d * 2) * 25;
-        fill(lightR + 30, lightG + 50, lightB + 30, 40);
-        ellipse(dx, dy, dsize, dsize * 0.8);
+      // Multi-scale leaf litter speckles
+      for (var layer = 0; layer < 3; layer = layer + 1) {
+        var count = 80 + layer * 60;
+        var maxSize = 8 - layer * 2;
+        var alpha = 100 - layer * 20;
+        
+        for (var s = 0; s < count; s = s + 1) {
+          var sx = random(width);
+          var sy = random(height);
+          var ssize = 1 + random(maxSize);
+          
+          if (random() > 0.5) {
+            fill(darkR - 10, darkG, darkB - 5, alpha);
+          } else {
+            fill(baseR + 15, baseG + 25, baseB + 10, alpha);
+          }
+          ellipse(sx, sy, ssize, ssize * (0.6 + random(0.4)));
+        }
+      }
+      
+      // Bright highlight flecks (sunlight through canopy)
+      for (var h = 0; h < 60; h = h + 1) {
+        var hx = random(width);
+        var hy = random(height);
+        var hsize = 1 + random(4);
+        fill(lightR + 30, lightG + 50, lightB + 20, 100 + random(80));
+        ellipse(hx, hy, hsize, hsize);
+      }
+      
+      // Dark patches for depth
+      for (var d = 0; d < 20; d = d + 1) {
+        var dx = random(width);
+        var dy = random(height);
+        var dsize = 10 + random(25);
+        fill(darkR - 15, darkG - 10, darkB - 10, 50);
+        ellipse(dx, dy, dsize, dsize * (0.7 + random(0.3)));
       }
     }
   `;
@@ -211,91 +228,89 @@ function generateMountainSketch(ctx: MaterialContext): string {
   const base = hexToRGB(palette.base);
   const dark = hexToRGB(palette.dark);
   const light = hexToRGB(palette.light);
-  const offsetX = Math.abs((ctx.worldX * 127 + ctx.seed) % 1000);
-  const offsetY = Math.abs((ctx.worldY * 131 + ctx.seed) % 1000);
+  const textureSeed = Math.abs((ctx.seed * 1000 + ctx.worldX * 100 + ctx.worldY) % 100000);
 
-  // MOUNTAIN: Fractured rock strata with bold diagonal ridges
+  // MOUNTAIN: Warped/rotated strata with angular rock debris
   return `
     function setup() {
+      var SEED = ${textureSeed};
+      randomSeed(SEED);
+      noiseSeed(SEED);
+      ${SKETCH_HELPERS}
+      
       var baseR = ${base.r}; var baseG = ${base.g}; var baseB = ${base.b};
       var darkR = ${dark.r}; var darkG = ${dark.g}; var darkB = ${dark.b};
       var lightR = ${light.r}; var lightG = ${light.g}; var lightB = ${light.b};
-      var offX = ${offsetX}; var offY = ${offsetY};
       
       background(baseR, baseG, baseB);
-      
-      // BOLD DIAGONAL STRATA - major geological layers
       noStroke();
-      var strataAngle = PI * 0.15 + noise(offX * 0.01, offY * 0.01) * PI * 0.1;
-      for (var layer = 0; layer < 20; layer = layer + 1) {
-        var layerOffset = layer * 15 - 50;
-        var layerWidth = 10 + noise(layer * 0.5, 0) * 15;
-        
-        // Alternating light/dark bands
-        if (layer % 3 == 0) {
-          fill(lightR + 15, lightG + 15, lightB + 15, 150);
-        } else if (layer % 3 == 1) {
-          fill(darkR - 20, darkG - 20, darkB - 20, 130);
-        } else {
-          fill(baseR - 10, baseG - 10, baseB - 10, 100);
+      
+      // Rotation angle for this tile (varies per seed)
+      var tileAngle = (noise(SEED * 0.001, 0) - 0.5) * PI * 0.4;
+      
+      // Warped strata using rotated/warped domain
+      for (var py = 0; py < height; py = py + 2) {
+        for (var px = 0; px < width; px = px + 2) {
+          // Rotate domain to break horizontal alignment
+          var rx = rotX(px - width/2, py - height/2, tileAngle) + width/2;
+          var ry = rotY(px - width/2, py - height/2, tileAngle) + height/2;
+          
+          // Warp for organic feel
+          var wx = warpX(rx, ry, 40);
+          var wy = warpY(rx, ry, 40);
+          
+          // Strata based on warped Y
+          var strataVal = (wy * 0.05) % 1;
+          var n = noise(wx * 0.02, wy * 0.01);
+          
+          if (strataVal < 0.3 && n > 0.4) {
+            fill(lightR + 10, lightG + 10, lightB + 10, 100);
+            rect(px, py, 2, 2);
+          } else if (strataVal > 0.7 && n < 0.6) {
+            fill(darkR - 15, darkG - 15, darkB - 15, 90);
+            rect(px, py, 2, 2);
+          }
         }
-        
-        // Draw diagonal band
-        push();
-        translate(width / 2, height / 2);
-        rotate(strataAngle);
-        rect(-width, layerOffset, width * 2, layerWidth);
-        pop();
       }
       
-      // FRACTURE LINES - sharp cracks in rock
-      stroke(darkR - 40, darkG - 40, darkB - 40, 180);
-      strokeWeight(2);
-      for (var crack = 0; crack < 12; crack = crack + 1) {
-        var cx = noise(crack * 23 + offX, 0) * width;
-        var cy = noise(0, crack * 23 + offY) * height;
-        var clen = 30 + noise(crack * 5, crack * 5) * 60;
-        var cang = noise(crack * 7, 100) * PI - PI * 0.5;
-        
-        // Jagged crack path
+      // Fracture lines (random angles, not axis-aligned)
+      stroke(darkR - 35, darkG - 35, darkB - 35, 150);
+      strokeWeight(1.5);
+      for (var crack = 0; crack < 18; crack = crack + 1) {
+        var cx = random(width);
+        var cy = random(height);
+        var cang = random(TWO_PI);
         var px = cx;
         var py = cy;
+        
         for (var seg = 0; seg < 6; seg = seg + 1) {
-          var segLen = clen / 6;
-          var segAng = cang + (noise(crack + seg, seg) - 0.5) * PI * 0.4;
+          var segLen = 8 + random(15);
+          var segAng = cang + (random() - 0.5) * PI * 0.5;
           var nx = px + cos(segAng) * segLen;
           var ny = py + sin(segAng) * segLen;
           line(px, py, nx, ny);
           px = nx;
           py = ny;
+          cang = segAng;
         }
-      }
-      
-      // SECONDARY HAIRLINE CRACKS
-      strokeWeight(1);
-      stroke(darkR - 30, darkG - 30, darkB - 30, 100);
-      for (var hc = 0; hc < 30; hc = hc + 1) {
-        var hx = noise(hc * 11 + offX, 200) * width;
-        var hy = noise(200, hc * 11 + offY) * height;
-        var hlen = 10 + noise(hc, hc) * 25;
-        var hang = noise(hc * 3, 50) * PI;
-        line(hx, hy, hx + cos(hang) * hlen, hy + sin(hang) * hlen);
       }
       noStroke();
       
-      // ROCK DEBRIS / LOOSE STONES
+      // Angular rock debris
       for (var stone = 0; stone < 50; stone = stone + 1) {
-        var sx = noise(stone * 9 + offX, 400) * width;
-        var sy = noise(400, stone * 9 + offY) * height;
-        var ssize = 4 + noise(stone * 2, stone * 2) * 10;
-        var sshade = (noise(stone, 0) - 0.5) * 40;
-        fill(baseR + sshade, baseG + sshade, baseB + sshade, 180);
+        var sx = random(width);
+        var sy = random(height);
+        var ssize = 4 + random(10);
+        var shade = (random() - 0.5) * 40;
+        fill(baseR + shade, baseG + shade, baseB + shade, 160);
         
-        // Angular stone shape
         beginShape();
-        for (var a = 0; a < TWO_PI; a = a + PI / 3) {
-          var r = ssize * (0.7 + noise(stone + a, 0) * 0.6);
-          vertex(sx + cos(a) * r, sy + sin(a) * r);
+        var sides = 4 + int(random(3));
+        var startAng = random(TWO_PI);
+        for (var s = 0; s < sides; s = s + 1) {
+          var ang = startAng + s * TWO_PI / sides + random(-0.3, 0.3);
+          var r = ssize * (0.5 + random(0.5));
+          vertex(sx + cos(ang) * r, sy + sin(ang) * r);
         }
         endShape(CLOSE);
       }
@@ -307,73 +322,68 @@ function generateSnowSketch(ctx: MaterialContext): string {
   const palette = MATERIAL_PALETTES.snow;
   const base = hexToRGB(palette.base);
   const dark = hexToRGB(palette.dark);
-  const offsetX = Math.abs((ctx.worldX * 127 + ctx.seed) % 1000);
-  const offsetY = Math.abs((ctx.worldY * 131 + ctx.seed) % 1000);
+  const textureSeed = Math.abs((ctx.seed * 1000 + ctx.worldX * 100 + ctx.worldY) % 100000);
 
-  // SNOW: Wind-scoured surface with drift patterns and ice highlights
+  // SNOW: Soft warped drifts with ice sparkles
   return `
     function setup() {
+      var SEED = ${textureSeed};
+      randomSeed(SEED);
+      noiseSeed(SEED);
+      ${SKETCH_HELPERS}
+      
       var baseR = ${base.r}; var baseG = ${base.g}; var baseB = ${base.b};
       var darkR = ${dark.r}; var darkG = ${dark.g}; var darkB = ${dark.b};
-      var offX = ${offsetX}; var offY = ${offsetY};
       
       background(baseR, baseG, baseB);
-      
-      // WIND-SCOURED DRIFT LINES - parallel curved streaks
-      noFill();
-      stroke(darkR - 10, darkG - 10, darkB, 80);
-      strokeWeight(2);
-      for (var drift = 0; drift < 40; drift = drift + 1) {
-        var dy = drift * (height / 40) + noise(drift * 0.3, offX * 0.01) * 20 - 10;
-        beginShape();
-        for (var x = 0; x < width; x = x + 10) {
-          var waveY = dy + sin(x * 0.02 + noise(drift, 0) * 5) * 8 + noise(x * 0.01 + offX * 0.01, drift * 0.1) * 15;
-          vertex(x, waveY);
-        }
-        endShape();
-      }
-      
-      // DEEPER SHADOW DRIFTS
-      stroke(darkR - 30, darkG - 25, darkB - 10, 60);
-      strokeWeight(3);
-      for (var sd = 0; sd < 15; sd = sd + 1) {
-        var sdy = noise(sd * 7 + offX, 0) * height;
-        beginShape();
-        for (var x = 0; x < width; x = x + 15) {
-          var waveY = sdy + sin(x * 0.015 + noise(sd, 100) * 10) * 12;
-          vertex(x, waveY);
-        }
-        endShape();
-      }
       noStroke();
       
-      // ICE CRYSTAL HIGHLIGHTS - bright sparkle points
-      for (var ice = 0; ice < 80; ice = ice + 1) {
-        var ix = noise(ice * 13 + offX, 500) * width;
-        var iy = noise(500, ice * 13 + offY) * height;
-        var isize = 1 + noise(ice, ice) * 3;
-        fill(255, 255, 255, 200 + noise(ice * 2, 0) * 55);
+      // Soft shadow undulations using fbm
+      for (var py = 0; py < height; py = py + 2) {
+        for (var px = 0; px < width; px = px + 2) {
+          var wx = warpX(px, py, 50);
+          var wy = warpY(px, py, 50);
+          var n = fbm(wx * 0.015, wy * 0.015);
+          
+          if (n < 0.45) {
+            fill(darkR - 10, darkG - 5, darkB + 5, (0.45 - n) * 120);
+            rect(px, py, 2, 2);
+          }
+        }
+      }
+      
+      // Drift shadow blobs
+      for (var drift = 0; drift < 15; drift = drift + 1) {
+        var dx = random(width);
+        var dy = random(height);
+        var dw = 30 + random(50);
+        var dh = 8 + random(15);
+        var dang = random(-0.3, 0.3);
+        
+        push();
+        translate(dx, dy);
+        rotate(dang);
+        fill(darkR - 15, darkG - 10, darkB, 40);
+        ellipse(0, 0, dw, dh);
+        pop();
+      }
+      
+      // Ice crystal sparkles
+      for (var ice = 0; ice < 100; ice = ice + 1) {
+        var ix = random(width);
+        var iy = random(height);
+        var isize = 1 + random(2);
+        fill(255, 255, 255, 180 + random(75));
         ellipse(ix, iy, isize, isize);
       }
       
-      // SUBTLE BLUE SHADOWS in depressions
-      for (var sh = 0; sh < 20; sh = sh + 1) {
-        var shx = noise(sh * 19 + offX, 700) * width;
-        var shy = noise(700, sh * 19 + offY) * height;
-        var shsize = 20 + noise(sh * 4, sh * 4) * 40;
-        fill(darkR - 20, darkG - 15, darkB + 10, 35);
-        ellipse(shx, shy, shsize, shsize * 0.5);
-      }
-      
-      // FROST TEXTURE OVERLAY
-      for (var fy = 0; fy < height; fy = fy + 4) {
-        for (var fx = 0; fx < width; fx = fx + 4) {
-          var fn = noise((fx + offX) * 0.03, (fy + offY) * 0.03);
-          if (fn > 0.6) {
-            fill(255, 255, 255, 40);
-            rect(fx, fy, 3, 3);
-          }
-        }
+      // Subtle blue shadow spots
+      for (var sh = 0; sh < 12; sh = sh + 1) {
+        var shx = random(width);
+        var shy = random(height);
+        var shsize = 15 + random(30);
+        fill(darkR - 25, darkG - 15, darkB + 15, 30);
+        ellipse(shx, shy, shsize, shsize * 0.6);
       }
     }
   `;
@@ -384,78 +394,61 @@ function generateWaterSketch(ctx: MaterialContext): string {
   const base = hexToRGB(palette.base);
   const dark = hexToRGB(palette.dark);
   const light = hexToRGB(palette.light);
-  const offsetX = Math.abs((ctx.worldX * 127 + ctx.seed) % 1000);
-  const offsetY = Math.abs((ctx.worldY * 131 + ctx.seed) % 1000);
+  const textureSeed = Math.abs((ctx.seed * 1000 + ctx.worldX * 100 + ctx.worldY) % 100000);
 
-  // WATER: Directional flow lines with depth gradient and caustic highlights
+  // WATER: Smooth warped caustics, no grid patterns
   return `
     function setup() {
+      var SEED = ${textureSeed};
+      randomSeed(SEED);
+      noiseSeed(SEED);
+      ${SKETCH_HELPERS}
+      
       var baseR = ${base.r}; var baseG = ${base.g}; var baseB = ${base.b};
       var darkR = ${dark.r}; var darkG = ${dark.g}; var darkB = ${dark.b};
       var lightR = ${light.r}; var lightG = ${light.g}; var lightB = ${light.b};
-      var offX = ${offsetX}; var offY = ${offsetY};
       
-      // DEPTH GRADIENT - darker at edges
-      for (var gy = 0; gy < height; gy = gy + 1) {
-        var depthFactor = 1 - abs(gy - height / 2) / (height / 2) * 0.3;
-        var r = baseR * depthFactor;
-        var g = baseG * depthFactor;
-        var b = baseB * depthFactor;
-        stroke(r, g, b);
-        line(0, gy, width, gy);
-      }
-      noStroke();
-      
-      // HORIZONTAL FLOW LINES - strong directional current
-      stroke(lightR, lightG + 20, lightB + 30, 100);
-      strokeWeight(1);
-      for (var flow = 0; flow < 60; flow = flow + 1) {
-        var fy = flow * (height / 60) + noise(flow * 0.5, offX * 0.01) * 15;
-        var flen = 30 + noise(flow * 0.3, 0) * 50;
-        var fx = noise(flow * 3 + offX, 0) * width;
-        
-        // Wavy flow line
-        beginShape();
-        for (var x = 0; x < flen; x = x + 5) {
-          var wy = fy + sin(x * 0.1 + noise(flow, 0) * 5) * 3;
-          vertex(fx + x, wy);
+      // Smooth depth gradient base
+      for (var py = 0; py < height; py = py + 1) {
+        for (var px = 0; px < width; px = px + 1) {
+          var n = fbm(px * 0.02, py * 0.02);
+          var depthMod = 0.9 + n * 0.2;
+          fill(baseR * depthMod, baseG * depthMod, baseB * depthMod);
+          rect(px, py, 1, 1);
         }
-        endShape();
-      }
-      
-      // SECONDARY FLOW (perpendicular hints)
-      stroke(lightR - 10, lightG + 10, lightB + 20, 50);
-      for (var sf = 0; sf < 25; sf = sf + 1) {
-        var sfx = noise(sf * 11 + offX, 200) * width;
-        var sfy = noise(200, sf * 11 + offY) * height;
-        var sflen = 15 + noise(sf, sf) * 20;
-        line(sfx, sfy, sfx + sflen, sfy + noise(sf * 2, 0) * 10 - 5);
       }
       noStroke();
       
-      // CAUSTIC LIGHT PATTERNS - bright refracted spots
-      for (var c = 0; c < 80; c = c + 1) {
-        var cx = noise(c * 7 + offX, 400) * width;
-        var cy = noise(400, c * 7 + offY) * height;
-        var csize = 5 + noise(c * 2, c * 2) * 15;
+      // Soft caustic highlights (organic blobs)
+      for (var c = 0; c < 50; c = c + 1) {
+        var cx = random(width);
+        var cy = random(height);
+        var csize = 8 + random(20);
         
-        // Irregular caustic shape
-        fill(lightR + 40, lightG + 50, lightB + 60, 60);
+        fill(lightR + 30, lightG + 40, lightB + 50, 50);
         beginShape();
-        for (var a = 0; a < TWO_PI; a = a + 0.7) {
-          var r = csize * (0.5 + noise(c + a * 0.5, 0) * 1);
+        for (var a = 0; a < TWO_PI; a = a + 0.5) {
+          var r = csize * (0.5 + noise(c * 3 + a, SEED * 0.001) * 0.8);
           vertex(cx + cos(a) * r, cy + sin(a) * r);
         }
         endShape(CLOSE);
       }
       
-      // DEEP SPOTS
-      for (var deep = 0; deep < 15; deep = deep + 1) {
-        var dx = noise(deep * 17 + offX, 600) * width;
-        var dy = noise(600, deep * 17 + offY) * height;
-        var dsize = 25 + noise(deep * 3, deep * 3) * 35;
-        fill(darkR - 20, darkG - 15, darkB - 10, 50);
-        ellipse(dx, dy, dsize, dsize * 0.6);
+      // Deep spots
+      for (var deep = 0; deep < 12; deep = deep + 1) {
+        var dx = random(width);
+        var dy = random(height);
+        var dsize = 20 + random(35);
+        fill(darkR - 15, darkG - 10, darkB - 5, 45);
+        ellipse(dx, dy, dsize, dsize * (0.6 + random(0.3)));
+      }
+      
+      // Subtle surface shimmer points
+      for (var sh = 0; sh < 40; sh = sh + 1) {
+        var shx = random(width);
+        var shy = random(height);
+        fill(lightR + 50, lightG + 60, lightB + 70, 60 + random(40));
+        ellipse(shx, shy, 2 + random(3), 2 + random(3));
       }
     }
   `;
@@ -466,72 +459,67 @@ function generatePathSketch(ctx: MaterialContext): string {
   const base = hexToRGB(palette.base);
   const dark = hexToRGB(palette.dark);
   const light = hexToRGB(palette.light);
-  const offsetX = Math.abs((ctx.worldX * 127 + ctx.seed) % 1000);
-  const offsetY = Math.abs((ctx.worldY * 131 + ctx.seed) % 1000);
+  const textureSeed = Math.abs((ctx.seed * 1000 + ctx.worldX * 100 + ctx.worldY) % 100000);
 
-  // PATH: Worn compacted surface with directional abrasion and wheel ruts
+  // PATH: Warped compacted dirt with scattered footprints
   return `
     function setup() {
+      var SEED = ${textureSeed};
+      randomSeed(SEED);
+      noiseSeed(SEED);
+      ${SKETCH_HELPERS}
+      
       var baseR = ${base.r}; var baseG = ${base.g}; var baseB = ${base.b};
       var darkR = ${dark.r}; var darkG = ${dark.g}; var darkB = ${dark.b};
       var lightR = ${light.r}; var lightG = ${light.g}; var lightB = ${light.b};
-      var offX = ${offsetX}; var offY = ${offsetY};
       
       background(baseR, baseG, baseB);
-      
-      // CENTER WEAR ZONE - lighter compacted center
-      noStroke();
-      for (var wy = 0; wy < height; wy = wy + 1) {
-        var wearWidth = width * 0.6 + noise(wy * 0.02 + offY * 0.01, 0) * width * 0.2;
-        var wearX = (width - wearWidth) / 2;
-        var wearIntensity = 1 - abs(wy - height / 2) / (height / 2) * 0.3;
-        fill(lightR, lightG, lightB, 50 * wearIntensity);
-        rect(wearX, wy, wearWidth, 1);
-      }
-      
-      // WHEEL RUTS - parallel darker grooves
-      stroke(darkR - 20, darkG - 15, darkB - 10, 120);
-      strokeWeight(3);
-      var rutOffset = width * 0.15;
-      for (var ry = 0; ry < height; ry = ry + 2) {
-        var wobble1 = noise(ry * 0.02 + offY * 0.01, offX * 0.01) * 8 - 4;
-        var wobble2 = noise(ry * 0.02 + offY * 0.01, offX * 0.01 + 100) * 8 - 4;
-        point(width / 2 - rutOffset + wobble1, ry);
-        point(width / 2 + rutOffset + wobble2, ry);
-      }
-      
-      // DIRECTIONAL ABRASION LINES
-      strokeWeight(1);
-      stroke(darkR - 10, darkG - 5, darkB, 80);
-      for (var ab = 0; ab < 100; ab = ab + 1) {
-        var ax = noise(ab * 9 + offX, 0) * width;
-        var ay = noise(0, ab * 9 + offY) * height;
-        var alen = 10 + noise(ab, ab) * 30;
-        // Mostly vertical (direction of travel)
-        var aang = PI * 0.5 + (noise(ab * 2, 50) - 0.5) * PI * 0.3;
-        line(ax, ay, ax + cos(aang) * alen, ay + sin(aang) * alen);
-      }
       noStroke();
       
-      // EMBEDDED STONES
-      for (var stone = 0; stone < 35; stone = stone + 1) {
-        var sx = noise(stone * 11 + offX, 300) * width;
-        var sy = noise(300, stone * 11 + offY) * height;
-        var ssize = 4 + noise(stone * 2, stone * 2) * 8;
-        fill(darkR - 15, darkG - 10, darkB - 5, 150);
-        ellipse(sx, sy, ssize, ssize * 0.7);
+      // Worn center zone using fbm (not axis-aligned)
+      for (var py = 0; py < height; py = py + 2) {
+        for (var px = 0; px < width; px = px + 2) {
+          var wx = warpX(px, py, 25);
+          var wy = warpY(px, py, 25);
+          var n = fbm(wx * 0.02, wy * 0.02);
+          
+          // Center is lighter (more worn)
+          var distFromCenter = Math.abs(px - width/2) / (width/2);
+          var wearFactor = (1 - distFromCenter) * 0.5;
+          
+          if (n > 0.5 - wearFactor * 0.2) {
+            fill(lightR, lightG, lightB, (n - 0.4) * 80 * (1 - distFromCenter));
+            rect(px, py, 2, 2);
+          }
+        }
       }
       
-      // EDGE DEBRIS - rougher at path edges
-      for (var ed = 0; ed < 50; ed = ed + 1) {
-        var ex = noise(ed * 7 + offX, 500);
-        // Bias towards edges
-        if (ex > 0.3 && ex < 0.7) continue;
-        ex = ex * width;
-        var ey = noise(500, ed * 7 + offY) * height;
-        var esize = 3 + noise(ed, ed) * 6;
-        fill(darkR, darkG, darkB, 100);
-        rect(ex, ey, esize, esize * 0.8);
+      // Scattered darker footprint impressions
+      for (var fp = 0; fp < 15; fp = fp + 1) {
+        var fx = random(width * 0.3, width * 0.7);
+        var fy = random(height);
+        var fsize = 6 + random(8);
+        fill(darkR - 15, darkG - 10, darkB - 5, 70);
+        ellipse(fx, fy, fsize * 0.6, fsize);
+      }
+      
+      // Embedded stones
+      for (var stone = 0; stone < 40; stone = stone + 1) {
+        var sx = random(width);
+        var sy = random(height);
+        var ssize = 3 + random(7);
+        var shade = random(-15, 10);
+        fill(darkR + shade, darkG + shade, darkB + shade, 130);
+        ellipse(sx, sy, ssize, ssize * (0.6 + random(0.3)));
+      }
+      
+      // Edge debris (biased to edges)
+      for (var ed = 0; ed < 35; ed = ed + 1) {
+        var ex = random() < 0.5 ? random(width * 0.25) : width - random(width * 0.25);
+        var ey = random(height);
+        var esize = 2 + random(5);
+        fill(darkR - 5, darkG, darkB + 5, 90);
+        rect(ex, ey, esize, esize * 0.7);
       }
     }
   `;
@@ -542,88 +530,91 @@ function generateRockSketch(ctx: MaterialContext): string {
   const base = hexToRGB(palette.base);
   const dark = hexToRGB(palette.dark);
   const light = hexToRGB(palette.light);
-  const offsetX = Math.abs((ctx.worldX * 127 + ctx.seed) % 1000);
-  const offsetY = Math.abs((ctx.worldY * 131 + ctx.seed) % 1000);
+  const textureSeed = Math.abs((ctx.seed * 1000 + ctx.worldX * 100 + ctx.worldY) % 100000);
 
-  // ROCK: Broken plate texture with sharp edges and mineral veins
+  // ROCK: Angular plates with random-angle cracks
   return `
     function setup() {
+      var SEED = ${textureSeed};
+      randomSeed(SEED);
+      noiseSeed(SEED);
+      ${SKETCH_HELPERS}
+      
       var baseR = ${base.r}; var baseG = ${base.g}; var baseB = ${base.b};
       var darkR = ${dark.r}; var darkG = ${dark.g}; var darkB = ${dark.b};
       var lightR = ${light.r}; var lightG = ${light.g}; var lightB = ${light.b};
-      var offX = ${offsetX}; var offY = ${offsetY};
       
       background(baseR, baseG, baseB);
-      
-      // PLATE REGIONS - distinct rock slabs with different shades
       noStroke();
-      for (var plate = 0; plate < 25; plate = plate + 1) {
-        var px = noise(plate * 17 + offX, 0) * width;
-        var py = noise(0, plate * 17 + offY) * height;
-        var psize = 30 + noise(plate * 3, plate * 3) * 60;
-        var pshade = (noise(plate * 5, 100) - 0.5) * 50;
+      
+      // Large angular plate regions
+      for (var plate = 0; plate < 20; plate = plate + 1) {
+        var px = random(width);
+        var py = random(height);
+        var psize = 25 + random(50);
+        var shade = (random() - 0.5) * 45;
         
-        fill(baseR + pshade, baseG + pshade, baseB + pshade, 200);
+        fill(baseR + shade, baseG + shade, baseB + shade, 180);
         
-        // Angular polygon plate
         beginShape();
-        var sides = 5 + int(noise(plate, 200) * 3);
+        var sides = 4 + int(random(4));
+        var startAng = random(TWO_PI);
         for (var s = 0; s < sides; s = s + 1) {
-          var ang = s * TWO_PI / sides + noise(plate + s, 0) * 0.5;
-          var r = psize * (0.6 + noise(plate + s * 0.5, 50) * 0.8);
+          var ang = startAng + s * TWO_PI / sides + random(-0.4, 0.4);
+          var r = psize * (0.5 + random(0.6));
           vertex(px + cos(ang) * r, py + sin(ang) * r);
         }
         endShape(CLOSE);
       }
       
-      // PLATE EDGES - dark crevices between plates
-      stroke(darkR - 40, darkG - 40, darkB - 40, 200);
-      strokeWeight(2);
-      for (var edge = 0; edge < 40; edge = edge + 1) {
-        var ex = noise(edge * 13 + offX, 300) * width;
-        var ey = noise(300, edge * 13 + offY) * height;
-        var elen = 15 + noise(edge * 2, edge * 2) * 40;
-        var eang = noise(edge * 4, 150) * PI;
+      // Crack network
+      stroke(darkR - 35, darkG - 35, darkB - 35, 170);
+      strokeWeight(1.5);
+      for (var crack = 0; crack < 25; crack = crack + 1) {
+        var cx = random(width);
+        var cy = random(height);
+        var cang = random(TWO_PI);
+        var cpx = cx;
+        var cpy = cy;
         
-        // Jagged edge
-        var px = ex;
-        var py = ey;
-        for (var seg = 0; seg < 4; seg = seg + 1) {
-          var segAng = eang + (noise(edge + seg, seg * 10) - 0.5) * PI * 0.5;
-          var nx = px + cos(segAng) * (elen / 4);
-          var ny = py + sin(segAng) * (elen / 4);
-          line(px, py, nx, ny);
-          px = nx;
-          py = ny;
+        for (var seg = 0; seg < 5; seg = seg + 1) {
+          var segLen = 6 + random(12);
+          var segAng = cang + (random() - 0.5) * PI * 0.6;
+          var nx = cpx + cos(segAng) * segLen;
+          var ny = cpy + sin(segAng) * segLen;
+          line(cpx, cpy, nx, ny);
+          cpx = nx;
+          cpy = ny;
+          cang = segAng;
         }
       }
       noStroke();
       
-      // MINERAL VEINS - lighter streaks
-      stroke(lightR + 20, lightG + 20, lightB + 20, 100);
+      // Mineral veins (lighter streaks)
+      stroke(lightR + 15, lightG + 15, lightB + 15, 90);
       strokeWeight(1);
-      for (var vein = 0; vein < 15; vein = vein + 1) {
-        var vx = noise(vein * 19 + offX, 500) * width;
-        var vy = noise(500, vein * 19 + offY) * height;
-        var vang = noise(vein * 3, 250) * PI;
+      for (var vein = 0; vein < 10; vein = vein + 1) {
+        var vx = random(width);
+        var vy = random(height);
+        var vang = random(TWO_PI);
         
         beginShape();
         noFill();
-        for (var vs = 0; vs < 8; vs = vs + 1) {
-          var vwx = vx + vs * cos(vang) * 8 + noise(vein + vs, 0) * 10 - 5;
-          var vwy = vy + vs * sin(vang) * 8 + noise(vein, vs) * 10 - 5;
+        for (var vs = 0; vs < 7; vs = vs + 1) {
+          var vwx = vx + vs * cos(vang) * 7 + random(-6, 6);
+          var vwy = vy + vs * sin(vang) * 7 + random(-6, 6);
           vertex(vwx, vwy);
         }
         endShape();
       }
       noStroke();
       
-      // SURFACE PITTING
-      for (var pit = 0; pit < 60; pit = pit + 1) {
-        var pitx = noise(pit * 7 + offX, 700) * width;
-        var pity = noise(700, pit * 7 + offY) * height;
-        var pitsize = 2 + noise(pit, pit) * 4;
-        fill(darkR - 20, darkG - 20, darkB - 20, 120);
+      // Surface pits
+      for (var pit = 0; pit < 50; pit = pit + 1) {
+        var pitx = random(width);
+        var pity = random(height);
+        var pitsize = 2 + random(4);
+        fill(darkR - 20, darkG - 20, darkB - 20, 110);
         ellipse(pitx, pity, pitsize, pitsize);
       }
     }
@@ -635,76 +626,79 @@ function generateSandSketch(ctx: MaterialContext): string {
   const base = hexToRGB(palette.base);
   const dark = hexToRGB(palette.dark);
   const light = hexToRGB(palette.light);
-  const offsetX = Math.abs((ctx.worldX * 127 + ctx.seed) % 1000);
-  const offsetY = Math.abs((ctx.worldY * 131 + ctx.seed) % 1000);
+  const textureSeed = Math.abs((ctx.seed * 1000 + ctx.worldX * 100 + ctx.worldY) % 100000);
 
-  // SAND: Wind ripples with strong parallel ridges and grain variation
+  // SAND: Warped ridge noise for organic dune ripples
   return `
     function setup() {
+      var SEED = ${textureSeed};
+      randomSeed(SEED);
+      noiseSeed(SEED);
+      ${SKETCH_HELPERS}
+      
       var baseR = ${base.r}; var baseG = ${base.g}; var baseB = ${base.b};
       var darkR = ${dark.r}; var darkG = ${dark.g}; var darkB = ${dark.b};
       var lightR = ${light.r}; var lightG = ${light.g}; var lightB = ${light.b};
-      var offX = ${offsetX}; var offY = ${offsetY};
       
       background(baseR, baseG, baseB);
-      
-      // WIND RIPPLE PATTERN - strong parallel curved lines
-      noFill();
-      for (var ripple = 0; ripple < 50; ripple = ripple + 1) {
-        var ry = ripple * (height / 50);
-        var phase = noise(ripple * 0.3, offX * 0.01) * TWO_PI;
-        
-        // Light crest
-        stroke(lightR + 15, lightG + 10, lightB, 120);
-        strokeWeight(2);
-        beginShape();
-        for (var x = 0; x < width; x = x + 8) {
-          var waveY = ry + sin(x * 0.025 + phase) * 6 + noise(x * 0.01 + offX * 0.01, ripple * 0.1) * 8;
-          vertex(x, waveY);
-        }
-        endShape();
-        
-        // Dark trough
-        stroke(darkR, darkG, darkB, 80);
-        strokeWeight(1);
-        beginShape();
-        for (var x = 0; x < width; x = x + 8) {
-          var waveY = ry + 4 + sin(x * 0.025 + phase) * 6 + noise(x * 0.01 + offX * 0.01, ripple * 0.1) * 8;
-          vertex(x, waveY);
-        }
-        endShape();
-      }
       noStroke();
       
-      // GRAIN VARIATION - scattered darker/lighter patches
-      for (var gy = 0; gy < height; gy = gy + 3) {
-        for (var gx = 0; gx < width; gx = gx + 3) {
-          var gn = noise((gx + offX) * 0.04, (gy + offY) * 0.04);
-          if (gn > 0.65) {
-            fill(lightR + 10, lightG + 5, lightB, 60);
-            rect(gx, gy, 2, 2);
-          } else if (gn < 0.35) {
-            fill(darkR - 10, darkG - 5, darkB, 50);
-            rect(gx, gy, 2, 2);
+      // Dominant wind angle for this tile
+      var windAngle = noise(SEED * 0.001, 0) * PI;
+      
+      // Warped ridge patterns for dunes
+      for (var py = 0; py < height; py = py + 2) {
+        for (var px = 0; px < width; px = px + 2) {
+          // Rotate domain by wind angle
+          var rx = rotX(px, py, windAngle);
+          var ry = rotY(px, py, windAngle);
+          
+          // Warp for organic look
+          var wx = warpX(rx, ry, 35);
+          var wy = warpY(rx, ry, 35);
+          
+          // Ridge noise
+          var r = ridge(wx, wy, 0.04);
+          
+          if (r > 0.7) {
+            fill(lightR + 10, lightG + 8, lightB, (r - 0.7) * 250);
+            rect(px, py, 2, 2);
+          } else if (r < 0.4) {
+            fill(darkR, darkG, darkB, (0.4 - r) * 150);
+            rect(px, py, 2, 2);
           }
         }
       }
       
-      // SHELL FRAGMENTS AND DEBRIS
-      for (var shell = 0; shell < 20; shell = shell + 1) {
-        var sx = noise(shell * 13 + offX, 400) * width;
-        var sy = noise(400, shell * 13 + offY) * height;
-        var ssize = 3 + noise(shell * 2, shell * 2) * 5;
-        fill(lightR + 30, lightG + 25, lightB + 15, 140);
-        ellipse(sx, sy, ssize, ssize * 0.6);
+      // Grain variation specks
+      for (var g = 0; g < 120; g = g + 1) {
+        var gx = random(width);
+        var gy = random(height);
+        var gsize = 1 + random(2);
+        
+        if (random() > 0.5) {
+          fill(lightR + 15, lightG + 10, lightB + 5, 70);
+        } else {
+          fill(darkR - 5, darkG - 3, darkB, 60);
+        }
+        rect(gx, gy, gsize, gsize);
       }
       
-      // SMALL PEBBLES
-      for (var peb = 0; peb < 25; peb = peb + 1) {
-        var px = noise(peb * 9 + offX, 600) * width;
-        var py = noise(600, peb * 9 + offY) * height;
-        var psize = 2 + noise(peb, peb) * 4;
-        fill(darkR + 20, darkG + 15, darkB + 10, 120);
+      // Shell fragments
+      for (var shell = 0; shell < 15; shell = shell + 1) {
+        var sx = random(width);
+        var sy = random(height);
+        var ssize = 3 + random(5);
+        fill(lightR + 35, lightG + 30, lightB + 20, 130);
+        ellipse(sx, sy, ssize, ssize * 0.5);
+      }
+      
+      // Small pebbles
+      for (var peb = 0; peb < 20; peb = peb + 1) {
+        var px = random(width);
+        var py = random(height);
+        var psize = 2 + random(3);
+        fill(darkR + 25, darkG + 20, darkB + 15, 100);
         ellipse(px, py, psize, psize);
       }
     }
@@ -739,7 +733,10 @@ function generateTextureSketch(kind: MaterialKind, ctx: MaterialContext): string
   }
 }
 
-// Generate a single texture using @nexart/ui-renderer
+// Internal render size for supersampling (2x for anti-aliasing)
+const SUPERSAMPLE_SCALE = 2;
+
+// Generate a single texture using @nexart/ui-renderer with 2x supersample
 export async function generateMaterialTexture(
   kind: MaterialKind,
   ctx: MaterialContext
@@ -752,15 +749,16 @@ export async function generateMaterialTexture(
     return cached;
   }
   
-  // Create canvas for texture
-  // NOTE: previewSystem().destroy() clears the canvas; render to a scratch canvas and copy out.
+  // Final output canvas at TEXTURE_SIZE
   const canvas = document.createElement('canvas');
   canvas.width = TEXTURE_SIZE;
   canvas.height = TEXTURE_SIZE;
 
+  // Hi-res render canvas at 2x for supersampling
+  const hiResSize = TEXTURE_SIZE * SUPERSAMPLE_SCALE;
   const renderCanvas = document.createElement('canvas');
-  renderCanvas.width = TEXTURE_SIZE;
-  renderCanvas.height = TEXTURE_SIZE;
+  renderCanvas.width = hiResSize;
+  renderCanvas.height = hiResSize;
 
   // Generate sketch source
   const source = generateTextureSketch(kind, ctx);
@@ -774,8 +772,8 @@ export async function generateMaterialTexture(
     const system = createSystem({
       type: 'code',
       mode: 'static',
-      width: TEXTURE_SIZE,
-      height: TEXTURE_SIZE,
+      width: hiResSize,
+      height: hiResSize,
       seed: textureSeed,
       vars: ctx.vars.slice(0, 10),
       source
@@ -784,8 +782,13 @@ export async function generateMaterialTexture(
     const renderer = previewSystem(system, renderCanvas, { showBadge: false });
     renderer.render();
 
+    // Downsample from hi-res to final size (anti-aliasing)
     const out2d = canvas.getContext('2d');
-    if (out2d) out2d.drawImage(renderCanvas, 0, 0);
+    if (out2d) {
+      out2d.imageSmoothingEnabled = true;
+      out2d.imageSmoothingQuality = 'high';
+      out2d.drawImage(renderCanvas, 0, 0, hiResSize, hiResSize, 0, 0, TEXTURE_SIZE, TEXTURE_SIZE);
+    }
 
     renderer.destroy();
     
