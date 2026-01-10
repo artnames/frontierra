@@ -667,14 +667,14 @@ const Index = () => {
                   {/* Visual Settings */}
                   <div className="pt-3 mt-3 border-t border-border space-y-3">
                     <div className="data-label text-[10px]">Visual Settings</div>
-                    
+
                     <div className="flex items-center justify-between gap-2">
                       <div className="space-y-0.5 flex-1">
                         <Label htmlFor="material-richness" className="text-xs font-medium cursor-pointer">
                           Material richness
                         </Label>
                         <p className="text-[10px] text-muted-foreground leading-tight">
-                          Detailed textures. Turn off for performance.
+                          Rich textures for ground, mountains, rivers and paths.
                         </p>
                       </div>
                       <Switch
@@ -683,7 +683,76 @@ const Index = () => {
                         onCheckedChange={toggleMaterialRichness}
                       />
                     </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-0.5 flex-1">
+                        <Label htmlFor="show-vegetation" className="text-xs font-medium cursor-pointer">
+                          Vegetation
+                        </Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">
+                          Trees, flowers, rocks and plants.
+                        </p>
+                      </div>
+                      <Switch
+                        id="show-vegetation"
+                        checked={showVegetation}
+                        onCheckedChange={toggleVegetation}
+                      />
+                    </div>
+
+                    {/* Audio Settings */}
+                    <div className="pt-3 mt-2 border-t border-border space-y-3">
+                      <div className="data-label text-[10px]">Audio</div>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="space-y-0.5 flex-1">
+                          <Label htmlFor="music-enabled" className="text-xs font-medium cursor-pointer">
+                            Cinematic music
+                          </Label>
+                          <p className="text-[10px] text-muted-foreground leading-tight">
+                            Background travel soundtrack.
+                          </p>
+                        </div>
+                        <Switch
+                          id="music-enabled"
+                          checked={musicEnabled}
+                          onCheckedChange={toggleMusic}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="space-y-0.5 flex-1">
+                          <Label htmlFor="sfx-enabled" className="text-xs font-medium cursor-pointer">
+                            Environment SFX
+                          </Label>
+                          <p className="text-[10px] text-muted-foreground leading-tight">
+                            Wind, water, and nature sounds.
+                          </p>
+                        </div>
+                        <Switch
+                          id="sfx-enabled"
+                          checked={sfxEnabled}
+                          onCheckedChange={toggleSfx}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-muted-foreground">Volume</span>
+                          <span className="data-value">{Math.round(masterVolume * 100)}%</span>
+                        </div>
+                        <Slider
+                          value={[masterVolume * 100]}
+                          onValueChange={([v]) => setMasterVolume(v / 100)}
+                          min={0}
+                          max={100}
+                          step={5}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
                   </div>
+
                 </div>
               )}
             </div>
