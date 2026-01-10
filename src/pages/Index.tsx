@@ -25,6 +25,7 @@ import { ActionSystem } from '@/components/ActionSystem';
 import { MultiplayerHUD } from '@/components/MultiplayerHUD';
 import { WorldAMap } from '@/components/WorldAMap';
 import { SocialPanel } from '@/components/social/SocialPanel';
+import { UnclaimedLandModal } from '@/components/UnclaimedLandModal';
 import { useMultiplayerWorld } from '@/hooks/useMultiplayerWorld';
 import { useToast } from '@/hooks/use-toast';
 import { useSearchParams } from 'react-router-dom';
@@ -110,10 +111,12 @@ const Index = () => {
     }
   }, [isOtherPlayerLand, toast]);
   
-  // Initialize multiplayer land on first load (requires auth)
+  // Initialize and navigate to player's claimed land when switching to multiplayer
   useEffect(() => {
-    if (worldMode === 'multiplayer' && isAuthenticated && !multiplayer.currentLand && !multiplayer.isLoading) {
-      multiplayer.initializePlayerLand(user?.id);
+    if (worldMode === 'multiplayer' && isAuthenticated && user?.id) {
+      if (!multiplayer.currentLand && !multiplayer.isLoading) {
+        multiplayer.initializePlayerLand(user.id);
+      }
     }
   }, [worldMode, isAuthenticated, user?.id, multiplayer.currentLand, multiplayer.isLoading, multiplayer.initializePlayerLand]);
   
@@ -450,6 +453,15 @@ const Index = () => {
             </div>
           )}
           
+          {/* Unclaimed Land Modal */}
+          {worldMode === 'multiplayer' && multiplayer.unclaimedAttempt && (
+            <UnclaimedLandModal
+              open={true}
+              onClose={multiplayer.dismissUnclaimedAttempt}
+              direction={multiplayer.unclaimedAttempt.direction}
+              gridPosition={multiplayer.unclaimedAttempt.gridPosition}
+            />
+          )}
           {/* Multiplayer HUD */}
           {worldMode === 'multiplayer' && viewMode === 'firstperson' && (
             <MultiplayerHUD

@@ -22,7 +22,11 @@ interface EdgeTransitionState {
 interface UseEdgeTransitionOptions {
   playerId?: string | null;
   onTransitionStart?: (crossing: EdgeCrossing) => void;
-  onTransitionComplete?: (newLand: PlayerLand | null, entryPosition: { x: number; z: number }) => void;
+  onTransitionComplete?: (
+    newLand: PlayerLand | null, 
+    entryPosition: { x: number; z: number },
+    crossing?: EdgeCrossing
+  ) => void;
   onTransitionFailed?: (error: string) => void;
 }
 
@@ -123,7 +127,7 @@ export function useEdgeTransition(options: UseEdgeTransitionOptions = {}) {
           isTransitioning: false,
           pendingCrossing: null
         }));
-        options.onTransitionComplete?.(neighborLand, entryPosition);
+        options.onTransitionComplete?.(neighborLand, entryPosition, crossing);
       } else {
         // No neighbor - stay at edge or show boundary
         setState(prev => ({
@@ -131,7 +135,7 @@ export function useEdgeTransition(options: UseEdgeTransitionOptions = {}) {
           isTransitioning: false,
           pendingCrossing: null
         }));
-        options.onTransitionComplete?.(null, entryPosition);
+        options.onTransitionComplete?.(null, entryPosition, crossing);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Transition failed';
