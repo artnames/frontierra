@@ -450,6 +450,7 @@ const Index = () => {
                 worldX: multiplayer.currentLand.pos_x,
                 worldY: multiplayer.currentLand.pos_y
               } : undefined}
+              isOwnLand={worldMode === 'solo' || !isOtherPlayerLand}
             />
           ) : (
             <div className="w-full h-full flex bg-background">
