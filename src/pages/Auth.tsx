@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { User, Lock, Mail, Loader2, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import frontierraLogo from '@/assets/frontierra-logo.png';
+import frontierraLogo from '@/assets/frontierra-logo-header.png';
 
 // Validation schemas
 const emailSchema = z.string().email('Invalid email address');
