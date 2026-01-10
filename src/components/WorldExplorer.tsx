@@ -22,7 +22,7 @@ import {
 } from '@/components/WorldRenderer';
 import { ForestTrees } from '@/components/ForestTrees';
 import { PlacedBeaconMesh } from '@/components/ActionSystem';
-import { SkyRenderer } from '@/components/SkyRenderer';
+import { SkyDome } from '@/components/SkyDome';
 import { TimeOfDayHUD } from '@/components/TimeOfDayHUD';
 import { DiscoveryToast } from '@/components/DiscoveryToast';
 import { useAmbientAudio } from '@/hooks/useAmbientAudio';
@@ -78,6 +78,9 @@ function FirstPersonScene({
   
   return (
     <>
+      {/* 3D Sky dome - world space, camera independent */}
+      <SkyDome worldX={worldX} worldY={worldY} />
+      
       <Atmosphere worldX={worldX} worldY={worldY} />
       <TerrainMesh world={world} />
       <TimeAwareWaterPlane world={world} worldX={worldX} worldY={worldY} />
@@ -237,10 +240,7 @@ export function WorldExplorer({
   }
   
   return (
-    <div className="relative w-full h-full overflow-hidden">
-      {/* Sky background layer - renders BEHIND the 3D canvas */}
-      <SkyRenderer worldX={worldX} worldY={worldY} className="z-0" />
-      
+    <div className="relative w-full h-full overflow-hidden bg-black">
       {/* Verifying overlay (non-blocking) */}
       {isVerifying && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
@@ -267,11 +267,11 @@ export function WorldExplorer({
         </div>
       )}
       
-      {/* 3D Canvas with transparent background to show sky */}
+      {/* 3D Canvas - sky dome rendered inside */}
       <Canvas
-        camera={{ fov: 45, near: 0.1, far: 200 }}
-        gl={{ antialias: true, alpha: true }}
-        style={{ position: 'absolute', inset: 0, zIndex: 1 }}
+        camera={{ fov: 45, near: 0.1, far: 1000 }}
+        gl={{ antialias: true }}
+        style={{ position: 'absolute', inset: 0 }}
       >
         <FirstPersonScene 
           world={world} 
