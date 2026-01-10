@@ -1,6 +1,7 @@
-// Time of Day HUD - Visual indicator of deterministic time
+// Time of Day HUD - Visual indicator of UTC-based global time
+// All players see the same time worldwide
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Sun, Moon, Sunrise, Sunset } from 'lucide-react';
 import { 
   getTimeOfDay, 
@@ -14,9 +15,18 @@ interface TimeOfDayHUDProps {
   worldX: number;
   worldY: number;
   sessionOffset?: number;
+  showDebug?: boolean; // New prop to control debug visibility
 }
 
-export function TimeOfDayHUD({ worldX, worldY, sessionOffset = 0 }: TimeOfDayHUDProps) {
+export function TimeOfDayHUD({ worldX, worldY, sessionOffset = 0, showDebug = false }: TimeOfDayHUDProps) {
+  // Force re-render every second to update time
+  const [, setTick] = useState(0);
+  
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
+  
   const timeContext = useMemo<TimeOfDayContext>(() => ({
     worldId: WORLD_A_ID,
     worldX,
@@ -53,23 +63,30 @@ export function TimeOfDayHUD({ worldX, worldY, sessionOffset = 0 }: TimeOfDayHUD
       <div className="text-xs space-y-2">
         <div className="flex items-center gap-2">
           <Icon className={`w-4 h-4 ${color}`} />
-          <span className="text-muted-foreground uppercase tracking-wider text-[10px]">
+          <span className="text-foreground/80 font-medium">
             {label}
           </span>
+          <span className="text-muted-foreground font-mono text-[10px]">
+            {timeString}
+          </span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">TIME:</span>
-          <span className="data-value font-mono">{timeString}</span>
+        
+        {/* Minimal cycle indicator */}
+        <div className="w-full h-1 bg-muted rounded-full overflow-hidden">
+          <div 
+            className={`h-full rounded-full transition-all duration-1000 ${
+              night ? 'bg-blue-400/60' : twilight ? 'bg-orange-400/70' : 'bg-yellow-400/80'
+            }`}
+            style={{ width: `${timeOfDay * 100}%` }}
+          />
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">CYCLE:</span>
-          <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-            <div 
-              className={`h-full rounded-full transition-all ${night ? 'bg-blue-400' : twilight ? 'bg-orange-400' : 'bg-yellow-400'}`}
-              style={{ width: `${timeOfDay * 100}%` }}
-            />
+        
+        {/* Debug info - hidden by default */}
+        {showDebug && (
+          <div className="text-[9px] text-muted-foreground/60 pt-1 border-t border-border/50">
+            20-min UTC cycle
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
