@@ -186,7 +186,7 @@ export function useAmbientAudio({
   
   // Update volumes based on terrain and time
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !world || !world.gridSize) {
       audioLayersRef.current.forEach(layer => {
         layer.targetVolume = 0;
       });
