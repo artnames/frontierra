@@ -39,8 +39,9 @@ export function useNexArtWorld({
   const [error, setError] = useState<string | null>(null);
   
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const pendingParamsRef = useRef<{ seed: number; vars: number[] } | null>(null);
   const generationIdRef = useRef(0);
+  const lastGeneratedKeyRef = useRef<string>('');
+  const isGeneratingRef = useRef(false);
   
   // Normalize inputs once
   const input = useMemo(() => normalizeNexArtInput({
@@ -61,8 +62,14 @@ export function useNexArtWorld({
     [input.seed, input.vars, fullWorldContext?.worldX, fullWorldContext?.worldY]
   );
   
-  const generateWorld = useCallback(async (targetSeed: number, targetVars: number[]) => {
+  const generateWorld = useCallback(async (targetSeed: number, targetVars: number[], key: string) => {
+    // Prevent duplicate generations
+    if (isGeneratingRef.current && lastGeneratedKeyRef.current === key) {
+      return;
+    }
+    
     const currentGenId = ++generationIdRef.current;
+    isGeneratingRef.current = true;
     
     setIsVerifying(true);
     setError(null);
@@ -84,6 +91,7 @@ export function useNexArtWorld({
         // Atomic swap
         setWorld(worldData);
         setError(null);
+        lastGeneratedKeyRef.current = key;
       }
     } catch (err) {
       if (currentGenId !== generationIdRef.current) return;
@@ -94,34 +102,35 @@ export function useNexArtWorld({
       if (currentGenId === generationIdRef.current) {
         setIsLoading(false);
         setIsVerifying(false);
+        isGeneratingRef.current = false;
       }
     }
-  }, []);
+  }, [fullWorldContext]);
   
-  // Debounced generation effect
+  // Debounced generation effect - runs only when paramsKey changes
   useEffect(() => {
-    // Store pending params
-    pendingParamsRef.current = { seed: input.seed, vars: input.vars };
-    
-    // If no world yet, generate immediately
-    if (!world) {
-      setIsLoading(true);
-      generateWorld(input.seed, input.vars);
+    // Skip if already generated this exact key
+    if (lastGeneratedKeyRef.current === paramsKey && world) {
       return;
     }
     
-    // Otherwise debounce
+    // Clear any pending debounce
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
     
+    // If no world yet, generate immediately
+    if (!world) {
+      setIsLoading(true);
+      generateWorld(input.seed, input.vars, paramsKey);
+      return;
+    }
+    
+    // Otherwise debounce parameter changes
     setIsVerifying(true);
     
     debounceTimerRef.current = setTimeout(() => {
-      const params = pendingParamsRef.current;
-      if (params) {
-        generateWorld(params.seed, params.vars);
-      }
+      generateWorld(input.seed, input.vars, paramsKey);
     }, debounceMs);
     
     return () => {
@@ -129,12 +138,14 @@ export function useNexArtWorld({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [paramsKey, debounceMs, generateWorld, world, input.seed, input.vars]);
+  }, [paramsKey, debounceMs, generateWorld, input.seed, input.vars]);
   
   const forceRegenerate = useCallback(() => {
+    // Clear the last key to force regeneration
+    lastGeneratedKeyRef.current = '';
     setIsLoading(true);
-    generateWorld(input.seed, input.vars);
-  }, [generateWorld, input.seed, input.vars]);
+    generateWorld(input.seed, input.vars, paramsKey);
+  }, [generateWorld, input.seed, input.vars, paramsKey]);
   
   return {
     world,
