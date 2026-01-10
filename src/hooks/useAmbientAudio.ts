@@ -1,13 +1,24 @@
 // Ambient Audio System - Cinematic music + environmental SFX
 // Client-only, no syncing, no gameplay impact
+// Uses local Pixabay-licensed audio with CDN fallbacks
 
 import { useEffect, useRef, useMemo, useCallback } from 'react';
 import { WorldData } from '@/lib/worldData';
 import { getTimeOfDay, isNight, TimeOfDayContext } from '@/lib/timeOfDay';
 import { WORLD_A_ID } from '@/lib/worldContext';
+import {
+  AMBIENT_SOURCES,
+  MUSIC_TRACKS,
+  FALLBACK_AMBIENT,
+  FALLBACK_MUSIC,
+  VOLUME_PRESETS,
+  getTerrainAmbients,
+  shouldTriggerExplorationMusic,
+  TerrainAmbient,
+} from '@/lib/soundscape';
 
 interface AmbientAudioOptions {
-  world: WorldData;
+  world: WorldData | null;
   playerPosition: { x: number; y: number };
   worldX?: number;
   worldY?: number;
@@ -19,34 +30,15 @@ interface AmbientAudioOptions {
 
 interface AudioLayer {
   id: string;
-  audio: HTMLAudioElement | null;
+  audio: HTMLAudioElement;
   targetVolume: number;
   currentVolume: number;
-  category: 'music' | 'sfx';
+  category: 'music' | 'ambient';
+  fadeSpeed: number; // Volume change per frame
 }
 
-// Cinematic ambient music - royalty-free atmospheric tracks
-const MUSIC_SOURCES = {
-  // Atmospheric ambient exploration music
-  ambient: 'https://cdn.pixabay.com/audio/2022/10/25/audio_52d3d90ffc.mp3',
-  // Calm cinematic underscore
-  cinematic: 'https://cdn.pixabay.com/audio/2023/09/04/audio_9f8e251f1d.mp3',
-};
-
-// Environmental SFX - nature sounds
-const SFX_SOURCES = {
-  // Wind ambience
-  wind: 'https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a73467.mp3',
-  // Water/stream sounds
-  water: 'https://cdn.pixabay.com/audio/2021/08/09/audio_dc39bba3b8.mp3',
-  // Forest birds
-  forest: 'https://cdn.pixabay.com/audio/2022/02/07/audio_5f5d6687f1.mp3',
-  // Night crickets
-  night: 'https://cdn.pixabay.com/audio/2021/04/06/audio_844c5c7d2b.mp3',
-};
-
 // Calculate terrain composition around player
-function getTerrainComposition(world: WorldData, x: number, z: number, radius: number = 8) {
+function getTerrainComposition(world: WorldData, x: number, z: number, radius: number = 10) {
   const composition = {
     forest: 0,
     water: 0,
@@ -87,6 +79,11 @@ function getTerrainComposition(world: WorldData, x: number, z: number, radius: n
         default:
           composition.ground += weight;
       }
+
+      // Rivers also count as water
+      if (cell.hasRiver) {
+        composition.water += weight * 0.5;
+      }
     }
   }
 
@@ -109,197 +106,255 @@ export function useAmbientAudio({
   enabled = true,
   musicEnabled = true,
   sfxEnabled = true,
-  masterVolume = 0.4,
+  masterVolume = 0.25,
 }: AmbientAudioOptions) {
-  const audioLayersRef = useRef<Map<string, AudioLayer>>(new Map());
-  const fadeIntervalRef = useRef<number | null>(null);
-  const hasUserInteracted = useRef(false);
+  const layersRef = useRef<Map<string, AudioLayer>>(new Map());
+  const fadeRafRef = useRef<number | null>(null);
+  const hasInteractedRef = useRef(false);
+  const lastMusicTimeRef = useRef(0);
+  const lastLandRef = useRef<string | null>(null);
+  const musicActiveRef = useRef(false);
+  const musicFadeTimeoutRef = useRef<number | null>(null);
 
-  // Get time of day
+  // Time of day context
   const timeContext = useMemo<TimeOfDayContext>(
-    () => ({
-      worldId: WORLD_A_ID,
-      worldX,
-      worldY,
-    }),
+    () => ({ worldId: WORLD_A_ID, worldX, worldY }),
     [worldX, worldY]
   );
+  const nightTime = useMemo(() => isNight(getTimeOfDay(timeContext)), [timeContext]);
 
-  const night = useMemo(() => isNight(getTimeOfDay(timeContext)), [timeContext]);
+  // Current land key for detecting transitions
+  const currentLandKey = `${worldX}_${worldY}`;
 
-  // Handle user interaction to enable audio (browser policy)
-  useEffect(() => {
-    const handleInteraction = () => {
-      hasUserInteracted.current = true;
-      // Try to start any layers that should be playing
-      audioLayersRef.current.forEach((layer) => {
-        const a = layer.audio;
-        if (!a) return;
-        a.muted = false;
-        a.play().catch(() => {});
-      });
-    };
-
-    window.addEventListener('pointerdown', handleInteraction, { once: true, capture: true });
-    window.addEventListener('click', handleInteraction, { once: true, capture: true });
-    window.addEventListener('keydown', handleInteraction, { once: true, capture: true });
-    window.addEventListener('touchstart', handleInteraction, { once: true, capture: true });
-
-    return () => {
-      window.removeEventListener('pointerdown', handleInteraction, { capture: true } as any);
-      window.removeEventListener('click', handleInteraction, { capture: true } as any);
-      window.removeEventListener('keydown', handleInteraction, { capture: true } as any);
-      window.removeEventListener('touchstart', handleInteraction, { capture: true } as any);
-    };
-  }, []);
-
-  // Initialize audio layer
-  const initializeLayer = useCallback((id: string, src: string, category: 'music' | 'sfx') => {
-    if (audioLayersRef.current.has(id)) return;
-
+  // Create audio element with fallback
+  const createAudio = useCallback((primarySrc: string, fallbackSrc: string, loop: boolean): HTMLAudioElement => {
     const audio = new Audio();
-    audio.loop = true;
+    audio.loop = loop;
     audio.volume = 0;
     audio.preload = 'auto';
     audio.crossOrigin = 'anonymous';
 
+    // Try primary source, fall back on error
     audio.onerror = () => {
-      console.warn(`[AmbientAudio] Failed to load: ${id}`);
-    };
-
-    audio.oncanplaythrough = () => {
-      if (hasUserInteracted.current) {
-        audio.play().catch(() => {});
+      if (audio.src !== fallbackSrc) {
+        console.warn(`[Soundscape] Local file failed, using CDN fallback: ${primarySrc}`);
+        audio.src = fallbackSrc;
       }
     };
 
-    audio.src = src;
-
-    audioLayersRef.current.set(id, {
-      id,
-      audio,
-      targetVolume: 0,
-      currentVolume: 0,
-      category,
-    });
+    audio.src = primarySrc;
+    return audio;
   }, []);
 
-  // Initialize all layers on mount
+  // Initialize all audio layers
   useEffect(() => {
-    // Music layers
-    Object.entries(MUSIC_SOURCES).forEach(([id, src]) => {
-      initializeLayer(`music_${id}`, src, 'music');
-    });
-    
-    // SFX layers
-    Object.entries(SFX_SOURCES).forEach(([id, src]) => {
-      initializeLayer(`sfx_${id}`, src, 'sfx');
+    // Ambient layers (looping)
+    const ambientKeys = Object.keys(AMBIENT_SOURCES) as TerrainAmbient[];
+    ambientKeys.forEach((key) => {
+      const audio = createAudio(
+        AMBIENT_SOURCES[key],
+        FALLBACK_AMBIENT[key],
+        true
+      );
+      layersRef.current.set(`ambient_${key}`, {
+        id: `ambient_${key}`,
+        audio,
+        targetVolume: 0,
+        currentVolume: 0,
+        category: 'ambient',
+        fadeSpeed: 0.015, // ~3s fade at 60fps
+      });
     });
 
-    // Fade loop for smooth transitions
-    fadeIntervalRef.current = window.setInterval(() => {
-      audioLayersRef.current.forEach((layer) => {
-        if (!layer.audio) return;
+    // Music layers (non-looping for sparse playback)
+    const musicKeys = Object.keys(MUSIC_TRACKS) as (keyof typeof MUSIC_TRACKS)[];
+    musicKeys.forEach((key) => {
+      const audio = createAudio(
+        MUSIC_TRACKS[key],
+        FALLBACK_MUSIC[key],
+        false // Music doesn't loop - plays once then fades
+      );
+      
+      // When music ends, mark as inactive
+      audio.onended = () => {
+        musicActiveRef.current = false;
+        const layer = layersRef.current.get(`music_${key}`);
+        if (layer) layer.targetVolume = 0;
+      };
 
+      layersRef.current.set(`music_${key}`, {
+        id: `music_${key}`,
+        audio,
+        targetVolume: 0,
+        currentVolume: 0,
+        category: 'music',
+        fadeSpeed: 0.008, // ~4s fade at 60fps
+      });
+    });
+
+    // Smooth fade animation loop
+    const runFadeLoop = () => {
+      layersRef.current.forEach((layer) => {
         const diff = layer.targetVolume - layer.currentVolume;
-        const step = diff * 0.03; // Smooth fade
-
+        
         if (Math.abs(diff) > 0.001) {
-          layer.currentVolume += step;
-          layer.audio.volume = Math.max(0, Math.min(1, layer.currentVolume));
+          const step = diff > 0 
+            ? Math.min(layer.fadeSpeed, diff)
+            : Math.max(-layer.fadeSpeed, diff);
+          
+          layer.currentVolume = Math.max(0, Math.min(1, layer.currentVolume + step));
+          layer.audio.volume = layer.currentVolume;
+        }
+
+        // Pause audio when fully faded out
+        if (layer.currentVolume < 0.001 && !layer.audio.paused && layer.targetVolume < 0.001) {
+          layer.audio.pause();
         }
       });
-    }, 50);
+
+      fadeRafRef.current = requestAnimationFrame(runFadeLoop);
+    };
+
+    fadeRafRef.current = requestAnimationFrame(runFadeLoop);
 
     return () => {
-      if (fadeIntervalRef.current) {
-        clearInterval(fadeIntervalRef.current);
-      }
-      audioLayersRef.current.forEach((layer) => {
-        if (layer.audio) {
-          layer.audio.pause();
-          layer.audio.src = '';
+      if (fadeRafRef.current) cancelAnimationFrame(fadeRafRef.current);
+      if (musicFadeTimeoutRef.current) clearTimeout(musicFadeTimeoutRef.current);
+      
+      layersRef.current.forEach((layer) => {
+        layer.audio.pause();
+        layer.audio.src = '';
+      });
+      layersRef.current.clear();
+    };
+  }, [createAudio]);
+
+  // Handle user interaction to unlock audio
+  useEffect(() => {
+    const unlock = () => {
+      if (hasInteractedRef.current) return;
+      hasInteractedRef.current = true;
+
+      // Start all ambient layers (music triggers separately)
+      layersRef.current.forEach((layer) => {
+        if (layer.category === 'ambient') {
+          layer.audio.play().catch(() => {});
         }
       });
-      audioLayersRef.current.clear();
     };
-  }, [initializeLayer]);
 
-  // Update volumes based on terrain, time, and settings
+    const events = ['pointerdown', 'click', 'keydown', 'touchstart'];
+    events.forEach((e) => window.addEventListener(e, unlock, { once: true, capture: true }));
+
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, unlock, { capture: true } as EventListenerOptions));
+    };
+  }, []);
+
+  // Trigger music on land entry
   useEffect(() => {
-    if (!enabled || !world || !world.gridSize) {
-      audioLayersRef.current.forEach((layer) => {
+    if (!musicEnabled || !hasInteractedRef.current) return;
+    
+    // Detect land transition
+    if (lastLandRef.current !== null && lastLandRef.current !== currentLandKey) {
+      // Entering new land - trigger music
+      triggerMusic();
+    }
+    lastLandRef.current = currentLandKey;
+  }, [currentLandKey, musicEnabled]);
+
+  // Trigger music function
+  const triggerMusic = useCallback(() => {
+    if (musicActiveRef.current) return;
+    
+    const now = Date.now();
+    const timeSinceLast = now - lastMusicTimeRef.current;
+    
+    // Don't re-trigger too quickly
+    if (timeSinceLast < 60000) return; // 1 minute cooldown
+    
+    lastMusicTimeRef.current = now;
+    musicActiveRef.current = true;
+
+    // Pick a random music track
+    const tracks = Object.keys(MUSIC_TRACKS) as (keyof typeof MUSIC_TRACKS)[];
+    const track = tracks[Math.floor(Math.random() * tracks.length)];
+    const layer = layersRef.current.get(`music_${track}`);
+
+    if (!layer) return;
+
+    // Reset and play
+    layer.audio.currentTime = 0;
+    layer.targetVolume = VOLUME_PRESETS.music.peak * masterVolume;
+    layer.audio.play().catch(() => {});
+
+    // Fade out after track plays for a while
+    if (musicFadeTimeoutRef.current) clearTimeout(musicFadeTimeoutRef.current);
+    
+    // Let it play for ~2 minutes then start fading
+    musicFadeTimeoutRef.current = window.setTimeout(() => {
+      layer.targetVolume = 0;
+      musicActiveRef.current = false;
+    }, 120000);
+  }, [masterVolume]);
+
+  // Random exploration music trigger
+  useEffect(() => {
+    if (!musicEnabled || !enabled) return;
+
+    const checkInterval = setInterval(() => {
+      const timeSinceLast = Date.now() - lastMusicTimeRef.current;
+      if (shouldTriggerExplorationMusic(timeSinceLast, 180000)) {
+        triggerMusic();
+      }
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(checkInterval);
+  }, [musicEnabled, enabled, triggerMusic]);
+
+  // Update ambient volumes based on terrain and time
+  useEffect(() => {
+    if (!enabled || !world) {
+      // Fade out everything
+      layersRef.current.forEach((layer) => {
         layer.targetVolume = 0;
       });
       return;
     }
 
     const composition = getTerrainComposition(world, playerPosition.x, playerPosition.y);
+    const ambientMix = getTerrainAmbients(composition, nightTime);
 
-    // --- MUSIC LAYERS ---
-    const musicVolume = musicEnabled ? masterVolume : 0;
-    
-    // Main ambient music - always playing at base level
-    const ambientLayer = audioLayersRef.current.get('music_ambient');
-    if (ambientLayer) {
-      ambientLayer.targetVolume = musicVolume * 0.6;
-    }
-    
-    // Cinematic layer - slightly lower, adds depth
-    const cinematicLayer = audioLayersRef.current.get('music_cinematic');
-    if (cinematicLayer) {
-      cinematicLayer.targetVolume = musicVolume * 0.35;
-    }
+    // Update ambient layer volumes
+    Object.entries(ambientMix).forEach(([key, intensity]) => {
+      const layer = layersRef.current.get(`ambient_${key}`);
+      if (!layer) return;
 
-    // --- SFX LAYERS ---
-    const sfxVolume = sfxEnabled ? masterVolume : 0;
+      const baseVolume = VOLUME_PRESETS.ambient[key as TerrainAmbient] || 0.2;
+      const targetVol = sfxEnabled ? intensity * baseVolume * masterVolume : 0;
+      layer.targetVolume = targetVol;
 
-    // Wind - base layer, stronger in mountains
-    const windLayer = audioLayersRef.current.get('sfx_wind');
-    if (windLayer) {
-      const windBase = 0.15;
-      const mountainBoost = composition.mountain * 0.4;
-      windLayer.targetVolume = (windBase + mountainBoost) * sfxVolume;
-    }
+      // Start playing if needed
+      if (hasInteractedRef.current && targetVol > 0.01 && layer.audio.paused) {
+        layer.audio.play().catch(() => {});
+      }
+    });
 
-    // Water - near rivers/water
-    const waterLayer = audioLayersRef.current.get('sfx_water');
-    if (waterLayer) {
-      waterLayer.targetVolume = composition.water * sfxVolume * 0.8;
-    }
-
-    // Forest birds - in forests, daytime
-    const forestLayer = audioLayersRef.current.get('sfx_forest');
-    if (forestLayer) {
-      forestLayer.targetVolume = composition.forest * sfxVolume * (night ? 0.1 : 0.6);
-    }
-
-    // Night crickets - at night
-    const nightLayer = audioLayersRef.current.get('sfx_night');
-    if (nightLayer) {
-      nightLayer.targetVolume = night ? sfxVolume * 0.5 : 0;
-    }
-
-    // Start playing any layers that should be audible
-    if (hasUserInteracted.current) {
-      audioLayersRef.current.forEach((layer) => {
-        const a = layer.audio;
-        if (!a) return;
-        if (layer.targetVolume > 0.001 && a.paused) {
-          a.play().catch(() => {});
+    // Update active music volume with master
+    layersRef.current.forEach((layer) => {
+      if (layer.category === 'music' && layer.targetVolume > 0) {
+        // Scale with master volume but keep relative level
+        const baseTarget = musicEnabled ? VOLUME_PRESETS.music.base * masterVolume : 0;
+        if (musicActiveRef.current) {
+          layer.targetVolume = Math.max(baseTarget, layer.targetVolume);
         }
-      });
-    }
-  }, [world, playerPosition, night, enabled, musicEnabled, sfxEnabled, masterVolume]);
+      }
+    });
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      audioLayersRef.current.forEach((layer) => {
-        if (layer.audio) {
-          layer.audio.pause();
-        }
-      });
-    };
-  }, []);
+  }, [world, playerPosition, nightTime, enabled, sfxEnabled, musicEnabled, masterVolume]);
+
+  return {
+    triggerMusic,
+    isPlaying: hasInteractedRef.current,
+  };
 }
