@@ -305,11 +305,13 @@ export function PlantedObject({ world, isDiscovered }: PlantedObjectProps) {
   const glowIntensity = isDiscovered ? 2 : 0.5;
   
   // Get proper elevation from terrain using getElevationAt
-  // COORDINATE FIX: Use flipped Z coordinate for Three.js positioning
-  const flippedZ = world.gridSize - 1 - gridY;
-  const terrainY = getElevationAt(world, x, flippedZ);
+  // IMPORTANT: Pass ORIGINAL grid coordinates - getElevationAt handles the Y-flip internally
+  const terrainY = getElevationAt(world, x, gridY);
   
-  // COORDINATE FIX: Add terrain center offset to match mesh positioning
+  // COORDINATE FIX: Flip Z for Three.js positioning (P5.js Y -> Three.js -Z)
+  const flippedZ = world.gridSize - 1 - gridY;
+  
+  // Add terrain center offset to match mesh positioning
   // The terrain mesh is offset by gridSize/2, so objects must be too
   const offsetX = x + world.gridSize / 2;
   const offsetZ = flippedZ + world.gridSize / 2;
