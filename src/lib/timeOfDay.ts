@@ -161,11 +161,11 @@ function colorToHex(c: { r: number; g: number; b: number }): string {
   return `#${toHex(c.r)}${toHex(c.g)}${toHex(c.b)}`;
 }
 
-// Sky color presets
+// Sky color presets - night values slightly brighter for visibility
 const SKY_COLORS = {
   midnight: {
-    zenith: { r: 0.02, g: 0.02, b: 0.08 },
-    horizon: { r: 0.05, g: 0.05, b: 0.12 }
+    zenith: { r: 0.06, g: 0.06, b: 0.14 },
+    horizon: { r: 0.1, g: 0.1, b: 0.18 }
   },
   dawn: {
     zenith: { r: 0.15, g: 0.12, b: 0.25 },
@@ -188,8 +188,8 @@ const SKY_COLORS = {
     horizon: { r: 0.95, g: 0.45, b: 0.25 }
   },
   night: {
-    zenith: { r: 0.03, g: 0.03, b: 0.1 },
-    horizon: { r: 0.06, g: 0.06, b: 0.15 }
+    zenith: { r: 0.08, g: 0.08, b: 0.16 },
+    horizon: { r: 0.12, g: 0.12, b: 0.22 }
   }
 };
 
@@ -295,25 +295,25 @@ export function getLightingParams(timeOfDay: number): LightingParams {
     sunColor = { r: 1.0, g: 0.98, b: 0.92 };
   }
   
-  // Ambient color
+  // Ambient color - brighter at night for visibility
   let ambientColor: { r: number; g: number; b: number };
   if (night) {
-    ambientColor = { r: 0.2, g: 0.22, b: 0.35 };
+    ambientColor = { r: 0.3, g: 0.32, b: 0.45 };
   } else if (twilight) {
     ambientColor = { r: 0.5, g: 0.45, b: 0.5 };
   } else {
     ambientColor = { r: 0.55, g: 0.55, b: 0.6 };
   }
   
-  // Fog color and density based on time
+  // Fog color and density based on time - less dense at night
   let fogColor: { r: number; g: number; b: number };
   let fogNear: number;
   let fogFar: number;
   
   if (night) {
-    fogColor = { r: 0.05, g: 0.05, b: 0.1 };
-    fogNear = 30;
-    fogFar = 100;
+    fogColor = { r: 0.08, g: 0.08, b: 0.14 };
+    fogNear = 40;
+    fogFar = 130;
   } else if (twilight) {
     fogColor = { r: 0.35, g: 0.25, b: 0.3 };
     fogNear = 35;
@@ -325,8 +325,8 @@ export function getLightingParams(timeOfDay: number): LightingParams {
   }
   
   return {
-    sunIntensity: night ? 0.3 : (twilight ? 0.7 : 1.0 + sun * 0.5),
-    ambientIntensity: night ? 0.15 : (twilight ? 0.3 : 0.4),
+    sunIntensity: night ? 0.5 : (twilight ? 0.7 : 1.0 + sun * 0.5),
+    ambientIntensity: night ? 0.28 : (twilight ? 0.3 : 0.4),
     sunAngle: angle,
     sunColor,
     ambientColor,
