@@ -1,40 +1,48 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { WorldParams, DEFAULT_PARAMS } from '@/lib/worldGenerator';
+
+// Parse params from URLSearchParams (pure function, no hooks)
+function parseParamsFromSearch(searchParams: URLSearchParams): WorldParams {
+  const seedParam = searchParams.get('seed');
+  const varsParam = searchParams.get('vars');
+  
+  let seed = DEFAULT_PARAMS.seed;
+  let vars = [...DEFAULT_PARAMS.vars];
+  
+  if (seedParam) {
+    const parsed = parseInt(seedParam, 10);
+    if (!isNaN(parsed)) seed = parsed;
+  }
+  
+  if (varsParam) {
+    const parsed = varsParam.split(',').map(v => {
+      const n = parseInt(v, 10);
+      return isNaN(n) ? 50 : Math.max(0, Math.min(100, n));
+    });
+    if (parsed.length === 10) {
+      vars = parsed;
+    }
+  }
+  
+  return { seed, vars };
+}
 
 export function useWorldParams() {
   const [searchParams, setSearchParams] = useSearchParams();
   
-  const parseParams = useCallback((): WorldParams => {
-    const seedParam = searchParams.get('seed');
-    const varsParam = searchParams.get('vars');
-    
-    let seed = DEFAULT_PARAMS.seed;
-    let vars = [...DEFAULT_PARAMS.vars];
-    
-    if (seedParam) {
-      const parsed = parseInt(seedParam, 10);
-      if (!isNaN(parsed)) seed = parsed;
-    }
-    
-    if (varsParam) {
-      const parsed = varsParam.split(',').map(v => {
-        const n = parseInt(v, 10);
-        return isNaN(n) ? 50 : Math.max(0, Math.min(100, n));
-      });
-      if (parsed.length === 10) {
-        vars = parsed;
-      }
-    }
-    
-    return { seed, vars };
-  }, [searchParams]);
+  // Memoize parsed params based on searchParams
+  const parsedParams = useMemo(
+    () => parseParamsFromSearch(searchParams),
+    [searchParams]
+  );
   
-  const [params, setParams] = useState<WorldParams>(parseParams);
+  const [params, setParams] = useState<WorldParams>(parsedParams);
   
+  // Sync state when URL changes
   useEffect(() => {
-    setParams(parseParams());
-  }, [parseParams]);
+    setParams(parsedParams);
+  }, [parsedParams]);
   
   const updateParams = useCallback((newParams: Partial<WorldParams>) => {
     setParams(prev => {
