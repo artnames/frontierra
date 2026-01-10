@@ -309,6 +309,11 @@ export function PlantedObject({ world, isDiscovered }: PlantedObjectProps) {
   const flippedZ = world.gridSize - 1 - gridY;
   const terrainY = getElevationAt(world, x, flippedZ);
   
+  // COORDINATE FIX: Add terrain center offset to match mesh positioning
+  // The terrain mesh is offset by gridSize/2, so objects must be too
+  const offsetX = x + world.gridSize / 2;
+  const offsetZ = flippedZ + world.gridSize / 2;
+  
   const ObjectMesh = () => {
     switch (type) {
       case 0: // Tower
@@ -407,7 +412,7 @@ export function PlantedObject({ world, isDiscovered }: PlantedObjectProps) {
   };
   
   return (
-    <group position={[x, terrainY, flippedZ]} scale={[0.3, 0.3, 0.3]}>
+    <group position={[offsetX, terrainY, offsetZ]} scale={[0.3, 0.3, 0.3]}>
       <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[1.5, 32]} />
         <meshBasicMaterial 

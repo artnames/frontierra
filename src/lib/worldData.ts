@@ -336,12 +336,17 @@ export function isWalkable(world: WorldData, worldX: number, worldY: number): bo
 }
 
 export function distanceToObject(world: WorldData, worldX: number, worldY: number): number {
-  // COORDINATE FIX: The player moves in Three.js space where Y is flipped
-  // The planted object is stored in grid coordinates, so we flip it to match player space
+  // COORDINATE FIX: The player moves in Three.js space where:
+  // 1. Y is flipped (grid Y -> gridSize - 1 - Y)
+  // 2. Terrain is offset by gridSize/2 in both X and Z
   const objectFlippedY = world.gridSize - 1 - world.plantedObject.y;
   
-  const dx = worldX - world.plantedObject.x;
-  const dy = worldY - objectFlippedY;
+  // Add terrain center offset to match PlantedObject 3D position
+  const objectWorldX = world.plantedObject.x + world.gridSize / 2;
+  const objectWorldZ = objectFlippedY + world.gridSize / 2;
+  
+  const dx = worldX - objectWorldX;
+  const dy = worldY - objectWorldZ;
   return Math.sqrt(dx * dx + dy * dy);
 }
 
