@@ -80,8 +80,17 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
         
         positions.setY(i, height);
         
-        // Color derived from tile type (RGB categorical) with enhanced shading
-        const { r, g, b } = getTileColor(cell.type, cell.elevation, cell.moisture, cell.hasRiver, cell.isPath);
+        // Color derived from tile type (RGB categorical) with enhanced shading and micro-variation
+        const { r, g, b } = getTileColor(
+          cell.type, 
+          cell.elevation, 
+          cell.moisture, 
+          cell.hasRiver, 
+          cell.isPath,
+          x,
+          flippedY,
+          world.seed
+        );
         
         colors[i * 3] = r;
         colors[i * 3 + 1] = g;
@@ -102,18 +111,31 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
   );
 }
 
+// Deterministic micro-variation for organic feel
+function getMicroVariation(x: number, y: number, seed: number): number {
+  const n = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.1) * 43758.5453;
+  return (n - Math.floor(n)) * 0.15 - 0.075; // ±7.5% variation
+}
+
 // Get tile color from categorical type (RGB) with perceptual shading
 // Uses curved elevation for natural light distribution
 // Color is based on NexArt tile type, not recalculated from elevation
+// Enhanced with micro-variation and elevation accents
 function getTileColor(
   type: TerrainCell['type'], 
   elevation: number, // Already curved elevation from worldData
   moisture: number,
   hasRiver: boolean = false,
-  isPath: boolean = false
+  isPath: boolean = false,
+  x: number = 0, // Grid position for micro-variation
+  y: number = 0,
+  seed: number = 0
 ): { r: number; g: number; b: number } {
+  // Micro-variation for organic feel - breaks flat color bands
+  const microVar = getMicroVariation(x, y, seed);
+  
   // Enhanced brightness curve - high elevations catch more light
-  const baseBrightness = 0.65;
+  const baseBrightness = 0.65 + microVar;
   const elevationLight = Math.pow(elevation, 0.7) * 0.5;
   const brightness = baseBrightness + elevationLight;
   
@@ -123,18 +145,18 @@ function getTileColor(
   // Rivers get distinct color regardless of underlying tile type
   if (hasRiver) {
     return {
-      r: 0.18,
-      g: 0.45,
-      b: 0.55
+      r: 0.18 + microVar * 0.5,
+      g: 0.45 + microVar * 0.5,
+      b: 0.55 + microVar * 0.3
     };
   }
   
   // Paths get distinct color for visibility
   if (isPath && type !== 'bridge') {
     return {
-      r: 0.62 * brightness * ao,
-      g: 0.52 * brightness * ao,
-      b: 0.38 * brightness * ao
+      r: (0.62 + microVar) * brightness * ao,
+      g: (0.52 + microVar) * brightness * ao,
+      b: (0.38 + microVar * 0.5) * brightness * ao
     };
   }
   
@@ -143,9 +165,9 @@ function getTileColor(
       // Water stays dark and flat - minimal elevation influence
       const depth = Math.max(0, 1 - elevation * 2);
       return {
-        r: 0.08 + depth * 0.04,
-        g: 0.18 + depth * 0.06,
-        b: 0.35 + depth * 0.1
+        r: 0.08 + depth * 0.04 + microVar * 0.3,
+        g: 0.18 + depth * 0.06 + microVar * 0.3,
+        b: 0.35 + depth * 0.1 + microVar * 0.2
       };
       
     case 'forest':
@@ -153,59 +175,65 @@ function getTileColor(
       const forestDark = 0.7 + elevation * 0.3;
       const moist = moisture * 0.4;
       return {
-        r: (0.12 + moist * 0.02) * forestDark * ao,
-        g: (0.32 + moist * 0.18) * forestDark * ao,
-        b: (0.10 + moist * 0.05) * forestDark * ao
+        r: (0.12 + moist * 0.02 + microVar * 0.5) * forestDark * ao,
+        g: (0.32 + moist * 0.18 + microVar) * forestDark * ao,
+        b: (0.10 + moist * 0.05 + microVar * 0.3) * forestDark * ao
       };
       
     case 'mountain':
       // Enhanced mountain shading with dramatic height variation
+      // Snow at high peaks (elevation > 0.65)
       const isSnow = elevation > 0.65;
       const isHighSnow = elevation > 0.8;
       
       if (isHighSnow) {
+        // Brilliant white snow
         return {
-          r: 0.95 * brightness,
-          g: 0.97 * brightness,
-          b: 1.0 * brightness
+          r: (0.95 + microVar * 0.2) * brightness,
+          g: (0.97 + microVar * 0.15) * brightness,
+          b: (1.0 + microVar * 0.1) * brightness
         };
       } else if (isSnow) {
+        // Transition to snow
         const snowMix = (elevation - 0.65) / 0.15;
         return {
-          r: (0.45 + snowMix * 0.45) * brightness,
-          g: (0.43 + snowMix * 0.50) * brightness,
-          b: (0.42 + snowMix * 0.55) * brightness
+          r: (0.45 + snowMix * 0.45 + microVar) * brightness,
+          g: (0.43 + snowMix * 0.50 + microVar) * brightness,
+          b: (0.42 + snowMix * 0.55 + microVar * 0.5) * brightness
         };
       }
       
+      // Rock with variation
       const rockHeight = elevation * 0.4;
       return {
-        r: (0.32 + rockHeight) * brightness * ao,
-        g: (0.30 + rockHeight) * brightness * ao,
-        b: (0.28 + rockHeight) * brightness * ao
+        r: (0.32 + rockHeight + microVar) * brightness * ao,
+        g: (0.30 + rockHeight + microVar) * brightness * ao,
+        b: (0.28 + rockHeight + microVar * 0.5) * brightness * ao
       };
       
     case 'path':
       return {
-        r: 0.58 * brightness * ao,
-        g: 0.48 * brightness * ao,
-        b: 0.35 * brightness * ao
+        r: (0.58 + microVar) * brightness * ao,
+        g: (0.48 + microVar) * brightness * ao,
+        b: (0.35 + microVar * 0.5) * brightness * ao
       };
       
     case 'bridge':
       return {
-        r: 0.40 * brightness,
-        g: 0.28 * brightness,
-        b: 0.16 * brightness
+        r: (0.40 + microVar) * brightness,
+        g: (0.28 + microVar) * brightness,
+        b: (0.16 + microVar * 0.5) * brightness
       };
       
     case 'ground':
     default:
+      // Ground with wet shoreline near water (darker soil in lowlands)
       const groundMoist = moisture * 0.3;
+      const lowlandDarken = elevation < 0.3 ? (0.3 - elevation) * 0.3 : 0;
       return {
-        r: (0.50 - groundMoist * 0.15) * brightness * ao,
-        g: (0.44 + groundMoist * 0.12) * brightness * ao,
-        b: (0.28 + groundMoist * 0.04) * brightness * ao
+        r: (0.50 - groundMoist * 0.15 - lowlandDarken + microVar) * brightness * ao,
+        g: (0.44 + groundMoist * 0.12 - lowlandDarken * 0.5 + microVar) * brightness * ao,
+        b: (0.28 + groundMoist * 0.04 + microVar * 0.5) * brightness * ao
       };
   }
 }

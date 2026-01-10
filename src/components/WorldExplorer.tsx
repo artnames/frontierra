@@ -24,6 +24,8 @@ import { ForestTrees } from '@/components/ForestTrees';
 import { PlacedBeaconMesh } from '@/components/ActionSystem';
 import { SkyRenderer } from '@/components/SkyRenderer';
 import { TimeOfDayHUD } from '@/components/TimeOfDayHUD';
+import { DiscoveryToast } from '@/components/DiscoveryToast';
+import { useAmbientAudio } from '@/hooks/useAmbientAudio';
 import * as THREE from 'three';
 import { useThree, useFrame } from '@react-three/fiber';
 
@@ -82,7 +84,8 @@ function FirstPersonScene({
       <Bridges world={world} />
       <ForestTrees world={world} />
       <PlantedObject world={world} isDiscovered={isDiscovered} />
-      <GridOverlay world={world} />
+      {/* Grid overlay hidden by default in explore mode */}
+      {interactionMode === 'editor' && <GridOverlay world={world} />}
       
       {actions.map((action, i) => (
         <PlacedBeaconMesh key={i} action={action} world={world} />
@@ -119,6 +122,7 @@ interface WorldExplorerProps {
   interactionMode?: InteractionMode;
   onModeChange?: (mode: InteractionMode) => void;
   worldContext?: { worldX: number; worldY: number };
+  showDebugHUD?: boolean; // Control debug visibility
 }
 
 export function WorldExplorer({ 
@@ -132,7 +136,8 @@ export function WorldExplorer({
   replayFrame,
   interactionMode = 'explore',
   onModeChange,
-  worldContext
+  worldContext,
+  showDebugHUD = false
 }: WorldExplorerProps) {
   const worldX = worldContext?.worldX ?? 0;
   const worldY = worldContext?.worldY ?? 0;
@@ -140,6 +145,7 @@ export function WorldExplorer({
   const [isDiscovered, setIsDiscovered] = useState(false);
   const [showDiscoveryBanner, setShowDiscoveryBanner] = useState(false);
   const [actions, setActions] = useState<WorldAction[]>(initialActions);
+  const [audioEnabled, setAudioEnabled] = useState(true);
   
   // Use debounced NexArt generation hook
   const { world, isLoading, isVerifying, error } = useNexArtWorld({
@@ -183,6 +189,16 @@ export function WorldExplorer({
   const handleDiscovery = useCallback((discovered: boolean) => {
     setIsDiscovered(discovered);
   }, []);
+  
+  // Ambient audio based on terrain
+  useAmbientAudio({
+    world,
+    playerPosition: { x: position.x, y: position.y },
+    worldX,
+    worldY,
+    enabled: audioEnabled && !isReplaying,
+    masterVolume: 0.25
+  });
   
   const isInvalid = (deterministicTest && !deterministicTest.isValid) || error !== null;
   
@@ -282,9 +298,9 @@ export function WorldExplorer({
         </div>
       )}
       
-      {/* Position HUD */}
-      {!isReplaying && (
-        <div className="absolute top-4 left-4 terminal-panel p-3 pointer-events-none">
+      {/* Minimal Position HUD - only in editor mode or when showDebugHUD is true */}
+      {!isReplaying && (interactionMode === 'editor' || showDebugHUD) && (
+        <div className="absolute top-4 left-4 terminal-panel p-3 pointer-events-none opacity-80">
           <div className="text-xs space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground">POS:</span>
@@ -296,30 +312,24 @@ export function WorldExplorer({
               <span className="text-muted-foreground">ALT:</span>
               <span className="data-value font-mono">{position.z.toFixed(1)}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">OBJ:</span>
-              <span className="text-secondary-foreground font-mono">
-                ({world.plantedObject.x.toFixed(0)}, {world.plantedObject.y.toFixed(0)})
-              </span>
-            </div>
           </div>
         </div>
       )}
       
-      {/* Controls hint */}
-      {!isReplaying && (
-        <div className="absolute bottom-4 left-4 terminal-panel p-3 pointer-events-none">
+      {/* Minimal Controls hint - fade after a few seconds in explore mode */}
+      {!isReplaying && interactionMode === 'editor' && (
+        <div className="absolute bottom-4 left-4 terminal-panel p-3 pointer-events-none opacity-70">
           <div className="text-xs text-muted-foreground space-y-1">
             <div><span className="text-primary">WASD</span> — Move</div>
             <div><span className="text-primary">Mouse drag</span> — Look</div>
-            {interactionMode === 'editor' && (
-              <div><span className="text-primary">Space/Shift</span> — Up/Down</div>
-            )}
-            <div className="mt-2 text-[10px] uppercase text-accent">
-              {interactionMode === 'explore' ? '🚶 Explore Mode' : '✏️ Editor Mode'}
-            </div>
+            <div><span className="text-primary">Space/Shift</span> — Up/Down</div>
           </div>
         </div>
+      )}
+      
+      {/* Discovery Toast - quiet text on new land */}
+      {!isReplaying && (
+        <DiscoveryToast worldX={worldX} worldY={worldY} />
       )}
       
       {/* Discovery Banner */}

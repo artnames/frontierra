@@ -51,29 +51,33 @@ function fract(n: number): number {
 }
 
 // ============================================
-// CORE TIME CALCULATION
+// CORE TIME CALCULATION - UTC-BASED GLOBAL CYCLE
 // ============================================
 
+// Day/night cycle duration in milliseconds (20 minutes = 1200000ms)
+const CYCLE_DURATION_MS = 20 * 60 * 1000;
+
 /**
- * Compute deterministic time of day from world position.
+ * Compute time of day from real-world UTC time.
  * Returns a value in [0, 1) representing:
  * - 0.0 = midnight
  * - 0.25 = dawn
  * - 0.5 = noon
  * - 0.75 = dusk
  * 
- * Same land = same time. No ticking.
+ * All players worldwide see the same time.
+ * One full cycle = 20 minutes.
+ * sessionOffset can be used for local visual adjustments.
  */
 export function getTimeOfDay(ctx: TimeOfDayContext): number {
-  const combined = `${ctx.worldId}:${ctx.worldX}:${ctx.worldY}:TIME`;
-  const hash = djb2Hash(combined);
+  // Use real-world UTC time for global synchronization
+  const now = Date.now();
   
-  // Normalize hash to [0, 1)
-  const baseTime = (hash % 10000) / 10000;
+  // Calculate position in the 20-minute cycle
+  const cyclePosition = (now % CYCLE_DURATION_MS) / CYCLE_DURATION_MS;
   
-  // Apply multiplier for variety across the grid
-  // Using 0.73 creates irregular time distribution
-  const timeValue = fract(baseTime * 0.73 + (ctx.sessionOffset ?? 0));
+  // Apply optional session offset (visual only, non-canonical)
+  const timeValue = fract(cyclePosition + (ctx.sessionOffset ?? 0));
   
   return timeValue;
 }
