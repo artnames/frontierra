@@ -4,7 +4,10 @@ import { WorldParams, VAR_LABELS } from '@/lib/worldGenerator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { useVisualSettings } from '@/hooks/useVisualSettings';
 
 interface ControlPanelProps {
   params: WorldParams;
@@ -25,6 +28,7 @@ export function ControlPanel({
 }: ControlPanelProps) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
+  const { materialRichness, toggleMaterialRichness } = useVisualSettings();
 
   const handleCopyLink = async () => {
     const url = getShareUrl();
@@ -108,6 +112,27 @@ export function ControlPanel({
               />
             </div>
           ))}
+        </div>
+        
+        {/* Visual Settings */}
+        <div className="space-y-3 pt-2 border-t border-border">
+          <div className="data-label">Visual Settings</div>
+          
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="material-richness" className="text-sm font-medium cursor-pointer">
+                Material richness
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Enables detailed materials. Turn off for performance.
+              </p>
+            </div>
+            <Switch
+              id="material-richness"
+              checked={materialRichness}
+              onCheckedChange={toggleMaterialRichness}
+            />
+          </div>
         </div>
       </div>
       
