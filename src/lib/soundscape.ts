@@ -1,49 +1,33 @@
 // Soundscape Configuration - Deterministic Ambient + Cinematic Audio
 // Client-only, no syncing, no gameplay impact, royalty-free only
+// Uses public-domain CDN sources directly (Pixabay license)
 
 // ============================================
-// AUDIO FILE PATHS
-// Store downloaded Pixabay audio files in these folders:
-// - /public/audio/ambient/ (environmental SFX)
-// - /public/audio/music/ (cinematic tracks)
+// AUDIO SOURCES - CDN (Pixabay / Public Domain)
+// All sources are royalty-free, no attribution required
 // ============================================
 
 // Ambient SFX layers (looping environmental sounds)
 export const AMBIENT_SOURCES = {
   // Base wind layer (always present at low volume)
-  wind: '/audio/ambient/wind-soft.mp3',
+  wind: 'https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a73467.mp3',
   // Forest birds/leaves
-  forest: '/audio/ambient/forest-birds.mp3',
-  // Water/stream sounds
-  water: '/audio/ambient/water-stream.mp3',
+  forest: 'https://cdn.pixabay.com/audio/2022/02/07/audio_5f5d6687f1.mp3',
+  // Water/stream sounds  
+  water: 'https://cdn.pixabay.com/audio/2021/08/09/audio_dc39bba3b8.mp3',
   // Night insects/crickets
-  night: '/audio/ambient/night-crickets.mp3',
-  // Mountain wind rumble
-  mountain: '/audio/ambient/mountain-wind.mp3',
+  night: 'https://cdn.pixabay.com/audio/2022/08/02/audio_54ca0ffa52.mp3',
+  // Mountain wind rumble (reuse wind with different mix)
+  mountain: 'https://cdn.pixabay.com/audio/2024/04/16/audio_c38a62a4ae.mp3',
 } as const;
 
 // Cinematic music tracks (sparse, emotional, non-looping by default)
 export const MUSIC_TRACKS = {
   // Slow evolving ambient pads
-  exploration: '/audio/music/exploration-ambient.mp3',
-  // Calm cinematic underscore
-  discovery: '/audio/music/discovery-theme.mp3',
-  // Peaceful travel music
-  journey: '/audio/music/journey-calm.mp3',
-} as const;
-
-// Fallback CDN sources (Pixabay) - used if local files fail to load
-export const FALLBACK_AMBIENT = {
-  wind: 'https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a73467.mp3',
-  water: 'https://cdn.pixabay.com/audio/2021/08/09/audio_dc39bba3b8.mp3',
-  forest: 'https://cdn.pixabay.com/audio/2022/02/07/audio_5f5d6687f1.mp3',
-  night: 'https://cdn.pixabay.com/audio/2021/04/06/audio_844c5c7d2b.mp3',
-  mountain: 'https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a73467.mp3', // reuse wind
-} as const;
-
-export const FALLBACK_MUSIC = {
   exploration: 'https://cdn.pixabay.com/audio/2022/10/25/audio_52d3d90ffc.mp3',
+  // Calm cinematic underscore
   discovery: 'https://cdn.pixabay.com/audio/2023/09/04/audio_9f8e251f1d.mp3',
+  // Peaceful travel music
   journey: 'https://cdn.pixabay.com/audio/2024/04/09/audio_fa4b04a4a8.mp3',
 } as const;
 
@@ -51,16 +35,16 @@ export const FALLBACK_MUSIC = {
 export const VOLUME_PRESETS = {
   // Ambient SFX volumes (relative to master)
   ambient: {
-    wind: 0.12,       // Always present baseline
-    forest: 0.45,     // Bird songs when in forest
-    water: 0.55,      // Water when near rivers
+    wind: 0.15,       // Always present baseline
+    forest: 0.40,     // Bird songs when in forest
+    water: 0.50,      // Water when near rivers
     night: 0.35,      // Night insects
-    mountain: 0.25,   // Mountain wind rumble
+    mountain: 0.20,   // Mountain wind rumble
   },
   // Music volumes (relative to master)
   music: {
-    base: 0.25,       // Very low background
-    peak: 0.40,       // Peak during entry
+    base: 0.20,       // Very low background
+    peak: 0.35,       // Peak during entry
   },
   // Fade durations (ms)
   fade: {
