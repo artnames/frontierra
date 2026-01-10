@@ -4,11 +4,18 @@
 export interface VisualSettings {
   materialRichness: boolean;
   showVegetation: boolean;
+  // Audio settings
+  musicEnabled: boolean;
+  sfxEnabled: boolean;
+  masterVolume: number; // 0-1
 }
 
 export const defaultVisualSettings: VisualSettings = {
   materialRichness: true,
-  showVegetation: true
+  showVegetation: true,
+  musicEnabled: true,
+  sfxEnabled: true,
+  masterVolume: 0.4
 };
 
 const STORAGE_KEY = 'nexart-visual-settings';

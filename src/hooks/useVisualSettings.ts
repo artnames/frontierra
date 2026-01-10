@@ -43,7 +43,7 @@ export function useVisualSettings() {
     setSnapshot(next);
   }, []);
 
-  // Toggle material richness specifically
+  // Toggle material richness
   const toggleMaterialRichness = useCallback(() => {
     updateSetting('materialRichness', !settings.materialRichness);
   }, [settings.materialRichness, updateSetting]);
@@ -53,13 +53,34 @@ export function useVisualSettings() {
     updateSetting('showVegetation', !settings.showVegetation);
   }, [settings.showVegetation, updateSetting]);
 
+  // Toggle music
+  const toggleMusic = useCallback(() => {
+    updateSetting('musicEnabled', !settings.musicEnabled);
+  }, [settings.musicEnabled, updateSetting]);
+
+  // Toggle SFX
+  const toggleSfx = useCallback(() => {
+    updateSetting('sfxEnabled', !settings.sfxEnabled);
+  }, [settings.sfxEnabled, updateSetting]);
+
+  // Set master volume
+  const setMasterVolume = useCallback((volume: number) => {
+    updateSetting('masterVolume', Math.max(0, Math.min(1, volume)));
+  }, [updateSetting]);
+
   return {
     settings,
     isLoaded: true,
     materialRichness: settings.materialRichness,
     showVegetation: settings.showVegetation,
+    musicEnabled: settings.musicEnabled,
+    sfxEnabled: settings.sfxEnabled,
+    masterVolume: settings.masterVolume,
     toggleMaterialRichness,
     toggleVegetation,
+    toggleMusic,
+    toggleSfx,
+    setMasterVolume,
     updateSetting,
   };
 }

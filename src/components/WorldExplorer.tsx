@@ -166,10 +166,9 @@ export function WorldExplorer({
   const [isDiscovered, setIsDiscovered] = useState(false);
   const [showDiscoveryBanner, setShowDiscoveryBanner] = useState(false);
   const [actions, setActions] = useState<WorldAction[]>(initialActions);
-  const [audioEnabled, setAudioEnabled] = useState(true);
   
   // Visual settings (localStorage only, no server sync)
-  const { materialRichness, showVegetation } = useVisualSettings();
+  const { materialRichness, showVegetation, musicEnabled, sfxEnabled, masterVolume } = useVisualSettings();
   
   // Use debounced NexArt generation hook
   const { world, isLoading, isVerifying, error } = useNexArtWorld({
@@ -214,14 +213,16 @@ export function WorldExplorer({
     setIsDiscovered(discovered);
   }, []);
   
-  // Ambient audio based on terrain
+  // Ambient audio based on terrain and settings
   useAmbientAudio({
     world,
     playerPosition: { x: position.x, y: position.y },
     worldX,
     worldY,
-    enabled: audioEnabled && !isReplaying,
-    masterVolume: 0.25
+    enabled: !isReplaying,
+    musicEnabled,
+    sfxEnabled,
+    masterVolume
   });
   
   const isInvalid = (deterministicTest && !deterministicTest.isValid) || error !== null;
