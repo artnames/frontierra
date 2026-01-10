@@ -8,6 +8,7 @@ interface DiscoveryToastProps {
   worldX: number;
   worldY: number;
   landName?: string;
+  isOwnLand?: boolean; // If true, don't show toast (player is on their own land)
 }
 
 // Deterministic land description based on coordinates
@@ -28,15 +29,21 @@ function getLandDescription(worldX: number, worldY: number): string {
   return descriptions[index];
 }
 
-export function DiscoveryToast({ worldX, worldY, landName }: DiscoveryToastProps) {
+export function DiscoveryToast({ worldX, worldY, landName, isOwnLand = false }: DiscoveryToastProps) {
   const [show, setShow] = useState(false);
   const [lastCoords, setLastCoords] = useState({ x: worldX, y: worldY });
   const [visitedLands] = useState<Set<string>>(() => new Set());
   
   useEffect(() => {
+    // Never show toast on your own land
+    if (isOwnLand) {
+      setShow(false);
+      return;
+    }
+    
     const landKey = `${worldX},${worldY}`;
     
-    // Only show for new lands (first visit in session)
+    // Only show for new lands (first visit in session) when visiting OTHER players' lands
     if (!visitedLands.has(landKey) && (worldX !== lastCoords.x || worldY !== lastCoords.y)) {
       visitedLands.add(landKey);
       setLastCoords({ x: worldX, y: worldY });
@@ -46,7 +53,7 @@ export function DiscoveryToast({ worldX, worldY, landName }: DiscoveryToastProps
       const timer = setTimeout(() => setShow(false), 4000);
       return () => clearTimeout(timer);
     }
-  }, [worldX, worldY, lastCoords, visitedLands]);
+  }, [worldX, worldY, lastCoords, visitedLands, isOwnLand]);
   
   const description = getLandDescription(worldX, worldY);
   

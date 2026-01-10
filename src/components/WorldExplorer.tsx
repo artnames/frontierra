@@ -146,6 +146,7 @@ interface WorldExplorerProps {
   onModeChange?: (mode: InteractionMode) => void;
   worldContext?: { worldX: number; worldY: number };
   showDebugHUD?: boolean; // Control debug visibility
+  isOwnLand?: boolean; // If true, player is on their own land (suppress discovery toast)
 }
 
 export function WorldExplorer({ 
@@ -160,7 +161,8 @@ export function WorldExplorer({
   interactionMode = 'explore',
   onModeChange,
   worldContext,
-  showDebugHUD = false
+  showDebugHUD = false,
+  isOwnLand = true
 }: WorldExplorerProps) {
   const worldX = worldContext?.worldX ?? 0;
   const worldY = worldContext?.worldY ?? 0;
@@ -353,9 +355,9 @@ export function WorldExplorer({
         </div>
       )}
       
-      {/* Discovery Toast - quiet text on new land */}
+      {/* Discovery Toast - quiet text on new land (only when visiting others) */}
       {!isReplaying && (
-        <DiscoveryToast worldX={worldX} worldY={worldY} />
+        <DiscoveryToast worldX={worldX} worldY={worldY} isOwnLand={isOwnLand} />
       )}
       
       {/* Discovery Banner */}
