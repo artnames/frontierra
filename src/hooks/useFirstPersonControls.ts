@@ -236,9 +236,23 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
     };
   }, [gl]);
 
-  // Update camera each frame
   useFrame((_, delta) => {
     if (!enabled) return;
+
+    // Apply land transition position immediately (works even if the world doesn't regenerate,
+    // e.g. when hitting an unclaimed/out-of-bounds border)
+    if (globalCameraState.pendingTransition) {
+      const { x, z } = globalCameraState.pendingTransition;
+      const terrainHeight = getElevationAt(world, x, z);
+      const eyeHeight = 0.7;
+
+      position.current.set(x, terrainHeight + eyeHeight, z);
+      manualHeightOffset.current = 0;
+
+      globalCameraState.position = position.current.clone();
+      globalCameraState.manualHeight = 0;
+      globalCameraState.pendingTransition = null;
+    }
     
     const speed = 3 * delta; // Slower walking speed for realistic scale
     const { forward, backward, left, right, up, down } = moveState.current;

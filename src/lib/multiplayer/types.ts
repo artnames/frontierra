@@ -56,21 +56,23 @@ export function calculateEntryPosition(
   direction: EdgeDirection,
   landSize: number = LAND_GRID_SIZE
 ): { x: number; z: number } {
-  const safeMargin = 5;  // Must be larger than detection margin (1.0) to prevent loop
-  
+  const safeMargin = 5; // Must be larger than detection margin to prevent loop
+
+  const clamp = (v: number) => Math.max(safeMargin, Math.min(landSize - safeMargin, v));
+
   switch (direction) {
     case 'north':
       // Exited north edge, enter from south edge of new land
-      return { x: exitPosition.x, z: landSize - safeMargin };
+      return { x: clamp(exitPosition.x), z: landSize - safeMargin };
     case 'south':
       // Exited south edge, enter from north edge of new land
-      return { x: exitPosition.x, z: safeMargin };
+      return { x: clamp(exitPosition.x), z: safeMargin };
     case 'east':
       // Exited east edge, enter from west edge of new land
-      return { x: safeMargin, z: exitPosition.z };
+      return { x: safeMargin, z: clamp(exitPosition.z) };
     case 'west':
       // Exited west edge, enter from east edge of new land
-      return { x: landSize - safeMargin, z: exitPosition.z };
+      return { x: landSize - safeMargin, z: clamp(exitPosition.z) };
   }
 }
 

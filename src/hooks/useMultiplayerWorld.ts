@@ -2,7 +2,7 @@
 // Manages the deterministic world loading and edge transitions
 // Integrates with World A shared macro geography via worldContext
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { PlayerLand, LAND_GRID_SIZE, WORLD_A_GRID_WIDTH, WORLD_A_GRID_HEIGHT } from '@/lib/multiplayer/types';
 import { 
   getLandByPlayerId, 
@@ -42,6 +42,12 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     isLoading: true,
     error: null,
     isVisitingOtherLand: false
+  });
+
+  // Always keep the latest camera/ground position (avoids stale state during transitions)
+  const latestPositionRef = useRef<{ x: number; z: number }>({
+    x: LAND_GRID_SIZE / 2,
+    z: LAND_GRID_SIZE / 2
   });
   
   // Keep playerId in sync with options.initialPlayerId (e.g., when user logs in)
@@ -95,14 +101,15 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
       // Notify parent to reposition camera
       options.onLandTransition?.(entryPosition);
     } else {
-      // No land at edge - push player back
-      setState(prev => ({
-        ...prev,
-        playerPosition: {
-          x: Math.max(2, Math.min(LAND_GRID_SIZE - 2, prev.playerPosition.x)),
-          z: Math.max(2, Math.min(LAND_GRID_SIZE - 2, prev.playerPosition.z))
-        }
-      }));
+      // No land at edge (unclaimed or out of bounds) — push player back inside current land
+      const pushed = {
+        x: Math.max(2, Math.min(LAND_GRID_SIZE - 2, latestPositionRef.current.x)),
+        z: Math.max(2, Math.min(LAND_GRID_SIZE - 2, latestPositionRef.current.z))
+      };
+
+      setState(prev => ({ ...prev, playerPosition: pushed }));
+      // Also snap the actual camera away from the edge to stop re-trigger loops
+      options.onLandTransition?.(pushed);
     }
   }, [forceRegenerate, options.onLandTransition]);
   
@@ -201,6 +208,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
   
   // Update player position and check for edge crossings
   const updatePlayerPosition = useCallback((x: number, z: number) => {
+    latestPositionRef.current = { x, z };
     setState(prev => ({ ...prev, playerPosition: { x, z } }));
     edgeTransition.handlePositionUpdate(x, z);
   }, [edgeTransition]);
