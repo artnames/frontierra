@@ -22,17 +22,17 @@ interface AudioLayer {
   currentVolume: number;
 }
 
-// Audio URLs - using reliable CDN sources for ambient loops (CC0/public domain)
-// Switched to more reliable sources that work across browsers
+// Audio URLs - using reliable public domain ambient loops
+// These are actual nature ambient sounds for immersive experience
 const AUDIO_SOURCES = {
-  // Wind ambience - reliable source
-  wind: 'https://assets.mixkit.co/active_storage/sfx/212/212-preview.mp3',
-  // Forest birds - reliable source  
-  forest: 'https://assets.mixkit.co/active_storage/sfx/2515/2515-preview.mp3',
-  // Water/stream - reliable source
-  water: 'https://assets.mixkit.co/active_storage/sfx/2514/2514-preview.mp3',
-  // Night crickets - reliable source
-  night: 'https://assets.mixkit.co/active_storage/sfx/2513/2513-preview.mp3',
+  // Gentle wind through grass/trees
+  wind: 'https://upload.wikimedia.org/wikipedia/commons/4/4f/Wind_noise_sound_effect.ogg',
+  // Forest birds chirping  
+  forest: 'https://upload.wikimedia.org/wikipedia/commons/7/7d/Bird_singing.ogg',
+  // Flowing stream/brook
+  water: 'https://upload.wikimedia.org/wikipedia/commons/4/4f/Stream_in_the_woods.ogg',
+  // Night crickets/insects
+  night: 'https://upload.wikimedia.org/wikipedia/commons/0/03/Crickets_at_night.ogg',
 };
 
 // Calculate terrain composition around player

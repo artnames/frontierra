@@ -28,7 +28,7 @@ export function ControlPanel({
 }: ControlPanelProps) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
-  const { materialRichness, toggleMaterialRichness } = useVisualSettings();
+  const { materialRichness, toggleMaterialRichness, showVegetation, toggleVegetation } = useVisualSettings();
 
   const handleCopyLink = async () => {
     const url = getShareUrl();
@@ -124,13 +124,29 @@ export function ControlPanel({
                 Material richness
               </Label>
               <p className="text-xs text-muted-foreground">
-                Enables detailed materials. Turn off for performance.
+                Enables detailed terrain textures.
               </p>
             </div>
             <Switch
               id="material-richness"
               checked={materialRichness}
               onCheckedChange={toggleMaterialRichness}
+            />
+          </div>
+          
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="show-vegetation" className="text-sm font-medium cursor-pointer">
+                Vegetation
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Shows trees, flowers, and plants.
+              </p>
+            </div>
+            <Switch
+              id="show-vegetation"
+              checked={showVegetation}
+              onCheckedChange={toggleVegetation}
             />
           </div>
         </div>

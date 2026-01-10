@@ -1,7 +1,7 @@
 // Hook for managing deterministic world textures
 // Generates and caches procedural textures using @nexart/ui-renderer
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { 
   MaterialKind, 
@@ -48,6 +48,9 @@ export function useWorldTextures({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // Keep track of previous textures to avoid flickering during reload
+  const prevTexturesRef = useRef<Map<MaterialKind, THREE.CanvasTexture>>(new Map());
+  
   // Stable key for dependency tracking
   const textureKey = useMemo(() => {
     const varsHash = vars.slice(0, 10).map(v => Math.floor(v)).join('-');
@@ -57,6 +60,7 @@ export function useWorldTextures({
   // Generate textures when inputs change
   useEffect(() => {
     if (!enabled) {
+      // Keep existing textures when disabled (don't clear them)
       return;
     }
     
@@ -85,8 +89,8 @@ export function useWorldTextures({
           threeTextures.set(kind, threeTexture);
         });
         
-        // Dispose old textures
-        textureMap.forEach(texture => texture.dispose());
+        // Store in ref before updating state
+        prevTexturesRef.current = threeTextures;
         
         setTextureMap(threeTextures);
         setIsLoading(false);
@@ -105,17 +109,15 @@ export function useWorldTextures({
     };
   }, [textureKey, enabled]);
   
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      textureMap.forEach(texture => texture.dispose());
-    };
-  }, []);
+  // Return previous textures if currently loading (prevents flicker)
+  const stableTextures = isLoading && prevTexturesRef.current.size > 0 
+    ? prevTexturesRef.current 
+    : textureMap;
   
   return {
-    textures: textureMap,
+    textures: stableTextures,
     isLoading,
-    isReady: textureMap.size > 0 && !isLoading,
+    isReady: stableTextures.size > 0,
     error
   };
 }

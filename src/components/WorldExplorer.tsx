@@ -44,6 +44,7 @@ interface FirstPersonSceneProps {
   worldX?: number;
   worldY?: number;
   useTextures?: boolean;
+  showVegetation?: boolean;
 }
 
 function FirstPersonScene({ 
@@ -56,7 +57,8 @@ function FirstPersonScene({
   interactionMode,
   worldX = 0,
   worldY = 0,
-  useTextures = true
+  useTextures = true,
+  showVegetation = true
 }: FirstPersonSceneProps) {
   const [isDiscovered, setIsDiscovered] = useState(false);
   
@@ -101,7 +103,7 @@ function FirstPersonScene({
       
       <TimeAwareWaterPlane world={world} worldX={worldX} worldY={worldY} />
       <Bridges world={world} />
-      <ForestTrees world={world} />
+      {showVegetation && <ForestTrees world={world} />}
       <PlantedObject world={world} isDiscovered={isDiscovered} />
       {/* Grid overlay hidden by default in explore mode */}
       {interactionMode === 'editor' && <GridOverlay world={world} />}
@@ -167,7 +169,7 @@ export function WorldExplorer({
   const [audioEnabled, setAudioEnabled] = useState(true);
   
   // Visual settings (localStorage only, no server sync)
-  const { materialRichness } = useVisualSettings();
+  const { materialRichness, showVegetation } = useVisualSettings();
   
   // Use debounced NexArt generation hook
   const { world, isLoading, isVerifying, error } = useNexArtWorld({
@@ -303,6 +305,7 @@ export function WorldExplorer({
           worldX={worldX}
           worldY={worldY}
           useTextures={materialRichness}
+          showVegetation={showVegetation}
         />
       </Canvas>
       
