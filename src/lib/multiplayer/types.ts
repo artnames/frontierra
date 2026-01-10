@@ -50,22 +50,27 @@ export function getOppositeDirection(dir: EdgeDirection): EdgeDirection {
 }
 
 // Calculate entry position when crossing an edge
+// The entry position must be far enough from the edge to avoid re-triggering a transition
 export function calculateEntryPosition(
   exitPosition: { x: number; z: number },
   direction: EdgeDirection,
   landSize: number = LAND_GRID_SIZE
 ): { x: number; z: number } {
-  const margin = 2;  // Small offset to prevent immediate re-crossing
+  const safeMargin = 5;  // Must be larger than detection margin (1.0) to prevent loop
   
   switch (direction) {
     case 'north':
-      return { x: exitPosition.x, z: landSize - margin };
+      // Exited north edge, enter from south edge of new land
+      return { x: exitPosition.x, z: landSize - safeMargin };
     case 'south':
-      return { x: exitPosition.x, z: margin };
+      // Exited south edge, enter from north edge of new land
+      return { x: exitPosition.x, z: safeMargin };
     case 'east':
-      return { x: margin, z: exitPosition.z };
+      // Exited east edge, enter from west edge of new land
+      return { x: safeMargin, z: exitPosition.z };
     case 'west':
-      return { x: landSize - margin, z: exitPosition.z };
+      // Exited west edge, enter from east edge of new land
+      return { x: landSize - safeMargin, z: exitPosition.z };
   }
 }
 
