@@ -44,6 +44,16 @@ export function ControlPanel({
   const [selectedPreset, setSelectedPreset] = useState<string>('');
   const { toast } = useToast();
   const { 
+    // Graphics
+    materialRichness,
+    toggleMaterialRichness,
+    fogEnabled,
+    toggleFog,
+    microDetailEnabled,
+    toggleMicroDetail,
+    shadowsEnabled,
+    toggleShadows,
+    // Audio
     musicEnabled,
     toggleMusic,
     sfxEnabled,
@@ -274,6 +284,48 @@ export function ControlPanel({
           </CollapsibleContent>
         </Collapsible>
         
+        {/* Graphics Settings */}
+        <div className="space-y-3 pt-2 border-t border-border">
+          <div className="data-label flex items-center gap-2">
+            <Settings2 className="w-3.5 h-3.5" />
+            Graphics
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Rich Terrain Materials</Label>
+              <p className="text-xs text-muted-foreground">
+                Adds PBR shading + micro detail while keeping vertex colors.
+              </p>
+            </div>
+            <Switch checked={materialRichness} onCheckedChange={toggleMaterialRichness} />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Fog</Label>
+              <p className="text-xs text-muted-foreground">Atmosphere + scale.</p>
+            </div>
+            <Switch checked={fogEnabled} onCheckedChange={toggleFog} />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Micro Detail</Label>
+              <p className="text-xs text-muted-foreground">Subtle grain + roughness variation.</p>
+            </div>
+            <Switch checked={microDetailEnabled} onCheckedChange={toggleMicroDetail} />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Shadows</Label>
+              <p className="text-xs text-muted-foreground">Contact depth (may cost FPS).</p>
+            </div>
+            <Switch checked={shadowsEnabled} onCheckedChange={toggleShadows} />
+          </div>
+        </div>
+
         {/* Audio Settings */}
         <div className="space-y-3 pt-2 border-t border-border">
           <div className="data-label flex items-center gap-2">

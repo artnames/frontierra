@@ -13,6 +13,7 @@ import {
 } from '@/lib/worldConstants';
 import { useWorldTextures } from '@/hooks/useWorldTextures';
 import { MaterialKind, getMaterialKind } from '@/lib/materialRegistry';
+import { createTerrainPbrDetailMaterial } from '@/lib/terrainPbrMaterial';
 
 interface TexturedTerrainMeshProps {
   world: WorldData;
@@ -69,170 +70,20 @@ const TEXTURE_INFLUENCE: Record<MaterialKind, number> = {
   sand: 0.20,      // Gentle ripple patterns
 };
 
-// Custom shader for texture-modulated vertex colors with procedural micro-detail
-// KEY IMPROVEMENTS:
-// 1. Triplanar-inspired procedural noise based on world position (not UVs) - no striping
-// 2. Roughness variation for material depth
-// 3. Proper fog integration with FogExp2
-// 4. Slope-aware shading for depth
-function createTexturedMaterial(
-  texture: THREE.Texture | null,
-  influence: number,
-  isWater: boolean,
-  microDetailEnabled: boolean = true
-): THREE.ShaderMaterial {
-  const vertexShader = `
-    varying vec2 vUv;
-    varying vec3 vColor;
-    varying vec3 vNormal;
-    varying vec3 vWorldPosition;
-    varying float vSlope;
-    
-    void main() {
-      vUv = uv;
-      vColor = color;
-      vNormal = normalize(normalMatrix * normal);
-      vec4 worldPos = modelMatrix * vec4(position, 1.0);
-      vWorldPosition = worldPos.xyz;
-      
-      // Calculate slope for AO-like darkening on steep surfaces
-      vSlope = 1.0 - abs(dot(vNormal, vec3(0.0, 1.0, 0.0)));
-      
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `;
+// PBR detail material keeps vertex colors primary but adds micro grain + roughness variation
+import { createTerrainPbrDetailMaterial } from '@/lib/terrainPbrMaterial';
 
-  const fragmentShader = `
-    uniform sampler2D map;
-    uniform float textureInfluence;
-    uniform vec3 lightDirection;
-    uniform vec3 ambientColor;
-    uniform vec3 lightColor;
-    uniform vec3 fogColor;
-    uniform float fogDensity;
-    uniform bool useFog;
-    uniform bool useMicroDetail;
-    uniform float time;
-    
-    varying vec2 vUv;
-    varying vec3 vColor;
-    varying vec3 vNormal;
-    varying vec3 vWorldPosition;
-    varying float vSlope;
-    
-    // Simple pseudo-random hash function (deterministic)
-    float hash(vec2 p) {
-      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-    }
-    
-    // Smooth noise function for micro-detail
-    float noise(vec2 p) {
-      vec2 i = floor(p);
-      vec2 f = fract(p);
-      f = f * f * (3.0 - 2.0 * f); // Smooth interpolation
-      
-      float a = hash(i);
-      float b = hash(i + vec2(1.0, 0.0));
-      float c = hash(i + vec2(0.0, 1.0));
-      float d = hash(i + vec2(1.0, 1.0));
-      
-      return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-    }
-    
-    // Multi-octave noise for richer detail
-    float fbm(vec2 p) {
-      float value = 0.0;
-      float amplitude = 0.5;
-      float frequency = 1.0;
-      
-      // 3 octaves - balanced for performance
-      for (int i = 0; i < 3; i++) {
-        value += amplitude * noise(p * frequency);
-        frequency *= 2.0;
-        amplitude *= 0.5;
-      }
-      return value;
-    }
-    
-    void main() {
-      // Sample texture if available and convert to luminance
-      vec4 texColor = texture2D(map, vUv);
-      float texLuminance = dot(texColor.rgb, vec3(0.299, 0.587, 0.114));
-      
-      // Modulate base vertex color with texture luminance
-      float modulator = mix(1.0, texLuminance, textureInfluence);
-      vec3 baseColor = vColor * modulator;
-      
-      // Apply procedural micro-detail based on world position (triplanar-style)
-      if (useMicroDetail) {
-        // Use world XZ position for detail (avoids UV-based striping)
-        vec2 detailCoord = vWorldPosition.xz * 0.8; // Scale for visible grain
-        
-        // Multi-scale noise for organic variation
-        float microNoise = fbm(detailCoord);
-        
-        // Subtle modulation (5-12% range as specified)
-        float microModulation = 0.92 + microNoise * 0.16; // 0.92-1.08 range
-        baseColor *= microModulation;
-        
-        // Add slope-based darkening (subtle AO effect)
-        float slopeAO = 1.0 - vSlope * 0.15;
-        baseColor *= slopeAO;
-      }
-      
-      // Directional lighting (Lambert) with softer falloff
-      float NdotL = max(dot(vNormal, lightDirection), 0.0);
-      float wrapLighting = NdotL * 0.8 + 0.2; // Wrap lighting for softer shadows
-      vec3 diffuse = baseColor * lightColor * wrapLighting;
-      vec3 ambient = baseColor * ambientColor;
-      vec3 finalColor = ambient + diffuse * 0.7;
-      
-      // Apply exponential fog (FogExp2 style)
-      if (useFog) {
-        float depth = length(vWorldPosition - cameraPosition);
-        float fogFactor = 1.0 - exp(-fogDensity * fogDensity * depth * depth);
-        fogFactor = clamp(fogFactor, 0.0, 1.0);
-        finalColor = mix(finalColor, fogColor, fogFactor);
-      }
-      
-      // Output - let Three.js handle tone mapping now
-      gl_FragColor = vec4(finalColor, 1.0);
-    }
-  `;
-
-  // Create a 1x1 white texture as fallback if no texture provided
-  const fallbackTexture = new THREE.DataTexture(
-    new Uint8Array([255, 255, 255, 255]),
-    1, 1,
-    THREE.RGBAFormat
-  );
-  fallbackTexture.needsUpdate = true;
-
-  const mat = new THREE.ShaderMaterial({
-    vertexShader,
-    fragmentShader,
-    uniforms: {
-      map: { value: texture || fallbackTexture },
-      textureInfluence: { value: texture ? influence : 0.0 },
-      lightDirection: { value: new THREE.Vector3(0.5, 0.8, 0.3).normalize() },
-      ambientColor: { value: new THREE.Color(0.45, 0.45, 0.5) },
-      lightColor: { value: new THREE.Color(0.9, 0.88, 0.85) },
-      fogColor: { value: new THREE.Color(0.6, 0.7, 0.8) },
-      fogDensity: { value: 0.012 },
-      useFog: { value: true },
-      useMicroDetail: { value: microDetailEnabled },
-      time: { value: 0.0 },
-    },
-    vertexColors: true,
-    side: THREE.DoubleSide,
-    fog: true, // Enable fog support
-  });
-
-  // Enable tone mapping for proper ACES response
-  mat.toneMapped = true;
-
-  return mat;
-}
+// Material tuning per kind (kept subtle to preserve stylized look)
+const PBR_PROPS: Record<MaterialKind, { roughness: number; metalness: number; transparent?: boolean; opacity?: number; detailScale: number; albedoVar: number; roughVar: number; slopeAO: number }> = {
+  ground:   { roughness: 0.92, metalness: 0.02, detailScale: 0.90, albedoVar: 0.08, roughVar: 0.18, slopeAO: 0.12 },
+  forest:   { roughness: 0.94, metalness: 0.02, detailScale: 0.95, albedoVar: 0.07, roughVar: 0.16, slopeAO: 0.10 },
+  mountain: { roughness: 0.80, metalness: 0.04, detailScale: 1.10, albedoVar: 0.08, roughVar: 0.22, slopeAO: 0.14 },
+  snow:     { roughness: 0.68, metalness: 0.01, detailScale: 0.70, albedoVar: 0.05, roughVar: 0.10, slopeAO: 0.06 },
+  water:    { roughness: 0.22, metalness: 0.10, transparent: true, opacity: 0.85, detailScale: 0.60, albedoVar: 0.03, roughVar: 0.08, slopeAO: 0.00 },
+  path:     { roughness: 0.86, metalness: 0.03, detailScale: 1.25, albedoVar: 0.08, roughVar: 0.20, slopeAO: 0.10 },
+  rock:     { roughness: 0.78, metalness: 0.05, detailScale: 1.35, albedoVar: 0.09, roughVar: 0.25, slopeAO: 0.16 },
+  sand:     { roughness: 0.88, metalness: 0.01, detailScale: 0.85, albedoVar: 0.06, roughVar: 0.14, slopeAO: 0.08 },
+};
 
 // Deterministic micro-variation for organic feel
 function getMicroVariation(x: number, y: number, seed: number): number {
@@ -440,18 +291,18 @@ export function TexturedTerrainMesh({
     return geos;
   }, [world, heightScale, riverDepth, pathMaxHeight, worldX, worldY]);
 
-  // Create custom ShaderMaterials per kind
+  // Create PBR materials per kind (vertex colors primary + deterministic micro-detail)
   const materialsPerKind = useMemo(() => {
-    const mats: Map<MaterialKind, THREE.ShaderMaterial> = new Map();
-    
+    const mats: Map<MaterialKind, THREE.MeshStandardMaterial> = new Map();
+
+    const worldOffset = new THREE.Vector2(worldX * world.gridSize, worldY * world.gridSize);
+
     for (const kind of MATERIAL_KINDS) {
       if (!geometriesPerKind.has(kind)) continue;
-      
-      const isWater = kind === 'water';
+
       const influence = TEXTURE_INFLUENCE[kind];
-      
-      const tex = texturesEnabled && isReady ? textures.get(kind) : null;
-      
+      const tex = texturesEnabled && isReady ? textures.get(kind) ?? null : null;
+
       if (tex) {
         tex.wrapS = THREE.RepeatWrapping;
         tex.wrapT = THREE.RepeatWrapping;
@@ -460,12 +311,29 @@ export function TexturedTerrainMesh({
         tex.anisotropy = 4;
         tex.needsUpdate = true;
       }
-      
-      mats.set(kind, createTexturedMaterial(tex, influence, isWater, microDetailEnabled));
+
+      const pbr = PBR_PROPS[kind];
+      mats.set(
+        kind,
+        createTerrainPbrDetailMaterial({
+          detailTexture: tex,
+          textureInfluence: influence,
+          microDetailEnabled,
+          worldOffset,
+          detailScale: pbr.detailScale,
+          albedoVariation: pbr.albedoVar,
+          roughnessVariation: pbr.roughVar,
+          slopeAO: pbr.slopeAO,
+          baseRoughness: pbr.roughness,
+          baseMetalness: pbr.metalness,
+          transparent: pbr.transparent,
+          opacity: pbr.opacity,
+        })
+      );
     }
-    
+
     return mats;
-  }, [texturesEnabled, isReady, textures, geometriesPerKind, microDetailEnabled]);
+  }, [texturesEnabled, isReady, textures, geometriesPerKind, microDetailEnabled, worldX, worldY, world.gridSize]);
 
   return (
     <group position={[0, 0, 0]}>
@@ -473,7 +341,7 @@ export function TexturedTerrainMesh({
         const geo = geometriesPerKind.get(kind);
         const mat = materialsPerKind.get(kind);
         if (!geo || !mat) return null;
-        return <mesh key={kind} geometry={geo} material={mat} />;
+        return <mesh key={kind} geometry={geo} material={mat} receiveShadow />;
       })}
     </group>
   );
@@ -593,7 +461,7 @@ export function SimpleTerrainMesh({
   }, [world, heightScale, riverDepth, pathMaxHeight]);
   
   return (
-    <mesh ref={meshRef} geometry={geometry} position={[0, 0, 0]}>
+    <mesh ref={meshRef} geometry={geometry} position={[0, 0, 0]} receiveShadow>
       <meshStandardMaterial vertexColors side={THREE.DoubleSide} roughness={0.85} metalness={0.05} />
     </mesh>
   );
