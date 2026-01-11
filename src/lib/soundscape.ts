@@ -14,6 +14,10 @@ export const AMBIENT_SOURCES = {
 export const MUSIC_TRACKS = {
   travel_01: '/audio/music/travel_01.mp3',
   travel_02: '/audio/music/travel_02.mp3',
+  cradle_of_winter: '/audio/music/cradle_of_winter.mp3',
+  discovering_asia: '/audio/music/discovering_asia.mp3',
+  ancient_world: '/audio/music/ancient_world.mp3',
+  ethereal_world: '/audio/music/ethereal_world.mp3',
 } as const;
 
 // Volume presets
