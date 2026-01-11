@@ -15,6 +15,8 @@ interface UseNexArtWorldOptions {
     worldX: number;
     worldY: number;
   };
+  // V2 mapping for archetype-aware generation
+  mappingVersion?: 'v1' | 'v2';
 }
 
 interface UseNexArtWorldResult {
@@ -31,7 +33,8 @@ export function useNexArtWorld({
   seed,
   vars,
   debounceMs = DEFAULT_DEBOUNCE_MS,
-  worldContext
+  worldContext,
+  mappingVersion = 'v1'
 }: UseNexArtWorldOptions): UseNexArtWorldResult {
   const [world, setWorld] = useState<WorldData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,10 +59,10 @@ export function useNexArtWorld({
     return createWorldContext(worldContext.worldX, worldContext.worldY);
   }, [worldContext?.worldX, worldContext?.worldY]);
   
-  // Stable key for dependency tracking (includes world context)
+  // Stable key for dependency tracking (includes world context and mapping version)
   const paramsKey = useMemo(
-    () => `${input.seed}:${input.vars.join(',')}:${fullWorldContext?.worldX ?? 'solo'}:${fullWorldContext?.worldY ?? ''}`,
-    [input.seed, input.vars, fullWorldContext?.worldX, fullWorldContext?.worldY]
+    () => `${input.seed}:${input.vars.join(',')}:${fullWorldContext?.worldX ?? 'solo'}:${fullWorldContext?.worldY ?? ''}:${mappingVersion}`,
+    [input.seed, input.vars, fullWorldContext?.worldX, fullWorldContext?.worldY, mappingVersion]
   );
   
   const generateWorld = useCallback(async (targetSeed: number, targetVars: number[], key: string) => {
@@ -75,7 +78,7 @@ export function useNexArtWorld({
     setError(null);
     
     try {
-      const worldData = await generateWorldDataAsync(targetSeed, targetVars, fullWorldContext);
+      const worldData = await generateWorldDataAsync(targetSeed, targetVars, fullWorldContext, mappingVersion);
       
       // Check if this generation is still current
       if (currentGenId !== generationIdRef.current) {
@@ -105,7 +108,7 @@ export function useNexArtWorld({
         isGeneratingRef.current = false;
       }
     }
-  }, [fullWorldContext]);
+  }, [fullWorldContext, mappingVersion]);
   
   // Debounced generation effect - runs only when paramsKey changes
   useEffect(() => {
