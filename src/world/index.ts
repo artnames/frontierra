@@ -1,6 +1,9 @@
 // World Parameter System - Main exports
 // Re-exports all var schema, mapping, and field utilities
 
+// Types
+export type { MappingVersion, WorldArchetype, WorldPreset } from './vars/mapping_v2';
+
 // Schema
 export * from './vars/schema';
 
