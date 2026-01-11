@@ -1,6 +1,7 @@
-// Textured Terrain - 3D terrain mesh with procedural textures from @nexart/ui-renderer
-// Uses custom ShaderMaterial to properly modulate vertex colors with texture luminance.
-// CRITICAL: All textures are deterministic - same inputs = same output.
+// Textured Terrain - 3D terrain mesh with PBR materials and procedural micro-detail
+// Uses vertex colors as base identity with shader-based micro-grain for rich material feel
+// CRITICAL: All rendering is deterministic - same inputs = same output.
+// NOTE: We no longer use uiTextures.ts/@nexart/ui-renderer for terrain.
 
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -11,7 +12,6 @@ import {
   RIVER_DEPTH_OFFSET,
   PATH_HEIGHT_OFFSET,
 } from '@/lib/worldConstants';
-import { useWorldTextures } from '@/hooks/useWorldTextures';
 import { MaterialKind, getMaterialKind } from '@/lib/materialRegistry';
 import { createTerrainPbrDetailMaterial } from '@/lib/terrainPbrMaterial';
 
@@ -34,7 +34,7 @@ const MATERIAL_KINDS: MaterialKind[] = [
   'sand',
 ];
 
-// UV scales per material - larger = less repetition, less striping
+// UV scales per material - used for world-aligned UVs (larger = less repetition)
 const UV_SCALES: Record<MaterialKind, number> = {
   ground: 0.08,
   forest: 0.10,
@@ -46,8 +46,8 @@ const UV_SCALES: Record<MaterialKind, number> = {
   sand: 0.07,
 };
 
-// Fallback colors when textures aren't ready
-const FALLBACK_COLORS: Record<string, { r: number; g: number; b: number }> = {
+// Base colors per material kind (used for vertex colors)
+const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
   ground: { r: 0.50, g: 0.44, b: 0.28 },
   forest: { r: 0.18, g: 0.35, b: 0.15 },
   mountain: { r: 0.45, g: 0.43, b: 0.42 },
@@ -56,18 +56,6 @@ const FALLBACK_COLORS: Record<string, { r: number; g: number; b: number }> = {
   path: { r: 0.58, g: 0.48, b: 0.35 },
   rock: { r: 0.42, g: 0.42, b: 0.42 },
   sand: { r: 0.76, g: 0.62, b: 0.38 },
-};
-
-// Texture influence per material (0-1) - how much texture modulates base color
-const TEXTURE_INFLUENCE: Record<MaterialKind, number> = {
-  ground: 0.25,    // Visible earth variation
-  forest: 0.22,    // Visible undergrowth texture
-  mountain: 0.28,  // More visible rock striations
-  snow: 0.15,      // Subtle - snow is mostly uniform
-  water: 0.12,     // Minimal - just brightness noise
-  path: 0.30,      // More visible for worn/trampled look
-  rock: 0.30,      // Visible cracks and texture
-  sand: 0.20,      // Gentle ripple patterns
 };
 
 // PBR detail material keeps vertex colors primary but adds micro grain + roughness variation
@@ -120,7 +108,7 @@ function getTileColor(
   }
 
   const kind = getMaterialKind(type, elevation, moisture);
-  const fallback = FALLBACK_COLORS[kind] || FALLBACK_COLORS.ground;
+  const fallback = BASE_COLORS[kind] || BASE_COLORS.ground;
 
   return {
     r: (fallback.r + microVar) * brightness * ao,
@@ -142,13 +130,9 @@ export function TexturedTerrainMesh({
   texturesEnabled = true,
   microDetailEnabled = true,
 }: TexturedTerrainMeshProps) {
-  const { textures, isReady } = useWorldTextures({
-    worldX,
-    worldY,
-    seed: world.seed,
-    vars: world.vars,
-    enabled: texturesEnabled,
-  });
+  // NOTE: We intentionally do NOT use uiTextures.ts here anymore.
+  // The terrain now relies purely on vertex colors + PBR micro-detail shader.
+  // This provides proper Three.js lighting/shadows without the flat ui-renderer look.
 
   const heightScale = WORLD_HEIGHT_SCALE;
   const waterLevel = getWaterLevel(world.vars);
@@ -212,7 +196,7 @@ export function TexturedTerrainMesh({
       if (cells.length === 0) continue;
       
       const uvScale = UV_SCALES[kind];
-      const baseColor = FALLBACK_COLORS[kind];
+      const baseColor = BASE_COLORS[kind];
       
       const vertCount = cells.length * 6;
       const positions = new Float32Array(vertCount * 3);
@@ -291,6 +275,8 @@ export function TexturedTerrainMesh({
   }, [world, heightScale, riverDepth, pathMaxHeight, worldX, worldY]);
 
   // Create PBR materials per kind (vertex colors primary + deterministic micro-detail)
+  // Create PBR materials per kind (vertex colors primary + procedural micro-detail)
+  // NOTE: We no longer use uiTextures.ts canvas textures - pure Three.js PBR with procedural noise
   const materialsPerKind = useMemo(() => {
     const mats: Map<MaterialKind, THREE.MeshStandardMaterial> = new Map();
 
@@ -299,24 +285,12 @@ export function TexturedTerrainMesh({
     for (const kind of MATERIAL_KINDS) {
       if (!geometriesPerKind.has(kind)) continue;
 
-      const influence = TEXTURE_INFLUENCE[kind];
-      const tex = texturesEnabled && isReady ? textures.get(kind) ?? null : null;
-
-      if (tex) {
-        tex.wrapS = THREE.RepeatWrapping;
-        tex.wrapT = THREE.RepeatWrapping;
-        tex.minFilter = THREE.LinearMipmapLinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        tex.anisotropy = 4;
-        tex.needsUpdate = true;
-      }
-
       const pbr = PBR_PROPS[kind];
       mats.set(
         kind,
         createTerrainPbrDetailMaterial({
-          detailTexture: tex,
-          textureInfluence: influence,
+          detailTexture: null, // No ui-renderer textures - rely on procedural micro-detail
+          textureInfluence: 0, // No texture influence since we're not using canvas textures
           microDetailEnabled,
           worldOffset,
           detailScale: pbr.detailScale,
@@ -332,7 +306,7 @@ export function TexturedTerrainMesh({
     }
 
     return mats;
-  }, [texturesEnabled, isReady, textures, geometriesPerKind, microDetailEnabled, worldX, worldY, world.gridSize]);
+  }, [geometriesPerKind, microDetailEnabled, worldX, worldY, world.gridSize]);
 
   return (
     <group position={[0, 0, 0]}>
