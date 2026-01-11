@@ -75,7 +75,13 @@ export function useNexArtWorld({
     [input.seed, input.vars, fullWorldContext?.worldX, fullWorldContext?.worldY, mappingVersion, microOverridesKey]
   );
   
-  const generateWorld = useCallback(async (targetSeed: number, targetVars: number[], key: string) => {
+  const generateWorld = useCallback(async (
+    targetSeed: number, 
+    targetVars: number[], 
+    key: string,
+    version: 'v1' | 'v2',
+    overrides: Map<number, number> | undefined
+  ) => {
     // Prevent duplicate generations
     if (isGeneratingRef.current && lastGeneratedKeyRef.current === key) {
       return;
@@ -88,7 +94,8 @@ export function useNexArtWorld({
     setError(null);
     
     try {
-      const worldData = await generateWorldDataAsync(targetSeed, targetVars, fullWorldContext, mappingVersion, microOverrides);
+      console.log(`[NexArt] Generating world with version=${version}, overrides=${overrides?.size ?? 0}`);
+      const worldData = await generateWorldDataAsync(targetSeed, targetVars, fullWorldContext, version, overrides);
       
       // Check if this generation is still current
       if (currentGenId !== generationIdRef.current) {
@@ -118,7 +125,7 @@ export function useNexArtWorld({
         isGeneratingRef.current = false;
       }
     }
-  }, [fullWorldContext, mappingVersion, microOverrides]);
+  }, [fullWorldContext]);
   
   // Debounced generation effect - runs only when paramsKey changes
   useEffect(() => {
@@ -135,7 +142,7 @@ export function useNexArtWorld({
     // If no world yet, generate immediately
     if (!world) {
       setIsLoading(true);
-      generateWorld(input.seed, input.vars, paramsKey);
+      generateWorld(input.seed, input.vars, paramsKey, mappingVersion, microOverrides);
       return;
     }
     
@@ -143,7 +150,7 @@ export function useNexArtWorld({
     setIsVerifying(true);
     
     debounceTimerRef.current = setTimeout(() => {
-      generateWorld(input.seed, input.vars, paramsKey);
+      generateWorld(input.seed, input.vars, paramsKey, mappingVersion, microOverrides);
     }, debounceMs);
     
     return () => {
@@ -151,14 +158,14 @@ export function useNexArtWorld({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [paramsKey, debounceMs, generateWorld, input.seed, input.vars]);
+  }, [paramsKey, debounceMs, generateWorld, input.seed, input.vars, mappingVersion, microOverrides]);
   
   const forceRegenerate = useCallback(() => {
     // Clear the last key to force regeneration
     lastGeneratedKeyRef.current = '';
     setIsLoading(true);
-    generateWorld(input.seed, input.vars, paramsKey);
-  }, [generateWorld, input.seed, input.vars, paramsKey]);
+    generateWorld(input.seed, input.vars, paramsKey, mappingVersion, microOverrides);
+  }, [generateWorld, input.seed, input.vars, paramsKey, mappingVersion, microOverrides]);
   
   return {
     world,
