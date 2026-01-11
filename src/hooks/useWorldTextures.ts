@@ -58,11 +58,12 @@ function canvasToThreeTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  // Sharper default filtering so the generated detail doesn't get blurred away.
-  texture.minFilter = THREE.NearestMipmapNearestFilter;
-  texture.magFilter = THREE.NearestFilter;
-  texture.anisotropy = 4;
+  // Use linear filtering for smooth, non-pixelated terrain
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.anisotropy = 8; // Higher anisotropy for smoother distant terrain
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.generateMipmaps = true;
   texture.needsUpdate = true;
   return texture;
 }
