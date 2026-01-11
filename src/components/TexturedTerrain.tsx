@@ -71,7 +71,6 @@ const TEXTURE_INFLUENCE: Record<MaterialKind, number> = {
 };
 
 // PBR detail material keeps vertex colors primary but adds micro grain + roughness variation
-import { createTerrainPbrDetailMaterial } from '@/lib/terrainPbrMaterial';
 
 // Material tuning per kind (kept subtle to preserve stylized look)
 const PBR_PROPS: Record<MaterialKind, { roughness: number; metalness: number; transparent?: boolean; opacity?: number; detailScale: number; albedoVar: number; roughVar: number; slopeAO: number }> = {
