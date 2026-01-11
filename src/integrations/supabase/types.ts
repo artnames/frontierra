@@ -75,6 +75,8 @@ export type Database = {
         Row: {
           created_at: string
           display_name: string | null
+          mapping_version: string
+          micro_overrides: Json | null
           player_id: string
           pos_x: number
           pos_y: number
@@ -86,6 +88,8 @@ export type Database = {
         Insert: {
           created_at?: string
           display_name?: string | null
+          mapping_version?: string
+          micro_overrides?: Json | null
           player_id?: string
           pos_x?: number
           pos_y?: number
@@ -97,6 +101,8 @@ export type Database = {
         Update: {
           created_at?: string
           display_name?: string | null
+          mapping_version?: string
+          micro_overrides?: Json | null
           player_id?: string
           pos_x?: number
           pos_y?: number

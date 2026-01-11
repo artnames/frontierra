@@ -10,6 +10,8 @@ export interface PlayerLand {
   vars: number[];  // Always 10 elements, 0-100
   pos_x: number;   // Grid position in world topology (0-9 for World A)
   pos_y: number;
+  mapping_version?: 'v1' | 'v2';  // V2 enables archetype-aware generation
+  micro_overrides?: Record<string, number> | null;  // V2 micro var overrides (index -> value)
   created_at?: string;
   updated_at?: string;
 }

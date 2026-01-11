@@ -4,6 +4,34 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { PlayerLand, WorldTopology } from './types';
+import { Json } from '@/integrations/supabase/types';
+
+// Convert database row to typed PlayerLand
+function toPlayerLand(row: {
+  player_id: string;
+  seed: number;
+  vars: number[];
+  pos_x: number;
+  pos_y: number;
+  mapping_version: string;
+  micro_overrides: Json | null;
+  created_at: string;
+  updated_at: string;
+  display_name: string | null;
+  presence_ping_at: string | null;
+}): PlayerLand {
+  return {
+    player_id: row.player_id,
+    seed: row.seed,
+    vars: row.vars,
+    pos_x: row.pos_x,
+    pos_y: row.pos_y,
+    mapping_version: (row.mapping_version === 'v2' ? 'v2' : 'v1') as 'v1' | 'v2',
+    micro_overrides: row.micro_overrides as Record<string, number> | null,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
 
 // Fetch a single land by player ID
 export async function getLandByPlayerId(playerId: string): Promise<PlayerLand | null> {
@@ -18,7 +46,7 @@ export async function getLandByPlayerId(playerId: string): Promise<PlayerLand | 
     return null;
   }
   
-  return data;
+  return data ? toPlayerLand(data) : null;
 }
 
 // Fetch a land by grid position
@@ -35,7 +63,7 @@ export async function getLandAtPosition(x: number, y: number): Promise<PlayerLan
     return null;
   }
   
-  return data;
+  return data ? toPlayerLand(data) : null;
 }
 
 // Fetch all lands in a bounding box (for loading neighbors)
@@ -58,7 +86,7 @@ export async function getLandsInArea(
     return [];
   }
   
-  return data ?? [];
+  return data?.map(toPlayerLand) ?? [];
 }
 
 // Build world topology from fetched lands
@@ -88,7 +116,9 @@ export async function createLand(
   seed: number,
   vars: number[],
   posX: number = 0,
-  posY: number = 0
+  posY: number = 0,
+  mappingVersion: 'v1' | 'v2' = 'v1',
+  microOverrides?: Record<string, number>
 ): Promise<PlayerLand | null> {
   // Ensure vars is exactly 10 elements, clamped 0-100
   const normalizedVars = Array(10).fill(0).map((_, i) => 
@@ -102,7 +132,9 @@ export async function createLand(
       seed: Math.floor(seed),
       vars: normalizedVars,
       pos_x: posX,
-      pos_y: posY
+      pos_y: posY,
+      mapping_version: mappingVersion,
+      micro_overrides: microOverrides ?? null
     })
     .select()
     .single();
@@ -112,13 +144,13 @@ export async function createLand(
     return null;
   }
   
-  return data;
+  return data ? toPlayerLand(data) : null;
 }
 
 // Update an existing land's parameters
 export async function updateLand(
   playerId: string,
-  updates: Partial<Pick<PlayerLand, 'seed' | 'vars' | 'pos_x' | 'pos_y'>>
+  updates: Partial<Pick<PlayerLand, 'seed' | 'vars' | 'pos_x' | 'pos_y' | 'mapping_version' | 'micro_overrides'>>
 ): Promise<PlayerLand | null> {
   const updateData: Record<string, unknown> = {};
   
@@ -136,6 +168,12 @@ export async function updateLand(
   if (updates.pos_y !== undefined) {
     updateData.pos_y = updates.pos_y;
   }
+  if (updates.mapping_version !== undefined) {
+    updateData.mapping_version = updates.mapping_version;
+  }
+  if (updates.micro_overrides !== undefined) {
+    updateData.micro_overrides = updates.micro_overrides;
+  }
   
   const { data, error } = await supabase
     .from('player_lands')
@@ -149,7 +187,7 @@ export async function updateLand(
     return null;
   }
   
-  return data;
+  return data ? toPlayerLand(data) : null;
 }
 
 // World A bounds (10×10 grid)
