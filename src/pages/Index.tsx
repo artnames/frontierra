@@ -21,6 +21,13 @@ import {
   parseActions,
   ReplayFrame
 } from '@/lib/worldContract';
+import { 
+  buildParamsV2, 
+  selectArchetype, 
+  ARCHETYPE_PROFILES,
+  ARCHETYPES,
+  type WorldArchetype 
+} from '@/world';
 import { WorldExplorer, InteractionMode } from '@/components/WorldExplorer';
 import { setCameraForLandTransition } from '@/hooks/useFirstPersonControls';
 import { WorldMap2D } from '@/components/WorldMap2D';
@@ -794,6 +801,54 @@ const Index = () => {
                       />
                     </div>
                   )}
+                  
+                  {/* V2 Archetype Info (when V2 enabled) */}
+                  {worldMode !== 'multiplayer' && params.mappingVersion === 'v2' && (() => {
+                    const archetype = selectArchetype(activeParams.seed, activeParams.vars);
+                    const profile = ARCHETYPE_PROFILES[archetype];
+                    const v2Params = buildParamsV2(activeParams.seed, activeParams.vars);
+                    const microVars = v2Params.vars.slice(10, 24);
+                    
+                    const MICRO_VAR_LABELS = [
+                      'River threshold', 'River width', 'Lake tendency', 'Wetland spread',
+                      'Erosion strength', 'Coastline complexity', 'Cliff frequency', 'Plateau size',
+                      'Valley depth', 'Ridge sharpness', 'Biome patchiness', 'Tree variety',
+                      'Undergrowth density', 'Meadow frequency'
+                    ];
+                    
+                    return (
+                      <div className="space-y-3 pt-3 mt-1 border-t border-border/50">
+                        {/* Archetype Badge */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted-foreground">World Archetype</span>
+                          <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">
+                            {profile.name}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground/70 -mt-2">
+                          {profile.description}
+                        </p>
+                        
+                        {/* Micro Vars (read-only display) */}
+                        <details className="group">
+                          <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                            <ChevronLeft className="w-3 h-3 -rotate-90 group-open:rotate-0 transition-transform" />
+                            Advanced Parameters (derived)
+                          </summary>
+                          <div className="mt-2 space-y-1.5 pl-1">
+                            {microVars.map((value, idx) => (
+                              <div key={idx} className="flex justify-between items-center text-[9px]">
+                                <span className="text-muted-foreground/70">
+                                  [{10 + idx}] {MICRO_VAR_LABELS[idx]}
+                                </span>
+                                <span className="font-mono text-muted-foreground">{Math.round(value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      </div>
+                    );
+                  })()}
                   
                   {worldMode !== 'multiplayer' && (
                     <Button 
