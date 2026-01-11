@@ -14,10 +14,11 @@ import { useFirstPersonControls, setCameraToEditorView, setCameraToExploreView, 
 import { 
   PlantedObject, 
   GridOverlay, 
-  Atmosphere,
   Bridges,
   TimeAwareWaterPlane
 } from '@/components/WorldRenderer';
+import { EnhancedAtmosphere } from '@/components/EnhancedAtmosphere';
+import { SceneSetup } from '@/components/SceneSetup';
 import { TexturedTerrainMesh, SimpleTerrainMesh } from '@/components/TexturedTerrain';
 import { ForestTrees } from '@/components/ForestTrees';
 import { PlacedBeaconMesh } from '@/components/ActionSystem';
@@ -45,6 +46,10 @@ interface FirstPersonSceneProps {
   worldY?: number;
   useTextures?: boolean;
   showVegetation?: boolean;
+  // Graphics settings
+  fogEnabled?: boolean;
+  microDetailEnabled?: boolean;
+  shadowsEnabled?: boolean;
 }
 
 function FirstPersonScene({ 
@@ -58,7 +63,10 @@ function FirstPersonScene({
   worldX = 0,
   worldY = 0,
   useTextures = true,
-  showVegetation = true
+  showVegetation = true,
+  fogEnabled = true,
+  microDetailEnabled = true,
+  shadowsEnabled = true
 }: FirstPersonSceneProps) {
   const [isDiscovered, setIsDiscovered] = useState(false);
   
@@ -84,27 +92,49 @@ function FirstPersonScene({
   
   return (
     <>
+      {/* Scene configuration - renderer, tone mapping, shadows */}
+      <SceneSetup worldX={worldX} worldY={worldY} shadowsEnabled={shadowsEnabled} />
+      
       {/* 3D Sky dome - world space, camera independent */}
       <SkyDome worldX={worldX} worldY={worldY} />
       
-      <Atmosphere worldX={worldX} worldY={worldY} />
+      {/* Enhanced atmosphere with FogExp2 and improved lighting */}
+      <EnhancedAtmosphere 
+        worldX={worldX} 
+        worldY={worldY} 
+        fogEnabled={fogEnabled}
+        shadowsEnabled={shadowsEnabled}
+      />
       
-      {/* Textured terrain when enabled, fallback to vertex colors */}
+      {/* Textured terrain with optional micro-detail */}
       {useTextures ? (
         <TexturedTerrainMesh
           world={world}
           worldX={worldX}
           worldY={worldY}
           texturesEnabled={true}
+          microDetailEnabled={microDetailEnabled}
         />
       ) : (
-        <SimpleTerrainMesh world={world} />
+        <SimpleTerrainMesh 
+          world={world} 
+          microDetailEnabled={microDetailEnabled}
+          fogEnabled={fogEnabled}
+          worldX={worldX}
+          worldY={worldY}
+        />
       )}
       
       <TimeAwareWaterPlane world={world} worldX={worldX} worldY={worldY} />
       <Bridges world={world} />
       {showVegetation && (
-        <ForestTrees world={world} useRichMaterials={useTextures} worldX={worldX} worldY={worldY} />
+        <ForestTrees 
+          world={world} 
+          useRichMaterials={useTextures} 
+          worldX={worldX} 
+          worldY={worldY}
+          shadowsEnabled={shadowsEnabled}
+        />
       )}
       <PlantedObject world={world} isDiscovered={isDiscovered} />
       {/* Grid overlay hidden by default in explore mode */}
@@ -182,7 +212,16 @@ export function WorldExplorer({
   }, []);
   
   // Visual settings (localStorage only, no server sync)
-  const { materialRichness, showVegetation, musicEnabled, sfxEnabled, masterVolume } = useVisualSettings();
+  const { 
+    materialRichness, 
+    showVegetation, 
+    musicEnabled, 
+    sfxEnabled, 
+    masterVolume,
+    fogEnabled,
+    microDetailEnabled,
+    shadowsEnabled
+  } = useVisualSettings();
   
   // Use debounced NexArt generation hook with V2 support
   const { world, isLoading, isVerifying, error } = useNexArtWorld({
@@ -309,6 +348,7 @@ export function WorldExplorer({
       <Canvas
         camera={{ fov: 45, near: 0.01, far: 1000 }}
         gl={{ antialias: true }}
+        shadows={shadowsEnabled}
         style={{ position: 'absolute', inset: 0 }}
       >
         <FirstPersonScene 
@@ -323,6 +363,9 @@ export function WorldExplorer({
           worldY={worldY}
           useTextures={materialRichness}
           showVegetation={showVegetation}
+          fogEnabled={fogEnabled}
+          microDetailEnabled={microDetailEnabled}
+          shadowsEnabled={shadowsEnabled}
         />
       </Canvas>
       

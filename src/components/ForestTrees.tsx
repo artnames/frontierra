@@ -12,6 +12,7 @@ interface ForestTreesProps {
   useRichMaterials?: boolean; // When true, use enhanced materials for visual richness
   worldX?: number;
   worldY?: number;
+  shadowsEnabled?: boolean; // When true, trees cast shadows
 }
 
 // Context to pass material richness setting to all vegetation components
@@ -39,7 +40,7 @@ function seededRandom(x: number, y: number, seedOffset: number): number {
   return n - Math.floor(n);
 }
 
-export function ForestTrees({ world, useRichMaterials = false, worldX = 0, worldY = 0 }: ForestTreesProps) {
+export function ForestTrees({ world, useRichMaterials = false, worldX = 0, worldY = 0, shadowsEnabled = true }: ForestTreesProps) {
   // When material richness is enabled, reuse the same deterministic procedural textures as terrain.
   const { textures, isReady } = useWorldTextures({
     worldX,
