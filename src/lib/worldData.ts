@@ -199,9 +199,10 @@ export async function generateWorldDataAsync(
   seed: number, 
   vars: number[],
   worldContext?: { worldX: number; worldY: number },
-  mappingVersion?: 'v1' | 'v2'
+  mappingVersion?: 'v1' | 'v2',
+  microOverrides?: Map<number, number>
 ): Promise<WorldData> {
-  const grid = await generateNexArtWorld({ seed, vars, worldContext, mappingVersion });
+  const grid = await generateNexArtWorld({ seed, vars, worldContext, mappingVersion, microOverrides });
   
   if (!grid.isValid) {
     return {

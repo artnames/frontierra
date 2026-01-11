@@ -17,6 +17,8 @@ interface UseNexArtWorldOptions {
   };
   // V2 mapping for archetype-aware generation
   mappingVersion?: 'v1' | 'v2';
+  // V2 micro var overrides (indices 10-23)
+  microOverrides?: Map<number, number>;
 }
 
 interface UseNexArtWorldResult {
@@ -34,7 +36,8 @@ export function useNexArtWorld({
   vars,
   debounceMs = DEFAULT_DEBOUNCE_MS,
   worldContext,
-  mappingVersion = 'v1'
+  mappingVersion = 'v1',
+  microOverrides
 }: UseNexArtWorldOptions): UseNexArtWorldResult {
   const [world, setWorld] = useState<WorldData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -59,10 +62,17 @@ export function useNexArtWorld({
     return createWorldContext(worldContext.worldX, worldContext.worldY);
   }, [worldContext?.worldX, worldContext?.worldY]);
   
-  // Stable key for dependency tracking (includes world context and mapping version)
+  // Serialize microOverrides for key comparison
+  const microOverridesKey = useMemo(() => {
+    if (!microOverrides || microOverrides.size === 0) return '';
+    const sorted = Array.from(microOverrides.entries()).sort((a, b) => a[0] - b[0]);
+    return sorted.map(([k, v]) => `${k}:${v}`).join(',');
+  }, [microOverrides]);
+  
+  // Stable key for dependency tracking (includes world context, mapping version, and micro overrides)
   const paramsKey = useMemo(
-    () => `${input.seed}:${input.vars.join(',')}:${fullWorldContext?.worldX ?? 'solo'}:${fullWorldContext?.worldY ?? ''}:${mappingVersion}`,
-    [input.seed, input.vars, fullWorldContext?.worldX, fullWorldContext?.worldY, mappingVersion]
+    () => `${input.seed}:${input.vars.join(',')}:${fullWorldContext?.worldX ?? 'solo'}:${fullWorldContext?.worldY ?? ''}:${mappingVersion}:${microOverridesKey}`,
+    [input.seed, input.vars, fullWorldContext?.worldX, fullWorldContext?.worldY, mappingVersion, microOverridesKey]
   );
   
   const generateWorld = useCallback(async (targetSeed: number, targetVars: number[], key: string) => {
@@ -78,7 +88,7 @@ export function useNexArtWorld({
     setError(null);
     
     try {
-      const worldData = await generateWorldDataAsync(targetSeed, targetVars, fullWorldContext, mappingVersion);
+      const worldData = await generateWorldDataAsync(targetSeed, targetVars, fullWorldContext, mappingVersion, microOverrides);
       
       // Check if this generation is still current
       if (currentGenId !== generationIdRef.current) {
@@ -108,7 +118,7 @@ export function useNexArtWorld({
         isGeneratingRef.current = false;
       }
     }
-  }, [fullWorldContext, mappingVersion]);
+  }, [fullWorldContext, mappingVersion, microOverrides]);
   
   // Debounced generation effect - runs only when paramsKey changes
   useEffect(() => {

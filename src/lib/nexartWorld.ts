@@ -110,6 +110,7 @@ const NEXART_TIMEOUT_MS = 15000;
 
 export interface ExtendedWorldParams extends WorldParams {
   mappingVersion?: 'v1' | 'v2';
+  microOverrides?: Map<number, number>;
 }
 
 export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<NexArtWorldGrid> {
@@ -179,7 +180,7 @@ export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<
     
     // Inject V2-specific parameters (archetype and micro vars)
     if (isV2Mode && !isWorldA) {
-      const v2Params = buildParamsV2(input.seed, input.vars);
+      const v2Params = buildParamsV2(input.seed, input.vars, params.microOverrides);
       const archetypeIndex = ARCHETYPES.indexOf(v2Params.archetype);
       
       // Build micro vars array from the derived values (indices 10-23 in full vars)
@@ -193,7 +194,7 @@ export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<
       );
       execOptions.source = finalSource;
       
-      console.log(`[NexArt V2] Archetype: ${v2Params.archetype} (${archetypeIndex})`);
+      console.log(`[NexArt V2] Archetype: ${v2Params.archetype} (${archetypeIndex})`, params.microOverrides?.size ? `with ${params.microOverrides.size} overrides` : '');
     }
     
     // Inject World A coordinates

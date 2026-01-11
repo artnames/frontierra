@@ -196,6 +196,7 @@ interface WorldExplorerProps {
   showDebugHUD?: boolean; // Control debug visibility
   isOwnLand?: boolean; // If true, player is on their own land (suppress discovery toast)
   mappingVersion?: 'v1' | 'v2'; // V2 enables archetype-aware generation
+  microOverrides?: Map<number, number>; // Manual overrides for V2 micro vars
 }
 
 export function WorldExplorer({ 
@@ -212,7 +213,8 @@ export function WorldExplorer({
   worldContext,
   showDebugHUD = false,
   isOwnLand = true,
-  mappingVersion = 'v1'
+  mappingVersion = 'v1',
+  microOverrides
 }: WorldExplorerProps) {
   const worldX = worldContext?.worldX ?? 0;
   const worldY = worldContext?.worldY ?? 0;
@@ -249,7 +251,8 @@ export function WorldExplorer({
     vars,
     debounceMs: 300,
     worldContext,
-    mappingVersion
+    mappingVersion,
+    microOverrides
   });
   
   // Track previous mode to detect changes
