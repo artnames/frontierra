@@ -315,8 +315,13 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
         position.current.z = newZ;
 
         // Update height based on terrain + manual offset
+        // Calculate slope-aware eye height to prevent clipping on steep terrain
         const terrainHeight = getElevationAt(world, newX, newZ);
-        position.current.y = terrainHeight + 0.7 + manualHeightOffset.current;
+        const prevTerrainHeight = getElevationAt(world, position.current.x, position.current.z);
+        const slopeGradient = Math.abs(terrainHeight - prevTerrainHeight) / (speed || 0.1);
+        const slopeBoost = Math.min(slopeGradient * 0.3, 0.5); // Up to 0.5 extra height on steep slopes
+        const baseEyeHeight = 0.7;
+        position.current.y = terrainHeight + baseEyeHeight + slopeBoost + manualHeightOffset.current;
       } else if (inBounds) {
         // Explore mode: try sliding along obstacles (water edges)
         if (isWalkable(world, newX, position.current.z)) {
@@ -352,7 +357,25 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
       // This ensures camera never clips through on steep slopes
       manualHeightOffset.current = 0;
       const terrainHeight = getElevationAt(world, position.current.x, position.current.z);
-      position.current.y = terrainHeight + 0.7;
+      
+      // Sample nearby terrain to detect slope and boost eye height accordingly
+      const sampleDist = 0.5;
+      const heightN = getElevationAt(world, position.current.x, position.current.z - sampleDist);
+      const heightS = getElevationAt(world, position.current.x, position.current.z + sampleDist);
+      const heightE = getElevationAt(world, position.current.x + sampleDist, position.current.z);
+      const heightW = getElevationAt(world, position.current.x - sampleDist, position.current.z);
+      
+      const maxSlope = Math.max(
+        Math.abs(heightN - terrainHeight),
+        Math.abs(heightS - terrainHeight),
+        Math.abs(heightE - terrainHeight),
+        Math.abs(heightW - terrainHeight)
+      );
+      
+      // Boost eye height on steep slopes (up to 0.6 extra at maximum steepness)
+      const slopeBoost = Math.min(maxSlope * 0.4, 0.6);
+      const baseEyeHeight = 0.7;
+      position.current.y = terrainHeight + baseEyeHeight + slopeBoost;
     }
 
     // Apply position and rotation to camera

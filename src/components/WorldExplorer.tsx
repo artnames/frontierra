@@ -305,7 +305,7 @@ export function WorldExplorer({
       
       {/* 3D Canvas - sky dome rendered inside */}
       <Canvas
-        camera={{ fov: 45, near: 0.1, far: 1000 }}
+        camera={{ fov: 45, near: 0.01, far: 1000 }}
         gl={{ antialias: true }}
         style={{ position: 'absolute', inset: 0 }}
       >
