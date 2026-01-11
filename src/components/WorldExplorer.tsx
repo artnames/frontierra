@@ -12,15 +12,13 @@ import {
 } from '@/lib/worldContract';
 import { useFirstPersonControls, setCameraToEditorView, setCameraToExploreView, setMobileMovement } from '@/hooks/useFirstPersonControls';
 import { 
-  TerrainMesh, 
   PlantedObject, 
   GridOverlay, 
-  WaterPlane,
   Atmosphere,
   Bridges,
   TimeAwareWaterPlane
 } from '@/components/WorldRenderer';
-import { TexturedTerrainMesh } from '@/components/TexturedTerrain';
+import { TexturedTerrainMesh, SimpleTerrainMesh } from '@/components/TexturedTerrain';
 import { ForestTrees } from '@/components/ForestTrees';
 import { PlacedBeaconMesh } from '@/components/ActionSystem';
 import { SkyDome } from '@/components/SkyDome';
@@ -100,7 +98,7 @@ function FirstPersonScene({
           texturesEnabled={true}
         />
       ) : (
-        <TerrainMesh world={world} />
+        <SimpleTerrainMesh world={world} />
       )}
       
       <TimeAwareWaterPlane world={world} worldX={worldX} worldY={worldY} />
