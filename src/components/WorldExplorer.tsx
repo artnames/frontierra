@@ -149,6 +149,7 @@ interface WorldExplorerProps {
   worldContext?: { worldX: number; worldY: number };
   showDebugHUD?: boolean; // Control debug visibility
   isOwnLand?: boolean; // If true, player is on their own land (suppress discovery toast)
+  mappingVersion?: 'v1' | 'v2'; // V2 enables archetype-aware generation
 }
 
 export function WorldExplorer({ 
@@ -164,7 +165,8 @@ export function WorldExplorer({
   onModeChange,
   worldContext,
   showDebugHUD = false,
-  isOwnLand = true
+  isOwnLand = true,
+  mappingVersion = 'v1'
 }: WorldExplorerProps) {
   const worldX = worldContext?.worldX ?? 0;
   const worldY = worldContext?.worldY ?? 0;
@@ -184,11 +186,13 @@ export function WorldExplorer({
   // Visual settings (localStorage only, no server sync)
   const { materialRichness, showVegetation, musicEnabled, sfxEnabled, masterVolume } = useVisualSettings();
   
-  // Use debounced NexArt generation hook
+  // Use debounced NexArt generation hook with V2 support
   const { world, isLoading, isVerifying, error } = useNexArtWorld({
     seed,
     vars,
-    debounceMs: 300
+    debounceMs: 300,
+    worldContext,
+    mappingVersion
   });
   
   // Track previous mode to detect changes
