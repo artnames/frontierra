@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { WorldParams, DEFAULT_PARAMS } from '@/lib/worldGenerator';
-import { buildParamsV2, type MappingVersion, type ResolvedWorldParams } from '@/world';
+import { buildParamsV2, deriveMicroVars, selectArchetype, type MappingVersion, type ResolvedWorldParams } from '@/world';
 
 // Simple V1 params builder (just passes through)
 function buildParamsV1(seed: number, vars: number[]) {
@@ -15,6 +15,7 @@ function buildParamsV1(seed: number, vars: number[]) {
 export interface ExtendedWorldParams extends WorldParams {
   mappingVersion: MappingVersion;
   archetype?: string;
+  microOverrides?: Map<number, number>; // Manual micro var overrides (index 10-23 -> value)
 }
 
 // Parse params from URLSearchParams (pure function, no hooks)
@@ -22,10 +23,12 @@ function parseParamsFromSearch(searchParams: URLSearchParams): ExtendedWorldPara
   const seedParam = searchParams.get('seed');
   const varsParam = searchParams.get('vars');
   const versionParam = searchParams.get('v');
+  const microParam = searchParams.get('micro'); // micro var overrides
   
   let seed = DEFAULT_PARAMS.seed;
   let vars = [...DEFAULT_PARAMS.vars];
   let mappingVersion: MappingVersion = 'v1';
+  let microOverrides: Map<number, number> | undefined;
   
   if (seedParam) {
     const parsed = parseInt(seedParam, 10);
@@ -46,7 +49,19 @@ function parseParamsFromSearch(searchParams: URLSearchParams): ExtendedWorldPara
     mappingVersion = 'v2';
   }
   
-  return { seed, vars, mappingVersion };
+  // Parse micro overrides (format: "10:45,12:80,...")
+  if (microParam && mappingVersion === 'v2') {
+    microOverrides = new Map();
+    const pairs = microParam.split(',');
+    for (const pair of pairs) {
+      const [idx, val] = pair.split(':').map(Number);
+      if (!isNaN(idx) && !isNaN(val) && idx >= 10 && idx < 24) {
+        microOverrides.set(idx, Math.max(0, Math.min(100, val)));
+      }
+    }
+  }
+  
+  return { seed, vars, mappingVersion, microOverrides };
 }
 
 export function useWorldParams() {
@@ -68,9 +83,18 @@ export function useWorldParams() {
   // Build full params using the appropriate mapping version
   const builtParams = useMemo(() => {
     if (params.mappingVersion === 'v2') {
-      return buildParamsV2(params.seed, params.vars);
+      return buildParamsV2(params.seed, params.vars, params.microOverrides);
     }
     return buildParamsV1(params.seed, params.vars);
+  }, [params.seed, params.vars, params.mappingVersion, params.microOverrides]);
+  
+  // Get derived micro vars (before overrides) for comparison
+  const derivedMicroVars = useMemo(() => {
+    if (params.mappingVersion === 'v2') {
+      const archetype = selectArchetype(params.seed, params.vars);
+      return deriveMicroVars(params.seed, params.vars, archetype);
+    }
+    return [];
   }, [params.seed, params.vars, params.mappingVersion]);
   
   const updateParams = useCallback((newParams: Partial<ExtendedWorldParams>) => {
@@ -92,6 +116,32 @@ export function useWorldParams() {
     });
   }, []);
   
+  // Set a micro var override (index 10-23)
+  const setMicroVar = useCallback((index: number, value: number) => {
+    if (index < 10 || index >= 24) return;
+    
+    setParams(prev => {
+      const newOverrides = new Map(prev.microOverrides || []);
+      newOverrides.set(index, Math.max(0, Math.min(100, value)));
+      return { ...prev, microOverrides: newOverrides };
+    });
+  }, []);
+  
+  // Reset a micro var to its derived value
+  const resetMicroVar = useCallback((index: number) => {
+    setParams(prev => {
+      if (!prev.microOverrides?.has(index)) return prev;
+      const newOverrides = new Map(prev.microOverrides);
+      newOverrides.delete(index);
+      return { ...prev, microOverrides: newOverrides.size > 0 ? newOverrides : undefined };
+    });
+  }, []);
+  
+  // Reset all micro var overrides
+  const resetAllMicroVars = useCallback(() => {
+    setParams(prev => ({ ...prev, microOverrides: undefined }));
+  }, []);
+  
   const setMappingVersion = useCallback((version: MappingVersion) => {
     updateParams({ mappingVersion: version });
   }, [updateParams]);
@@ -100,7 +150,18 @@ export function useWorldParams() {
     const base = window.location.origin + window.location.pathname;
     const varsStr = params.vars.join(',');
     const versionStr = params.mappingVersion === 'v2' ? '&v=v2' : '';
-    return `${base}?seed=${params.seed}&vars=${varsStr}${versionStr}`;
+    
+    // Include micro overrides in URL
+    let microStr = '';
+    if (params.microOverrides && params.microOverrides.size > 0) {
+      const pairs: string[] = [];
+      params.microOverrides.forEach((val, idx) => {
+        pairs.push(`${idx}:${val}`);
+      });
+      microStr = `&micro=${pairs.join(',')}`;
+    }
+    
+    return `${base}?seed=${params.seed}&vars=${varsStr}${versionStr}${microStr}`;
   }, [params]);
   
   const applyToUrl = useCallback(() => {
@@ -111,6 +172,13 @@ export function useWorldParams() {
     };
     if (params.mappingVersion === 'v2') {
       urlParams.v = 'v2';
+    }
+    if (params.microOverrides && params.microOverrides.size > 0) {
+      const pairs: string[] = [];
+      params.microOverrides.forEach((val, idx) => {
+        pairs.push(`${idx}:${val}`);
+      });
+      urlParams.micro = pairs.join(',');
     }
     setSearchParams(urlParams);
   }, [params, setSearchParams]);
@@ -124,8 +192,12 @@ export function useWorldParams() {
   return {
     params,
     builtParams,
+    derivedMicroVars,
     setSeed,
     setVar,
+    setMicroVar,
+    resetMicroVar,
+    resetAllMicroVars,
     setMappingVersion,
     updateParams,
     getShareUrl,

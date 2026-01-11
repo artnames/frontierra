@@ -82,8 +82,12 @@ const Index = () => {
   
   const {
     params,
+    derivedMicroVars,
     setSeed,
     setVar,
+    setMicroVar,
+    resetMicroVar,
+    resetAllMicroVars,
     setMappingVersion,
     getShareUrl,
     applyToUrl,
@@ -806,8 +810,9 @@ const Index = () => {
                   {worldMode !== 'multiplayer' && params.mappingVersion === 'v2' && (() => {
                     const archetype = selectArchetype(activeParams.seed, activeParams.vars);
                     const profile = ARCHETYPE_PROFILES[archetype];
-                    const v2Params = buildParamsV2(activeParams.seed, activeParams.vars);
+                    const v2Params = buildParamsV2(activeParams.seed, activeParams.vars, params.microOverrides);
                     const microVars = v2Params.vars.slice(10, 24);
+                    const hasOverrides = params.microOverrides && params.microOverrides.size > 0;
                     
                     const MICRO_VAR_LABELS = [
                       'River threshold', 'River width', 'Lake tendency', 'Wetland spread',
@@ -829,21 +834,67 @@ const Index = () => {
                           {profile.description}
                         </p>
                         
-                        {/* Micro Vars (read-only display) */}
-                        <details className="group">
+                        {/* Micro Vars (editable) */}
+                        <details className="group" open>
                           <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
                             <ChevronLeft className="w-3 h-3 -rotate-90 group-open:rotate-0 transition-transform" />
-                            Advanced Parameters (derived)
+                            Advanced Parameters
+                            {hasOverrides && (
+                              <span className="text-[9px] text-accent ml-1">
+                                ({params.microOverrides!.size} modified)
+                              </span>
+                            )}
                           </summary>
-                          <div className="mt-2 space-y-1.5 pl-1">
-                            {microVars.map((value, idx) => (
-                              <div key={idx} className="flex justify-between items-center text-[9px]">
-                                <span className="text-muted-foreground/70">
-                                  [{10 + idx}] {MICRO_VAR_LABELS[idx]}
-                                </span>
-                                <span className="font-mono text-muted-foreground">{Math.round(value)}</span>
-                              </div>
-                            ))}
+                          <div className="mt-2 space-y-2">
+                            {hasOverrides && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={resetAllMicroVars}
+                                className="h-5 px-2 text-[9px] text-muted-foreground hover:text-foreground w-full justify-start"
+                              >
+                                Reset all to derived values
+                              </Button>
+                            )}
+                            {microVars.map((value, idx) => {
+                              const varIndex = 10 + idx;
+                              const isOverridden = params.microOverrides?.has(varIndex);
+                              const derivedValue = derivedMicroVars[idx] ?? value;
+                              
+                              return (
+                                <div key={idx} className="space-y-0.5">
+                                  <div className="flex justify-between items-center text-[9px]">
+                                    <span className={`${isOverridden ? 'text-accent' : 'text-muted-foreground/70'}`}>
+                                      [{varIndex}] {MICRO_VAR_LABELS[idx]}
+                                      {isOverridden && ' *'}
+                                    </span>
+                                    <div className="flex items-center gap-1">
+                                      <span className="font-mono text-muted-foreground w-6 text-right">
+                                        {Math.round(value)}
+                                      </span>
+                                      {isOverridden && (
+                                        <button
+                                          onClick={() => resetMicroVar(varIndex)}
+                                          className="text-[8px] text-muted-foreground hover:text-foreground px-1"
+                                          title={`Reset to derived (${Math.round(derivedValue)})`}
+                                        >
+                                          ↺
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <Slider
+                                    value={[Math.round(value)]}
+                                    onValueChange={([v]) => setMicroVar(varIndex, v)}
+                                    min={0}
+                                    max={100}
+                                    step={1}
+                                    className="w-full"
+                                    disabled={isReplaying}
+                                  />
+                                </div>
+                              );
+                            })}
                           </div>
                         </details>
                       </div>
