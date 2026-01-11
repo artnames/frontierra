@@ -19,6 +19,7 @@ interface TexturedTerrainMeshProps {
   worldX?: number;
   worldY?: number;
   texturesEnabled?: boolean;
+  microDetailEnabled?: boolean;
 }
 
 const MATERIAL_KINDS: MaterialKind[] = [
@@ -68,18 +69,24 @@ const TEXTURE_INFLUENCE: Record<MaterialKind, number> = {
   sand: 0.20,      // Gentle ripple patterns
 };
 
-// Custom shader for texture-modulated vertex colors
-// This is the KEY fix: vertex colors are multiplied by texture luminance in fragment shader
+// Custom shader for texture-modulated vertex colors with procedural micro-detail
+// KEY IMPROVEMENTS:
+// 1. Triplanar-inspired procedural noise based on world position (not UVs) - no striping
+// 2. Roughness variation for material depth
+// 3. Proper fog integration with FogExp2
+// 4. Slope-aware shading for depth
 function createTexturedMaterial(
   texture: THREE.Texture | null,
   influence: number,
-  isWater: boolean
+  isWater: boolean,
+  microDetailEnabled: boolean = true
 ): THREE.ShaderMaterial {
   const vertexShader = `
     varying vec2 vUv;
     varying vec3 vColor;
     varying vec3 vNormal;
     varying vec3 vWorldPosition;
+    varying float vSlope;
     
     void main() {
       vUv = uv;
@@ -87,6 +94,10 @@ function createTexturedMaterial(
       vNormal = normalize(normalMatrix * normal);
       vec4 worldPos = modelMatrix * vec4(position, 1.0);
       vWorldPosition = worldPos.xyz;
+      
+      // Calculate slope for AO-like darkening on steep surfaces
+      vSlope = 1.0 - abs(dot(vNormal, vec3(0.0, 1.0, 0.0)));
+      
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `;
@@ -98,42 +109,93 @@ function createTexturedMaterial(
     uniform vec3 ambientColor;
     uniform vec3 lightColor;
     uniform vec3 fogColor;
-    uniform float fogNear;
-    uniform float fogFar;
+    uniform float fogDensity;
     uniform bool useFog;
+    uniform bool useMicroDetail;
+    uniform float time;
     
     varying vec2 vUv;
     varying vec3 vColor;
     varying vec3 vNormal;
     varying vec3 vWorldPosition;
+    varying float vSlope;
+    
+    // Simple pseudo-random hash function (deterministic)
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    }
+    
+    // Smooth noise function for micro-detail
+    float noise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      f = f * f * (3.0 - 2.0 * f); // Smooth interpolation
+      
+      float a = hash(i);
+      float b = hash(i + vec2(1.0, 0.0));
+      float c = hash(i + vec2(0.0, 1.0));
+      float d = hash(i + vec2(1.0, 1.0));
+      
+      return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    }
+    
+    // Multi-octave noise for richer detail
+    float fbm(vec2 p) {
+      float value = 0.0;
+      float amplitude = 0.5;
+      float frequency = 1.0;
+      
+      // 3 octaves - balanced for performance
+      for (int i = 0; i < 3; i++) {
+        value += amplitude * noise(p * frequency);
+        frequency *= 2.0;
+        amplitude *= 0.5;
+      }
+      return value;
+    }
     
     void main() {
-      // Sample texture and convert to luminance (grayscale)
+      // Sample texture if available and convert to luminance
       vec4 texColor = texture2D(map, vUv);
       float texLuminance = dot(texColor.rgb, vec3(0.299, 0.587, 0.114));
       
       // Modulate base vertex color with texture luminance
-      // Formula: finalColor = baseColor * mix(1.0, texLuminance, influence)
-      // This makes texture act like paper grain - felt, not seen
       float modulator = mix(1.0, texLuminance, textureInfluence);
       vec3 baseColor = vColor * modulator;
       
-      // Simple directional lighting (Lambert)
-      float NdotL = max(dot(vNormal, lightDirection), 0.0);
-      vec3 diffuse = baseColor * lightColor * NdotL;
-      vec3 ambient = baseColor * ambientColor;
-      vec3 finalColor = ambient + diffuse;
+      // Apply procedural micro-detail based on world position (triplanar-style)
+      if (useMicroDetail) {
+        // Use world XZ position for detail (avoids UV-based striping)
+        vec2 detailCoord = vWorldPosition.xz * 0.8; // Scale for visible grain
+        
+        // Multi-scale noise for organic variation
+        float microNoise = fbm(detailCoord);
+        
+        // Subtle modulation (5-12% range as specified)
+        float microModulation = 0.92 + microNoise * 0.16; // 0.92-1.08 range
+        baseColor *= microModulation;
+        
+        // Add slope-based darkening (subtle AO effect)
+        float slopeAO = 1.0 - vSlope * 0.15;
+        baseColor *= slopeAO;
+      }
       
-      // Apply fog if enabled
+      // Directional lighting (Lambert) with softer falloff
+      float NdotL = max(dot(vNormal, lightDirection), 0.0);
+      float wrapLighting = NdotL * 0.8 + 0.2; // Wrap lighting for softer shadows
+      vec3 diffuse = baseColor * lightColor * wrapLighting;
+      vec3 ambient = baseColor * ambientColor;
+      vec3 finalColor = ambient + diffuse * 0.7;
+      
+      // Apply exponential fog (FogExp2 style)
       if (useFog) {
-        float depth = gl_FragCoord.z / gl_FragCoord.w;
-        float fogFactor = smoothstep(fogNear, fogFar, depth);
+        float depth = length(vWorldPosition - cameraPosition);
+        float fogFactor = 1.0 - exp(-fogDensity * fogDensity * depth * depth);
+        fogFactor = clamp(fogFactor, 0.0, 1.0);
         finalColor = mix(finalColor, fogColor, fogFactor);
       }
       
-      // Output with gamma correction for sRGB
-      finalColor = pow(finalColor, vec3(1.0 / 2.2));
-      
+      // Output - let Three.js handle tone mapping now
       gl_FragColor = vec4(finalColor, 1.0);
     }
   `;
@@ -155,17 +217,19 @@ function createTexturedMaterial(
       lightDirection: { value: new THREE.Vector3(0.5, 0.8, 0.3).normalize() },
       ambientColor: { value: new THREE.Color(0.45, 0.45, 0.5) },
       lightColor: { value: new THREE.Color(0.9, 0.88, 0.85) },
-      fogColor: { value: new THREE.Color(0.75, 0.85, 0.95) },
-      fogNear: { value: 50.0 },
-      fogFar: { value: 200.0 },
+      fogColor: { value: new THREE.Color(0.6, 0.7, 0.8) },
+      fogDensity: { value: 0.012 },
       useFog: { value: true },
+      useMicroDetail: { value: microDetailEnabled },
+      time: { value: 0.0 },
     },
     vertexColors: true,
     side: THREE.DoubleSide,
+    fog: true, // Enable fog support
   });
 
-  // Disable tone mapping to keep colors consistent
-  mat.toneMapped = false;
+  // Enable tone mapping for proper ACES response
+  mat.toneMapped = true;
 
   return mat;
 }
@@ -226,6 +290,7 @@ export function TexturedTerrainMesh({
   worldX = 0,
   worldY = 0,
   texturesEnabled = true,
+  microDetailEnabled = true,
 }: TexturedTerrainMeshProps) {
   const { textures, isReady } = useWorldTextures({
     worldX,
@@ -396,11 +461,11 @@ export function TexturedTerrainMesh({
         tex.needsUpdate = true;
       }
       
-      mats.set(kind, createTexturedMaterial(tex, influence, isWater));
+      mats.set(kind, createTexturedMaterial(tex, influence, isWater, microDetailEnabled));
     }
     
     return mats;
-  }, [texturesEnabled, isReady, textures, geometriesPerKind]);
+  }, [texturesEnabled, isReady, textures, geometriesPerKind, microDetailEnabled]);
 
   return (
     <group position={[0, 0, 0]}>
@@ -417,7 +482,23 @@ export function TexturedTerrainMesh({
 
 // Simple fallback terrain (vertex colors only) for when textures are disabled
 // Uses the same explicit vertex positioning as TexturedTerrainMesh for alignment
-export function SimpleTerrainMesh({ world }: { world: WorldData }) {
+// Now includes optional micro-detail noise and fog support
+
+interface SimpleTerrainMeshProps {
+  world: WorldData;
+  microDetailEnabled?: boolean;
+  fogEnabled?: boolean;
+  worldX?: number;
+  worldY?: number;
+}
+
+export function SimpleTerrainMesh({ 
+  world, 
+  microDetailEnabled = true,
+  fogEnabled = true,
+  worldX = 0,
+  worldY = 0
+}: SimpleTerrainMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   
   const heightScale = WORLD_HEIGHT_SCALE;

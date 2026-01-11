@@ -68,6 +68,21 @@ export function useVisualSettings() {
     updateSetting('masterVolume', Math.max(0, Math.min(1, volume)));
   }, [updateSetting]);
 
+  // Toggle fog
+  const toggleFog = useCallback(() => {
+    updateSetting('fogEnabled', !settings.fogEnabled);
+  }, [settings.fogEnabled, updateSetting]);
+
+  // Toggle micro detail
+  const toggleMicroDetail = useCallback(() => {
+    updateSetting('microDetailEnabled', !settings.microDetailEnabled);
+  }, [settings.microDetailEnabled, updateSetting]);
+
+  // Toggle shadows
+  const toggleShadows = useCallback(() => {
+    updateSetting('shadowsEnabled', !settings.shadowsEnabled);
+  }, [settings.shadowsEnabled, updateSetting]);
+
   return {
     settings,
     isLoaded: true,
@@ -76,11 +91,17 @@ export function useVisualSettings() {
     musicEnabled: settings.musicEnabled,
     sfxEnabled: settings.sfxEnabled,
     masterVolume: settings.masterVolume,
+    fogEnabled: settings.fogEnabled,
+    microDetailEnabled: settings.microDetailEnabled,
+    shadowsEnabled: settings.shadowsEnabled,
     toggleMaterialRichness,
     toggleVegetation,
     toggleMusic,
     toggleSfx,
     setMasterVolume,
+    toggleFog,
+    toggleMicroDetail,
+    toggleShadows,
     updateSetting,
   };
 }
