@@ -15,7 +15,7 @@ export interface VisualSettings {
 }
 
 export const defaultVisualSettings: VisualSettings = {
-  materialRichness: false,
+  materialRichness: true,
   showVegetation: true,
   musicEnabled: true,
   sfxEnabled: true,

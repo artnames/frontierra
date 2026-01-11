@@ -37,10 +37,14 @@ export function SceneSetup({ worldX = 0, worldY = 0, shadowsEnabled = true }: Sc
   useEffect(() => {
     // Enable proper color management
     gl.outputColorSpace = THREE.SRGBColorSpace;
-    
+
+    // Use modern light units (better PBR response)
+    // @ts-expect-error - present in Three r160, but TS types may vary
+    gl.useLegacyLights = false;
+
     // ACES Filmic tone mapping for natural color response
     gl.toneMapping = THREE.ACESFilmicToneMapping;
-    
+
     // Configure shadow maps if enabled
     if (shadowsEnabled) {
       gl.shadowMap.enabled = true;
