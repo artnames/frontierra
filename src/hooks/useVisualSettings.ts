@@ -83,6 +83,16 @@ export function useVisualSettings() {
     updateSetting('shadowsEnabled', !settings.shadowsEnabled);
   }, [settings.shadowsEnabled, updateSetting]);
 
+  // Toggle smooth shading
+  const toggleSmoothShading = useCallback(() => {
+    updateSetting('smoothShading', !settings.smoothShading);
+  }, [settings.smoothShading, updateSetting]);
+
+  // Toggle water animation
+  const toggleWaterAnimation = useCallback(() => {
+    updateSetting('waterAnimation', !settings.waterAnimation);
+  }, [settings.waterAnimation, updateSetting]);
+
   return {
     settings,
     isLoaded: true,
@@ -94,6 +104,8 @@ export function useVisualSettings() {
     fogEnabled: settings.fogEnabled,
     microDetailEnabled: settings.microDetailEnabled,
     shadowsEnabled: settings.shadowsEnabled,
+    smoothShading: settings.smoothShading,
+    waterAnimation: settings.waterAnimation,
     toggleMaterialRichness,
     toggleVegetation,
     toggleMusic,
@@ -102,6 +114,8 @@ export function useVisualSettings() {
     toggleFog,
     toggleMicroDetail,
     toggleShadows,
+    toggleSmoothShading,
+    toggleWaterAnimation,
     updateSetting,
   };
 }

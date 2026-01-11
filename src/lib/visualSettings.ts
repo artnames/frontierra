@@ -8,10 +8,12 @@ export interface VisualSettings {
   musicEnabled: boolean;
   sfxEnabled: boolean;
   masterVolume: number; // 0-1
-  // Graphics settings (new)
+  // Graphics settings
   fogEnabled: boolean;
   microDetailEnabled: boolean;
   shadowsEnabled: boolean;
+  smoothShading: boolean;
+  waterAnimation: boolean;
 }
 
 export const defaultVisualSettings: VisualSettings = {
@@ -24,6 +26,8 @@ export const defaultVisualSettings: VisualSettings = {
   fogEnabled: true,
   microDetailEnabled: true,
   shadowsEnabled: true,
+  smoothShading: true,
+  waterAnimation: true,
 };
 
 const STORAGE_KEY = 'nexart-visual-settings';

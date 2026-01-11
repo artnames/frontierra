@@ -15,11 +15,12 @@ import {
   PlantedObject, 
   GridOverlay, 
   Bridges,
-  TimeAwareWaterPlane
 } from '@/components/WorldRenderer';
 import { EnhancedAtmosphere } from '@/components/EnhancedAtmosphere';
 import { SceneSetup } from '@/components/SceneSetup';
 import { TexturedTerrainMesh, SimpleTerrainMesh } from '@/components/TexturedTerrain';
+import { SmoothTerrainMesh } from '@/components/SmoothTerrainMesh';
+import { EnhancedWaterPlane } from '@/components/EnhancedWaterPlane';
 import { ForestTrees } from '@/components/ForestTrees';
 import { PlacedBeaconMesh } from '@/components/ActionSystem';
 import { SkyDome } from '@/components/SkyDome';
@@ -50,6 +51,8 @@ interface FirstPersonSceneProps {
   fogEnabled?: boolean;
   microDetailEnabled?: boolean;
   shadowsEnabled?: boolean;
+  smoothShading?: boolean;
+  waterAnimation?: boolean;
 }
 
 function FirstPersonScene({ 
@@ -66,7 +69,9 @@ function FirstPersonScene({
   showVegetation = true,
   fogEnabled = true,
   microDetailEnabled = true,
-  shadowsEnabled = true
+  shadowsEnabled = true,
+  smoothShading = true,
+  waterAnimation = true
 }: FirstPersonSceneProps) {
   const [isDiscovered, setIsDiscovered] = useState(false);
   
@@ -106,8 +111,15 @@ function FirstPersonScene({
         shadowsEnabled={shadowsEnabled}
       />
       
-      {/* Textured terrain with optional micro-detail */}
-      {useTextures ? (
+      {/* Terrain - use smooth shading mesh when enabled, otherwise textured/simple */}
+      {smoothShading ? (
+        <SmoothTerrainMesh
+          world={world}
+          worldX={worldX}
+          worldY={worldY}
+          microDetailEnabled={microDetailEnabled}
+        />
+      ) : useTextures ? (
         <TexturedTerrainMesh
           world={world}
           worldX={worldX}
@@ -125,7 +137,13 @@ function FirstPersonScene({
         />
       )}
       
-      <TimeAwareWaterPlane world={world} worldX={worldX} worldY={worldY} />
+      {/* Enhanced water with fresnel + animation */}
+      <EnhancedWaterPlane 
+        world={world} 
+        worldX={worldX} 
+        worldY={worldY} 
+        animated={waterAnimation}
+      />
       <Bridges world={world} />
       {showVegetation && (
         <ForestTrees 
@@ -220,7 +238,9 @@ export function WorldExplorer({
     masterVolume,
     fogEnabled,
     microDetailEnabled,
-    shadowsEnabled
+    shadowsEnabled,
+    smoothShading,
+    waterAnimation
   } = useVisualSettings();
   
   // Use debounced NexArt generation hook with V2 support
@@ -366,6 +386,8 @@ export function WorldExplorer({
           fogEnabled={fogEnabled}
           microDetailEnabled={microDetailEnabled}
           shadowsEnabled={shadowsEnabled}
+          smoothShading={smoothShading}
+          waterAnimation={waterAnimation}
         />
       </Canvas>
       
