@@ -155,18 +155,19 @@ interface PlacedBeaconProps {
 }
 
 export function PlacedBeaconMesh({ action, world }: PlacedBeaconProps) {
-  // IMPORTANT: Pass ORIGINAL grid coordinates - getElevationAt handles the Y-flip internally
-  const terrainY = getElevationAt(world, action.gridX, action.gridY);
-  
   // Flip Z for Three.js positioning (P5.js Y -> Three.js -Z)
   const flippedZ = world.gridSize - 1 - action.gridY;
   
-  // Add terrain center offset to match mesh positioning
-  const offsetX = action.gridX + world.gridSize / 2;
-  const offsetZ = flippedZ + world.gridSize / 2;
+  // Object positioned directly at grid coordinates (no offset)
+  // since TexturedTerrainMesh is positioned at origin
+  const posX = action.gridX;
+  const posZ = flippedZ;
+  
+  // Get elevation at grid coordinates - getElevationAt handles the Y-flip internally
+  const terrainY = getElevationAt(world, action.gridX, action.gridY);
 
   return (
-    <group position={[offsetX, terrainY, offsetZ]}>
+    <group position={[posX, terrainY, posZ]}>
       {/* Small base stone */}
       <mesh position={[0, 0.08, 0]}>
         <cylinderGeometry args={[0.12, 0.15, 0.16, 6]} />

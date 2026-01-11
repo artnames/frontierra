@@ -288,10 +288,12 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
 
   // Bilinear interpolation of ALREADY CURVED elevation
   // (terrain cells store the shaped elevation from nexartGridToWorldData)
-  // Use flipped Y for correct coordinate mapping
   const fx = worldX - gridX;
   const fy = worldY - gridY;
-
+  
+  // Since Y is flipped, the interpolation direction needs to be inverted
+  // flippedY corresponds to gridY=0, flippedY-1 corresponds to gridY=1
+  // So when fy increases (moving +Y in world), we move toward flippedY-1
   const flippedY1 = Math.max(0, flippedY - 1);
 
   const e00 = world.terrain[flippedY]?.[gridX]?.elevation ?? 0;
@@ -299,9 +301,11 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
   const e01 = world.terrain[flippedY1]?.[gridX]?.elevation ?? 0;
   const e11 = world.terrain[flippedY1]?.[gridX + 1]?.elevation ?? 0;
 
+  // Interpolate in X direction first
   const e0 = e00 * (1 - fx) + e10 * fx;
   const e1 = e01 * (1 - fx) + e11 * fx;
-
+  
+  // Interpolate in Y direction - fy=0 uses flippedY (e0), fy=1 uses flippedY-1 (e1)
   let height = (e0 * (1 - fy) + e1 * fy) * heightScale;
 
   if (cell?.hasRiver) {
@@ -337,13 +341,13 @@ export function isWalkable(world: WorldData, worldX: number, worldY: number): bo
 
 export function distanceToObject(world: WorldData, worldX: number, worldY: number): number {
   // COORDINATE FIX: The player moves in Three.js space where:
-  // 1. Y is flipped (grid Y -> gridSize - 1 - Y)
-  // 2. Terrain is offset by gridSize/2 in both X and Z
+  // - Y is flipped (grid Y -> gridSize - 1 - Y)
+  // - Terrain is at origin (no gridSize/2 offset since TexturedTerrainMesh is at 0,0,0)
   const objectFlippedY = world.gridSize - 1 - world.plantedObject.y;
   
-  // Add terrain center offset to match PlantedObject 3D position
-  const objectWorldX = world.plantedObject.x + world.gridSize / 2;
-  const objectWorldZ = objectFlippedY + world.gridSize / 2;
+  // Object world position matches player coordinate system (no offset)
+  const objectWorldX = world.plantedObject.x;
+  const objectWorldZ = objectFlippedY;
   
   const dx = worldX - objectWorldX;
   const dy = worldY - objectWorldZ;
