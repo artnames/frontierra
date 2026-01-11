@@ -584,6 +584,7 @@ const Index = () => {
               } : undefined}
               isOwnLand={worldMode === 'solo' || !isOtherPlayerLand}
               mappingVersion={params.mappingVersion}
+              microOverrides={params.microOverrides}
             />
           ) : (
             <div className="w-full h-full flex bg-background">
