@@ -105,7 +105,7 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
   }, [world, heightScale, waterHeight, riverDepth, pathMaxHeight]);
   
   return (
-    <mesh ref={meshRef} geometry={geometry} position={[world.gridSize / 2, 0, world.gridSize / 2]}>
+    <mesh ref={meshRef} geometry={geometry} position={[0, 0, 0]}>
       <meshStandardMaterial vertexColors side={THREE.DoubleSide} roughness={0.85} metalness={0.05} />
     </mesh>
   );
@@ -301,20 +301,20 @@ interface PlantedObjectProps {
 }
 
 export function PlantedObject({ world, isDiscovered }: PlantedObjectProps) {
-  const { x, y: gridY, type } = world.plantedObject;
+  const { x: gridX, y: gridY, type } = world.plantedObject;
   const glowIntensity = isDiscovered ? 2 : 0.5;
   
-  // Get proper elevation from terrain using getElevationAt
-  // IMPORTANT: Pass ORIGINAL grid coordinates - getElevationAt handles the Y-flip internally
-  const terrainY = getElevationAt(world, x, gridY);
-  
   // COORDINATE FIX: Flip Z for Three.js positioning (P5.js Y -> Three.js -Z)
+  // TexturedTerrainMesh is at origin (0,0,0), so objects use grid coords directly
   const flippedZ = world.gridSize - 1 - gridY;
   
-  // Add terrain center offset to match mesh positioning
-  // The terrain mesh is offset by gridSize/2, so objects must be too
-  const offsetX = x + world.gridSize / 2;
-  const offsetZ = flippedZ + world.gridSize / 2;
+  // Object positioned directly at grid coordinates (no offset needed)
+  // since TexturedTerrainMesh is positioned at origin
+  const posX = gridX;
+  const posZ = flippedZ;
+  
+  // Get elevation at the grid position
+  const terrainY = getElevationAt(world, gridX, gridY);
   
   const ObjectMesh = () => {
     switch (type) {
@@ -414,7 +414,7 @@ export function PlantedObject({ world, isDiscovered }: PlantedObjectProps) {
   };
   
   return (
-    <group position={[offsetX, terrainY, offsetZ]} scale={[0.3, 0.3, 0.3]}>
+    <group position={[posX, terrainY, posZ]} scale={[0.3, 0.3, 0.3]}>
       <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[1.5, 32]} />
         <meshBasicMaterial 
@@ -513,7 +513,7 @@ export function WaterPlane({ world }: { world: WorldData }) {
   
   return (
     <mesh 
-      position={[world.gridSize / 2, waterPlaneHeight, world.gridSize / 2]} 
+      position={[world.gridSize / 2, waterPlaneHeight, world.gridSize / 2]}
       rotation={[-Math.PI / 2, 0, 0]}
     >
       <planeGeometry args={[world.gridSize, world.gridSize]} />
