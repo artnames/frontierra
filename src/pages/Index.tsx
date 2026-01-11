@@ -77,6 +77,7 @@ const Index = () => {
     params,
     setSeed,
     setVar,
+    setMappingVersion,
     getShareUrl,
     applyToUrl,
     randomizeSeed
@@ -571,6 +572,7 @@ const Index = () => {
                 worldY: multiplayer.currentLand.pos_y
               } : undefined}
               isOwnLand={worldMode === 'solo' || !isOtherPlayerLand}
+              mappingVersion={params.mappingVersion}
             />
           ) : (
             <div className="w-full h-full flex bg-background">
@@ -775,6 +777,23 @@ const Index = () => {
                       </div>
                     ))}
                   </div>
+                  
+                  {/* V2 Enhanced Generation Toggle */}
+                  {worldMode !== 'multiplayer' && (
+                    <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-border">
+                      <div className="space-y-0.5 flex-1">
+                        <Label className="text-xs font-medium">Enhanced Generation (v2)</Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">
+                          Enables archetypes and structural variety
+                        </p>
+                      </div>
+                      <Switch
+                        checked={params.mappingVersion === 'v2'}
+                        onCheckedChange={(checked) => setMappingVersion(checked ? 'v2' : 'v1')}
+                        disabled={isReplaying}
+                      />
+                    </div>
+                  )}
                   
                   {worldMode !== 'multiplayer' && (
                     <Button 
