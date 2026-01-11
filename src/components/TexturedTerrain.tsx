@@ -416,6 +416,7 @@ export function TexturedTerrainMesh({
 
 
 // Simple fallback terrain (vertex colors only) for when textures are disabled
+// Uses the same explicit vertex positioning as TexturedTerrainMesh for alignment
 export function SimpleTerrainMesh({ world }: { world: WorldData }) {
   const meshRef = useRef<THREE.Mesh>(null);
   
@@ -425,34 +426,45 @@ export function SimpleTerrainMesh({ world }: { world: WorldData }) {
   const riverDepth = waterHeight - RIVER_DEPTH_OFFSET;
   const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
   
-  const { geometry } = useMemo(() => {
+  const geometry = useMemo(() => {
     const size = world.gridSize;
-    const geometry = new THREE.PlaneGeometry(size, size, size - 1, size - 1);
-    geometry.rotateX(-Math.PI / 2);
     
-    const positions = geometry.attributes.position;
-    const colors = new Float32Array(positions.count * 3);
+    // Compute heights grid first
+    const heights: number[][] = [];
+    for (let y = 0; y < size; y++) {
+      heights[y] = [];
+      for (let x = 0; x < size; x++) {
+        const flippedY = size - 1 - y;
+        const cell = world.terrain[flippedY]?.[x];
+        if (!cell) {
+          heights[y][x] = 0;
+          continue;
+        }
+        let h = cell.elevation * heightScale;
+        if (cell.hasRiver) h = Math.min(h, riverDepth);
+        if (cell.isPath && !cell.isBridge) h = Math.min(h, pathMaxHeight);
+        heights[y][x] = h;
+      }
+    }
     
-    for (let i = 0; i < positions.count; i++) {
-      const x = Math.floor(i % size);
-      const y = Math.floor(i / size);
-      const flippedY = size - 1 - y;
-      
-      const cell = world.terrain[flippedY]?.[x];
-      if (cell) {
-        let height = cell.elevation * heightScale;
+    // Build triangles explicitly - 2 triangles per cell, 6 vertices per cell
+    const cellCount = (size - 1) * (size - 1);
+    const vertCount = cellCount * 6;
+    const positions = new Float32Array(vertCount * 3);
+    const colors = new Float32Array(vertCount * 3);
+    
+    let vi = 0;
+    for (let y = 0; y < size - 1; y++) {
+      for (let x = 0; x < size - 1; x++) {
+        const flippedY = size - 1 - y;
+        const cell = world.terrain[flippedY]?.[x];
         
-        if (cell.hasRiver) {
-          height = Math.min(height, riverDepth);
-        }
+        const h00 = heights[y][x];
+        const h10 = heights[y][x + 1];
+        const h01 = heights[y + 1]?.[x] ?? h00;
+        const h11 = heights[y + 1]?.[x + 1] ?? h10;
         
-        if (cell.isPath && !cell.isBridge) {
-          height = Math.min(height, pathMaxHeight);
-        }
-        
-        positions.setY(i, height);
-        
-        const { r, g, b } = getTileColor(
+        const { r, g, b } = cell ? getTileColor(
           cell.type,
           cell.elevation,
           cell.moisture,
@@ -461,21 +473,46 @@ export function SimpleTerrainMesh({ world }: { world: WorldData }) {
           x,
           flippedY,
           world.seed
-        );
-        colors[i * 3] = r;
-        colors[i * 3 + 1] = g;
-        colors[i * 3 + 2] = b;
+        ) : { r: 0.5, g: 0.5, b: 0.5 };
+        
+        // Triangle 1: (x,y), (x,y+1), (x+1,y)
+        positions[vi * 3] = x; positions[vi * 3 + 1] = h00; positions[vi * 3 + 2] = y;
+        colors[vi * 3] = r; colors[vi * 3 + 1] = g; colors[vi * 3 + 2] = b;
+        vi++;
+        
+        positions[vi * 3] = x; positions[vi * 3 + 1] = h01; positions[vi * 3 + 2] = y + 1;
+        colors[vi * 3] = r; colors[vi * 3 + 1] = g; colors[vi * 3 + 2] = b;
+        vi++;
+        
+        positions[vi * 3] = x + 1; positions[vi * 3 + 1] = h10; positions[vi * 3 + 2] = y;
+        colors[vi * 3] = r; colors[vi * 3 + 1] = g; colors[vi * 3 + 2] = b;
+        vi++;
+        
+        // Triangle 2: (x,y+1), (x+1,y+1), (x+1,y)
+        positions[vi * 3] = x; positions[vi * 3 + 1] = h01; positions[vi * 3 + 2] = y + 1;
+        colors[vi * 3] = r; colors[vi * 3 + 1] = g; colors[vi * 3 + 2] = b;
+        vi++;
+        
+        positions[vi * 3] = x + 1; positions[vi * 3 + 1] = h11; positions[vi * 3 + 2] = y + 1;
+        colors[vi * 3] = r; colors[vi * 3 + 1] = g; colors[vi * 3 + 2] = b;
+        vi++;
+        
+        positions[vi * 3] = x + 1; positions[vi * 3 + 1] = h10; positions[vi * 3 + 2] = y;
+        colors[vi * 3] = r; colors[vi * 3 + 1] = g; colors[vi * 3 + 2] = b;
+        vi++;
       }
     }
     
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geometry.computeVertexNormals();
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
     
-    return { geometry };
-  }, [world, heightScale, waterHeight, riverDepth, pathMaxHeight]);
+    return geo;
+  }, [world, heightScale, riverDepth, pathMaxHeight]);
   
   return (
-    <mesh ref={meshRef} geometry={geometry} position={[world.gridSize / 2, 0, world.gridSize / 2]}>
+    <mesh ref={meshRef} geometry={geometry} position={[0, 0, 0]}>
       <meshStandardMaterial vertexColors side={THREE.DoubleSide} roughness={0.85} metalness={0.05} />
     </mesh>
   );
