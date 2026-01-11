@@ -79,10 +79,38 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     return { worldX: ctx.worldX, worldY: ctx.worldY };
   }, [state.currentLand?.pos_x, state.currentLand?.pos_y]);
   
-  const worldParams = useMemo(() => ({
-    seed: state.currentLand?.seed ?? 0,
-    vars: state.currentLand?.vars ?? [50, 50, 50, 50, 50, 50, 50, 50, 50, 50]
-  }), [state.currentLand?.seed, state.currentLand?.vars]);
+  // Extract world params including V2 settings from land
+  const worldParams = useMemo(() => {
+    const land = state.currentLand;
+    if (!land) {
+      return {
+        seed: 0,
+        vars: [50, 50, 50, 50, 50, 50, 50, 50, 50, 50],
+        mappingVersion: 'v1' as const,
+        microOverrides: undefined as Map<number, number> | undefined
+      };
+    }
+    
+    // Convert micro_overrides from Record to Map
+    let microOverrides: Map<number, number> | undefined;
+    if (land.micro_overrides && typeof land.micro_overrides === 'object') {
+      microOverrides = new Map();
+      for (const [key, value] of Object.entries(land.micro_overrides)) {
+        const idx = parseInt(key, 10);
+        if (!isNaN(idx) && typeof value === 'number') {
+          microOverrides.set(idx, value);
+        }
+      }
+      if (microOverrides.size === 0) microOverrides = undefined;
+    }
+    
+    return {
+      seed: land.seed,
+      vars: land.vars,
+      mappingVersion: land.mapping_version ?? 'v1',
+      microOverrides
+    };
+  }, [state.currentLand]);
   
   const { 
     world: generatedWorld, 
@@ -91,8 +119,11 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     error: worldError,
     forceRegenerate 
   } = useNexArtWorld({
-    ...worldParams,
-    worldContext
+    seed: worldParams.seed,
+    vars: worldParams.vars,
+    worldContext,
+    mappingVersion: worldParams.mappingVersion,
+    microOverrides: worldParams.microOverrides
   });
   
   // Use cached world if available for instant transitions, otherwise use generated
@@ -305,7 +336,12 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     edgeTransition.handlePositionUpdate(x, z);
   }, [edgeTransition]);
   
-  const updateLandParams = useCallback(async (updates: { seed?: number; vars?: number[] }) => {
+  const updateLandParams = useCallback(async (updates: { 
+    seed?: number; 
+    vars?: number[];
+    mapping_version?: 'v1' | 'v2';
+    micro_overrides?: Record<string, number> | null;
+  }) => {
     const playerId = state.playerId || options.initialPlayerId;
     
     if (!playerId || !state.currentLand) {
@@ -319,7 +355,12 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
       return;
     }
     
-    const updatedLand = await updateLand(playerId, updates);
+    const updatedLand = await updateLand(playerId, {
+      seed: updates.seed,
+      vars: updates.vars,
+      mapping_version: updates.mapping_version,
+      micro_overrides: updates.micro_overrides ?? undefined
+    });
     if (updatedLand) {
       setState(prev => ({ ...prev, currentLand: updatedLand }));
       forceRegenerate();
@@ -354,6 +395,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     isVisitingOtherLand: state.isVisitingOtherLand,
     unclaimedAttempt: state.unclaimedAttempt,
     worldContext,
+    worldParams, // Expose full V2 params
     world,
     isLoading: state.isLoading || isWorldLoading,
     isVerifying,

@@ -204,6 +204,15 @@ const Index = () => {
   const activeParams = worldMode === 'multiplayer' && multiplayer.currentLand
     ? { seed: multiplayer.currentLand.seed, vars: multiplayer.currentLand.vars }
     : params;
+  
+  // Get active V2 settings - from land in multiplayer, from params in solo
+  const activeMappingVersion = worldMode === 'multiplayer' && multiplayer.currentLand
+    ? (multiplayer.worldParams.mappingVersion ?? 'v1')
+    : params.mappingVersion;
+  
+  const activeMicroOverrides = worldMode === 'multiplayer' && multiplayer.currentLand
+    ? multiplayer.worldParams.microOverrides
+    : params.microOverrides;
     
   // Generate world for contract panel
   const world = useMemo(() => generateWorldData(activeParams.seed, activeParams.vars), [activeParams.seed, activeParams.vars]);
@@ -583,8 +592,8 @@ const Index = () => {
                 worldY: multiplayer.currentLand.pos_y
               } : undefined}
               isOwnLand={worldMode === 'solo' || !isOtherPlayerLand}
-              mappingVersion={params.mappingVersion}
-              microOverrides={params.microOverrides}
+              mappingVersion={activeMappingVersion}
+              microOverrides={activeMicroOverrides}
             />
           ) : (
             <div className="w-full h-full flex bg-background">
