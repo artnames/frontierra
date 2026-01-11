@@ -3,12 +3,14 @@
 // 3D rendering is a projection of this layout, never independent generation
 
 import { WORLD_LAYOUT_SOURCE, WORLD_A_LAYOUT_SOURCE, WorldParams } from './worldGenerator';
+import { WORLD_LAYOUT_SOURCE_V2 } from './worldGeneratorV2';
 import { 
   WorldContext, 
   getWorldSeed, 
   WORLD_A_ID,
   WORLD_GRID_WIDTH
 } from './worldContext';
+import { buildParamsV2, ARCHETYPES, type ResolvedWorldParams } from '@/world';
 
 // ============================================
 // NEW RGBA CHANNEL ENCODING (from NexArt pixels)
@@ -106,7 +108,11 @@ export function normalizeNexArtInput(params: {
 
 const NEXART_TIMEOUT_MS = 15000;
 
-export async function generateNexArtWorld(params: WorldParams): Promise<NexArtWorldGrid> {
+export interface ExtendedWorldParams extends WorldParams {
+  mappingVersion?: 'v1' | 'v2';
+}
+
+export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<NexArtWorldGrid> {
   const GRID_SIZE = 64;
   
   // Build world context if provided
@@ -123,9 +129,23 @@ export async function generateNexArtWorld(params: WorldParams): Promise<NexArtWo
     worldContext
   });
   
-  // Determine which source to use - World A or solo mode
+  // Check for V2 mapping mode
+  const isV2Mode = params.mappingVersion === 'v2';
+  
+  // Determine which source to use
   const isWorldA = !!input.worldContext;
-  const source = isWorldA ? WORLD_A_LAYOUT_SOURCE : WORLD_LAYOUT_SOURCE;
+  let source: string;
+  
+  if (isWorldA) {
+    // World A mode always uses its own source (shared macro geography)
+    source = WORLD_A_LAYOUT_SOURCE;
+  } else if (isV2Mode) {
+    // V2 mode uses archetype-aware generation
+    source = WORLD_LAYOUT_SOURCE_V2;
+  } else {
+    // V1 legacy mode
+    source = WORLD_LAYOUT_SOURCE;
+  }
   
   // Compute the combined seed for World A (includes world position)
   let executionSeed = input.seed;
@@ -145,7 +165,7 @@ export async function generateNexArtWorld(params: WorldParams): Promise<NexArtWo
       setTimeout(() => reject(new Error('NexArt execution timeout')), NEXART_TIMEOUT_MS);
     });
     
-    // Build execution options with optional globals for World A
+    // Build execution options
     const execOptions: Parameters<typeof executeCodeMode>[0] = {
       source,
       width: GRID_SIZE,
@@ -155,13 +175,31 @@ export async function generateNexArtWorld(params: WorldParams): Promise<NexArtWo
       mode: input.mode,
     };
     
-    // Note: World coordinates are embedded in the source via string replacement
-    // since executeCodeMode may not support globals directly
     let finalSource = source;
-    if (input.worldContext) {
-      // Inject WORLD_X and WORLD_Y as literal values at the start of the sketch
-      const injection = `var WORLD_X = ${input.worldContext.worldX}; var WORLD_Y = ${input.worldContext.worldY};`;
+    
+    // Inject V2-specific parameters (archetype and micro vars)
+    if (isV2Mode && !isWorldA) {
+      const v2Params = buildParamsV2(input.seed, input.vars);
+      const archetypeIndex = ARCHETYPES.indexOf(v2Params.archetype);
+      
+      // Build micro vars array from the derived values (indices 10-23 in full vars)
+      const microVars = v2Params.vars.slice(10, 24);
+      
+      // Inject ARCHETYPE_ID and MV array at the start of setup()
+      const v2Injection = `var ARCHETYPE_ID = ${archetypeIndex}; var MV = [${microVars.join(',')}];`;
       finalSource = source.replace(
+        'function setup() {',
+        `function setup() { ${v2Injection}`
+      );
+      execOptions.source = finalSource;
+      
+      console.log(`[NexArt V2] Archetype: ${v2Params.archetype} (${archetypeIndex})`);
+    }
+    
+    // Inject World A coordinates
+    if (input.worldContext) {
+      const injection = `var WORLD_X = ${input.worldContext.worldX}; var WORLD_Y = ${input.worldContext.worldY};`;
+      finalSource = finalSource.replace(
         'function setup() {',
         `function setup() { ${injection}`
       );
