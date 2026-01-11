@@ -53,6 +53,10 @@ export function ControlPanel({
     toggleMicroDetail,
     shadowsEnabled,
     toggleShadows,
+    smoothShading,
+    toggleSmoothShading,
+    waterAnimation,
+    toggleWaterAnimation,
     // Audio
     musicEnabled,
     toggleMusic,
@@ -293,20 +297,12 @@ export function ControlPanel({
 
           <div className="flex items-center justify-between gap-3">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Rich Terrain Materials</Label>
+              <Label className="text-sm font-medium">Smooth Shading</Label>
               <p className="text-xs text-muted-foreground">
-                Adds PBR shading + micro detail while keeping vertex colors.
+                Removes faceted/low-poly look from terrain.
               </p>
             </div>
-            <Switch checked={materialRichness} onCheckedChange={toggleMaterialRichness} />
-          </div>
-
-          <div className="flex items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Fog</Label>
-              <p className="text-xs text-muted-foreground">Atmosphere + scale.</p>
-            </div>
-            <Switch checked={fogEnabled} onCheckedChange={toggleFog} />
+            <Switch checked={smoothShading} onCheckedChange={toggleSmoothShading} />
           </div>
 
           <div className="flex items-center justify-between gap-3">
@@ -319,10 +315,36 @@ export function ControlPanel({
 
           <div className="flex items-center justify-between gap-3">
             <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Water Animation</Label>
+              <p className="text-xs text-muted-foreground">Subtle wave movement.</p>
+            </div>
+            <Switch checked={waterAnimation} onCheckedChange={toggleWaterAnimation} />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Fog</Label>
+              <p className="text-xs text-muted-foreground">Atmosphere + scale.</p>
+            </div>
+            <Switch checked={fogEnabled} onCheckedChange={toggleFog} />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
               <Label className="text-sm font-medium">Shadows</Label>
               <p className="text-xs text-muted-foreground">Contact depth (may cost FPS).</p>
             </div>
             <Switch checked={shadowsEnabled} onCheckedChange={toggleShadows} />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Rich Materials</Label>
+              <p className="text-xs text-muted-foreground">
+                PBR textures (disable for better perf).
+              </p>
+            </div>
+            <Switch checked={materialRichness} onCheckedChange={toggleMaterialRichness} />
           </div>
         </div>
 
