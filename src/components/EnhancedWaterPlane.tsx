@@ -106,7 +106,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     // gl = baseH
     // rb = gl - RIVER_DEPTH_OFFSET
     // rl = rb + 0.5*RIVER_DEPTH_OFFSET = gl - 0.5*RIVER_DEPTH_OFFSET
-    const halfDepth = RIVER_DEPTH_OFFSET * 0.5;
+    const halfDepth = RIVER_DEPTH_OFFSET * 5.5;
 
     return buildWaterGeometry(
       world,
