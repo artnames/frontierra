@@ -177,7 +177,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
           vec3 col = mix(uDeep, uShallow, w);
 
           float edgeFade = smoothstep(0.0, 1.0, vEdge);
-          float a = uOpacity * mix(0.25, 1.0, edgeFade);
+          float a = uOpacity * mix(0.55, 1.0, edgeFade);
 
           float foam = (1.0 - edgeFade) * 0.18;
           col += foam;
