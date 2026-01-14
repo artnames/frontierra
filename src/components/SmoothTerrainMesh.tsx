@@ -23,6 +23,7 @@ const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
   mountain: { r: 0.45, g: 0.43, b: 0.42 },
   snow: { r: 0.95, g: 0.95, b: 1.0 },
   water: { r: 0.15, g: 0.35, b: 0.45 },
+  riverbed: { r: 0.28, g: 0.26, b: 0.2 }, // dark wet soil/rock
   path: { r: 0.58, g: 0.48, b: 0.35 },
   rock: { r: 0.42, g: 0.42, b: 0.42 },
   sand: { r: 0.76, g: 0.62, b: 0.38 },
@@ -41,11 +42,16 @@ const PBR_SETTINGS = {
 // Deterministic micro-variation for organic feel
 function getMicroVariation(x: number, y: number, seed: number): number {
   const n = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.1) * 43758.5453;
-  return (n - Math.floor(n)) * 0.15 - 0.075;
+  return (n - Math.floor(n)) * 0.15 - 0.075; // ~[-0.075..0.075]
 }
 
 function getCellMaterialKind(cell: TerrainCell): MaterialKind {
-  if (cell.hasRiver) return "water";
+  // Lakes / oceans stay water
+  if (cell.type === "water") return "water";
+
+  // Rivers should read as carved riverbed. (Water surface is rendered separately.)
+  if (cell.hasRiver) return "riverbed";
+
   if (cell.isPath || cell.isBridge || cell.type === "path" || cell.type === "bridge") return "path";
   return getMaterialKind(cell.type, cell.elevation, cell.moisture);
 }
@@ -63,6 +69,8 @@ export function SmoothTerrainMesh({
   const heightScale = WORLD_HEIGHT_SCALE;
   const waterLevel = getWaterLevel(world.vars);
   const waterHeight = waterLevel * heightScale;
+
+  // Base target heights
   const riverDepth = waterHeight - RIVER_DEPTH_OFFSET;
   const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
 
@@ -90,10 +98,10 @@ export function SmoothTerrainMesh({
         if (cell) {
           h = cell.elevation * heightScale;
 
-          // ---- River carving (channel + banks) ----
+          // ---- River carving (channel + banks + center depth) ----
           const isRiver = !!cell.hasRiver;
 
-          // 4-neighborhood for river proximity (bank shaping)
+          // 4-neighborhood for river proximity
           const left = world.terrain[flippedY]?.[x - 1];
           const right = world.terrain[flippedY]?.[x + 1];
           const up = world.terrain[flippedY - 1]?.[x];
@@ -101,17 +109,34 @@ export function SmoothTerrainMesh({
 
           const nearRiver = isRiver || !!left?.hasRiver || !!right?.hasRiver || !!up?.hasRiver || !!down?.hasRiver;
 
-          // Tune these in *world height units*
-          const RIVER_BED_CARVE = 0.14; // deeper channel
-          const RIVER_BANK_CARVE = 0.06; // gentle banks
-
           if (nearRiver) {
-            h -= isRiver ? RIVER_BED_CARVE : RIVER_BANK_CARVE;
-          }
+            // How "center of river" are we? (more river neighbors => more centered)
+            const riverNeighbors =
+              (left?.hasRiver ? 1 : 0) + (right?.hasRiver ? 1 : 0) + (up?.hasRiver ? 1 : 0) + (down?.hasRiver ? 1 : 0);
 
-          // Keep river tiles below the target river depth plane
-          if (isRiver) {
-            h = Math.min(h, riverDepth - 0.02);
+            const centerFactor = Math.min(1, riverNeighbors / 3); // 0..1
+
+            // Subtle deterministic bed variation (prevents uniform trench)
+            const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed);
+            const bedVar = bedNoise * 0.6;
+
+            // Carve profile (world height units)
+            const BANK_CARVE = 0.05; // gentle bank dip
+            const BED_MIN = 0.1; // shallow edge bed
+            const BED_MAX = 0.22; // deep center bed
+            const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
+
+            const carve = isRiver ? bedCarve + bedVar : BANK_CARVE;
+            h -= carve;
+
+            // Soft constraints: avoid flattening everything to one plane
+            if (isRiver) {
+              // Let center be deeper than riverDepth; edges slightly higher
+              const softFloor = riverDepth - 0.08 - centerFactor * 0.06;
+              const softCeil = riverDepth + 0.02;
+              h = Math.max(h, softFloor);
+              h = Math.min(h, softCeil);
+            }
           }
 
           // Path clamp (keep paths readable above water where relevant)
@@ -172,7 +197,6 @@ export function SmoothTerrainMesh({
     geo.setIndex(new THREE.BufferAttribute(indices, 1));
 
     // CRITICAL: Compute vertex normals AFTER setting index
-    // With indexed geometry, normals are averaged across shared vertices = smooth shading
     geo.computeVertexNormals();
 
     return geo;
