@@ -1,175 +1,215 @@
-// SmoothTerrainMesh - Terrain with indexed geometry for smooth shading
-// Uses shared vertices + proper vertex normals for non-faceted appearance
-// CRITICAL: No Math.random() or Date.now() - all rendering is deterministic
+// EnhancedWaterPlane - Masked water + rivers with fresnel, foam edges, and flow
+// Renders water ONLY where world tiles are water, and renders rivers ONLY where hasRiver.
+// CRITICAL: deterministic (no Math.random / Date.now). Animation is visual only (uTime).
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
-import { WorldData, TerrainCell } from "@/lib/worldData";
-import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET, PATH_HEIGHT_OFFSET } from "@/lib/worldConstants";
-import { MaterialKind, getMaterialKind } from "@/lib/materialRegistry";
-import { createTerrainPbrDetailMaterial } from "@/lib/terrainPbrMaterial";
+import { useFrame } from "@react-three/fiber";
+import { WorldData } from "@/lib/worldData";
+import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET } from "@/lib/worldConstants";
+import { getTimeOfDay, isNight, TimeOfDayContext } from "@/lib/timeOfDay";
+import { WORLD_A_ID } from "@/lib/worldContext";
 
-interface SmoothTerrainMeshProps {
+interface EnhancedWaterPlaneProps {
   world: WorldData;
   worldX?: number;
   worldY?: number;
-  microDetailEnabled?: boolean;
+  animated?: boolean;
 }
 
-// Base colors per material kind (used for vertex colors)
-const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
-  ground: { r: 0.5, g: 0.44, b: 0.28 },
-  forest: { r: 0.18, g: 0.35, b: 0.15 },
-  mountain: { r: 0.45, g: 0.43, b: 0.42 },
-  snow: { r: 0.95, g: 0.95, b: 1.0 },
-  water: { r: 0.15, g: 0.35, b: 0.45 },
-  riverbed: { r: 0.28, g: 0.26, b: 0.2 }, // dark wet soil/rock
-  path: { r: 0.58, g: 0.48, b: 0.35 },
-  rock: { r: 0.42, g: 0.42, b: 0.42 },
-  sand: { r: 0.76, g: 0.62, b: 0.38 },
+// Water color palette
+const WATER_COLORS = {
+  day: {
+    shallow: new THREE.Color(0.15, 0.45, 0.55),
+    deep: new THREE.Color(0.06, 0.22, 0.38),
+    river: new THREE.Color(0.07, 0.3, 0.4),
+    foam: new THREE.Color(0.88, 0.92, 0.95),
+  },
+  night: {
+    shallow: new THREE.Color(0.06, 0.18, 0.28),
+    deep: new THREE.Color(0.02, 0.08, 0.16),
+    river: new THREE.Color(0.03, 0.12, 0.2),
+    foam: new THREE.Color(0.55, 0.62, 0.7),
+  },
 };
 
-// PBR tuning - subtle micro-detail
-const PBR_SETTINGS = {
-  roughness: 0.88,
-  metalness: 0.02,
-  detailScale: 0.9,
-  albedoVar: 0.08,
-  roughVar: 0.18,
-  slopeAO: 0.12,
-};
-
-// Deterministic micro-variation for organic feel
-function getMicroVariation(x: number, y: number, seed: number): number {
-  const n = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.1) * 43758.5453;
-  return (n - Math.floor(n)) * 0.15 - 0.075; // ~[-0.075..0.075]
+function clamp01(v: number) {
+  return Math.max(0, Math.min(1, v));
 }
 
-function getCellMaterialKind(cell: TerrainCell): MaterialKind {
-  // Lakes / oceans stay water
-  if (cell.type === "water") return "water";
-
-  // Rivers should read as carved riverbed. (Water surface is rendered separately.)
-  if (cell.hasRiver) return "riverbed";
-
-  if (cell.isPath || cell.isBridge || cell.type === "path" || cell.type === "bridge") return "path";
-  return getMaterialKind(cell.type, cell.elevation, cell.moisture);
+// Deterministic hash based on coords + seed (no Math.random)
+function hash01(x: number, y: number, seed: number): number {
+  const n = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.12345) * 43758.5453123;
+  return n - Math.floor(n);
 }
 
-/**
- * Creates INDEXED geometry with shared vertices for smooth normal interpolation.
- * This is the key to eliminating the faceted/low-poly look.
- */
-export function SmoothTerrainMesh({
-  world,
-  worldX = 0,
-  worldY = 0,
-  microDetailEnabled = true,
-}: SmoothTerrainMeshProps) {
+export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = true }: EnhancedWaterPlaneProps) {
+  const meshRef = useRef<THREE.Mesh>(null);
+
   const heightScale = WORLD_HEIGHT_SCALE;
+
   const waterLevel = getWaterLevel(world.vars);
-  const waterHeight = waterLevel * heightScale;
+  const waterThresholdHeight = waterLevel * heightScale;
 
-  // Base target heights
-  const riverDepth = waterHeight - RIVER_DEPTH_OFFSET;
-  const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
+  // River surface baseline (matches terrain carve logic)
+  const riverSurfaceBase = waterThresholdHeight - RIVER_DEPTH_OFFSET + 0.04; // sits above carved riverbed
 
-  // Build indexed geometry with shared vertices
-  const geometry = useMemo(() => {
+  // Time of day context
+  const timeContext: TimeOfDayContext = useMemo(
+    () => ({
+      worldId: WORLD_A_ID,
+      worldX,
+      worldY,
+    }),
+    [worldX, worldY],
+  );
+
+  const timeOfDay = useMemo(() => getTimeOfDay(timeContext), [timeContext]);
+  const night = isNight(timeOfDay);
+
+  // Compute a safe lake/ocean water plane height (below lowest non-water)
+  const lakeWaterHeight = useMemo(() => {
+    let minNonWaterElevation = Infinity;
+    let waterCellCount = 0;
+
+    for (const row of world.terrain) {
+      for (const cell of row) {
+        if (cell.type === "water") {
+          waterCellCount++;
+        } else if (cell.type !== "bridge") {
+          const cellHeight = cell.elevation * heightScale;
+          if (cellHeight < minNonWaterElevation) minNonWaterElevation = cellHeight;
+        }
+      }
+    }
+
+    if (waterCellCount === 0) {
+      return minNonWaterElevation - 2;
+    }
+
+    const maxSafeHeight = minNonWaterElevation - 0.3;
+    return Math.min(waterThresholdHeight, maxSafeHeight);
+  }, [world.terrain, heightScale, waterThresholdHeight]);
+
+  /**
+   * Build a mask texture:
+   *  R = lake/ocean water mask (cell.type === 'water') 0/255
+   *  G = river mask (cell.hasRiver) 0/255
+   *  B = flowX (0..255)
+   *  A = flowY (0..255)
+   *
+   * NOTE: We flip Y to match rendering orientation used elsewhere (terrain uses flippedY).
+   */
+  const maskTex = useMemo(() => {
     const size = world.gridSize;
-    const vertCount = size * size;
-    const cellCount = (size - 1) * (size - 1);
-    const indexCount = cellCount * 6; // 2 triangles per cell
+    const data = new Uint8Array(size * size * 4);
 
-    const positions = new Float32Array(vertCount * 3);
-    const colors = new Float32Array(vertCount * 3);
-    const uvs = new Float32Array(vertCount * 2);
-    const indices = new Uint32Array(indexCount);
+    const seed = world.seed || 0;
 
-    // First pass: create vertices (one per grid point, shared across triangles)
     for (let y = 0; y < size; y++) {
+      const flippedY = size - 1 - y;
       for (let x = 0; x < size; x++) {
-        const vi = y * size + x;
-        const flippedY = size - 1 - y;
         const cell = world.terrain[flippedY]?.[x];
+        const i = (y * size + x) * 4;
 
-        // Height calculation
-        let h = 0;
-        if (cell) {
-          h = cell.elevation * heightScale;
+        const isLake = !!cell && cell.type === "water";
+        const isRiver = !!cell && !!cell.hasRiver;
 
-          // ---- River carving (channel + banks + center depth) ----
-          const isRiver = !!cell.hasRiver;
+        // Flow direction for rivers from local neighbor structure (deterministic)
+        let fx = 0;
+        let fy = 0;
 
-          // 4-neighborhood for river proximity
+        if (isRiver) {
           const left = world.terrain[flippedY]?.[x - 1];
           const right = world.terrain[flippedY]?.[x + 1];
           const up = world.terrain[flippedY - 1]?.[x];
           const down = world.terrain[flippedY + 1]?.[x];
 
-          const nearRiver = isRiver || !!left?.hasRiver || !!right?.hasRiver || !!up?.hasRiver || !!down?.hasRiver;
+          const lx = left?.hasRiver ? 1 : 0;
+          const rx = right?.hasRiver ? 1 : 0;
+          const uy = up?.hasRiver ? 1 : 0;
+          const dy = down?.hasRiver ? 1 : 0;
 
-          if (nearRiver) {
-            // How "center of river" are we? (more river neighbors => more centered)
-            const riverNeighbors =
-              (left?.hasRiver ? 1 : 0) + (right?.hasRiver ? 1 : 0) + (up?.hasRiver ? 1 : 0) + (down?.hasRiver ? 1 : 0);
+          // crude “river tangent”: prefer direction toward connected neighbors
+          fx = rx - lx;
+          fy = dy - uy;
 
-            const centerFactor = Math.min(1, riverNeighbors / 3); // 0..1
-
-            // Subtle deterministic bed variation (prevents uniform trench)
-            const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed);
-            const bedVar = bedNoise * 0.6;
-
-            // Carve profile (world height units)
-            const BANK_CARVE = 0.05; // gentle bank dip
-            const BED_MIN = 0.1; // shallow edge bed
-            const BED_MAX = 0.28; // deep center bed
-            const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
-
-            const carve = isRiver ? bedCarve + bedVar : BANK_CARVE;
-            h -= carve;
-
-            // Soft constraints: avoid flattening everything to one plane
-            if (isRiver) {
-              // Let center be deeper than riverDepth; edges slightly higher
-              const softFloor = riverDepth - 0.12 - centerFactor * 0.06;
-              const softCeil = riverDepth + 0.02;
-              h = Math.max(h, softFloor);
-              h = Math.min(h, softCeil);
-            }
-          }
-
-          // Path clamp (keep paths readable above water where relevant)
-          if (cell.isPath && !cell.isBridge) {
-            h = Math.min(h, pathMaxHeight);
+          // if ambiguous (junction/isolated), fall back to deterministic angle
+          const mag = Math.sqrt(fx * fx + fy * fy);
+          if (mag < 0.001) {
+            const a = hash01(x + worldX * size, y + worldY * size, seed) * Math.PI * 2;
+            fx = Math.cos(a);
+            fy = Math.sin(a);
+          } else {
+            fx /= mag;
+            fy /= mag;
           }
         }
 
-        // Position
+        // Encode flow from [-1..1] -> [0..1] -> [0..255]
+        const encFx = Math.floor(clamp01(fx * 0.5 + 0.5) * 255);
+        const encFy = Math.floor(clamp01(fy * 0.5 + 0.5) * 255);
+
+        data[i] = isLake ? 255 : 0;
+        data[i + 1] = isRiver ? 255 : 0;
+        data[i + 2] = encFx;
+        data[i + 3] = encFy;
+      }
+    }
+
+    const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+    tex.needsUpdate = true;
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.generateMipmaps = false;
+    return tex;
+  }, [world, worldX, worldY]);
+
+  /**
+   * Build a shared-vertex grid geometry (size x size verts) like terrain,
+   * so we can position river surface slightly lower than lake surface if desired.
+   *
+   * We still DISCARD non-water in shader, so geometry exists everywhere but is cheap.
+   */
+  const geometry = useMemo(() => {
+    const size = world.gridSize;
+    const vertCount = size * size;
+    const cellCount = (size - 1) * (size - 1);
+    const indexCount = cellCount * 6;
+
+    const positions = new Float32Array(vertCount * 3);
+    const uvs = new Float32Array(vertCount * 2);
+    const indices = new Uint32Array(indexCount);
+
+    const seed = world.seed || 0;
+
+    for (let y = 0; y < size; y++) {
+      const flippedY = size - 1 - y;
+      for (let x = 0; x < size; x++) {
+        const vi = y * size + x;
+        const cell = world.terrain[flippedY]?.[x];
+
+        const isLake = !!cell && cell.type === "water";
+        const isRiver = !!cell && !!cell.hasRiver;
+
+        // Slight deterministic height micro-variation to break perfect flatness (tiny)
+        const v = (hash01(x + worldX * size, y + worldY * size, seed) - 0.5) * 0.01;
+
+        // Lake water is flat; river water sits slightly lower and varies slightly
+        let h = lakeWaterHeight + v;
+        if (isRiver) h = riverSurfaceBase + v * 1.5;
+
         positions[vi * 3] = x;
         positions[vi * 3 + 1] = h;
         positions[vi * 3 + 2] = y;
 
-        // Color based on material kind
-        const kind = cell ? getCellMaterialKind(cell) : "ground";
-        const baseColor = BASE_COLORS[kind] || BASE_COLORS.ground;
-
-        const microVar = getMicroVariation(x, y, world.seed);
-        const elevLight = 0.7 + (cell ? Math.pow(cell.elevation, 0.7) * 0.4 : 0) + microVar;
-
-        colors[vi * 3] = Math.min(1, baseColor.r * elevLight);
-        colors[vi * 3 + 1] = Math.min(1, baseColor.g * elevLight);
-        colors[vi * 3 + 2] = Math.min(1, baseColor.b * elevLight);
-
-        // UVs (world-aligned)
-        const worldAbsX = x + worldX * size;
-        const worldAbsZ = y + worldY * size;
-        uvs[vi * 2] = worldAbsX * 0.08;
-        uvs[vi * 2 + 1] = worldAbsZ * 0.08;
+        uvs[vi * 2] = x / (size - 1);
+        uvs[vi * 2 + 1] = y / (size - 1);
       }
     }
 
-    // Second pass: create indices (referencing shared vertices)
     let ii = 0;
     for (let y = 0; y < size - 1; y++) {
       for (let x = 0; x < size - 1; x++) {
@@ -178,12 +218,10 @@ export function SmoothTerrainMesh({
         const v01 = (y + 1) * size + x;
         const v11 = (y + 1) * size + (x + 1);
 
-        // Triangle 1: v00, v01, v10
         indices[ii++] = v00;
         indices[ii++] = v01;
         indices[ii++] = v10;
 
-        // Triangle 2: v01, v11, v10
         indices[ii++] = v01;
         indices[ii++] = v11;
         indices[ii++] = v10;
@@ -192,33 +230,211 @@ export function SmoothTerrainMesh({
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     geo.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
     geo.setIndex(new THREE.BufferAttribute(indices, 1));
-
-    // CRITICAL: Compute vertex normals AFTER setting index
     geo.computeVertexNormals();
-
     return geo;
-  }, [world, heightScale, riverDepth, pathMaxHeight, worldX, worldY]);
+  }, [world, worldX, worldY, lakeWaterHeight, riverSurfaceBase]);
 
-  // Create PBR material with micro-detail
-  const material = useMemo(() => {
-    const worldOffset = new THREE.Vector2(worldX * world.gridSize, worldY * world.gridSize);
+  // Shader material (masked water + foam edges + river flow)
+  const shaderMaterial = useMemo(() => {
+    const colors = night ? WATER_COLORS.night : WATER_COLORS.day;
 
-    return createTerrainPbrDetailMaterial({
-      detailTexture: null,
-      textureInfluence: 0,
-      microDetailEnabled,
-      worldOffset,
-      detailScale: PBR_SETTINGS.detailScale,
-      albedoVariation: PBR_SETTINGS.albedoVar,
-      roughnessVariation: PBR_SETTINGS.roughVar,
-      slopeAO: PBR_SETTINGS.slopeAO,
-      baseRoughness: PBR_SETTINGS.roughness,
-      baseMetalness: PBR_SETTINGS.metalness,
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uMaskTex: { value: maskTex },
+
+        uShallowColor: { value: colors.shallow },
+        uDeepColor: { value: colors.deep },
+        uRiverColor: { value: colors.river },
+        uFoamColor: { value: colors.foam },
+
+        uFresnelPower: { value: 2.6 },
+        uFresnelBias: { value: 0.08 },
+
+        uAnimated: { value: animated ? 1.0 : 0.0 },
+        uOpacity: { value: night ? 0.82 : 0.72 },
+        uReflectivity: { value: night ? 0.45 : 0.28 },
+
+        // tuning knobs
+        uLakeWaveScale: { value: 0.1 },
+        uRiverWaveScale: { value: 0.2 },
+        uRiverFlowSpeed: { value: 0.35 },
+        uFoamStrength: { value: night ? 0.35 : 0.55 },
+      },
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        varying vec3 vWorldNormal;
+        varying vec2 vUv;
+
+        void main() {
+          vUv = uv;
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPos.xyz;
+          vWorldNormal = normalize(mat3(modelMatrix) * normal);
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform sampler2D uMaskTex;
+
+        uniform vec3 uShallowColor;
+        uniform vec3 uDeepColor;
+        uniform vec3 uRiverColor;
+        uniform vec3 uFoamColor;
+
+        uniform float uFresnelPower;
+        uniform float uFresnelBias;
+        uniform float uAnimated;
+        uniform float uOpacity;
+        uniform float uReflectivity;
+
+        uniform float uLakeWaveScale;
+        uniform float uRiverWaveScale;
+        uniform float uRiverFlowSpeed;
+        uniform float uFoamStrength;
+
+        varying vec3 vWorldPosition;
+        varying vec3 vWorldNormal;
+        varying vec2 vUv;
+
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+        }
+
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          float a = hash(i);
+          float b = hash(i + vec2(1.0, 0.0));
+          float c = hash(i + vec2(0.0, 1.0));
+          float d = hash(i + vec2(1.0, 1.0));
+          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }
+
+        // Approx edge: compare mask with its neighbors (NearestFilter texture)
+        float edgeFactor(vec2 uv, vec2 texel, float channel) {
+          float m  = texture2D(uMaskTex, uv)[int(channel)];
+          float ml = texture2D(uMaskTex, uv + vec2(-texel.x, 0.0))[int(channel)];
+          float mr = texture2D(uMaskTex, uv + vec2( texel.x, 0.0))[int(channel)];
+          float mu = texture2D(uMaskTex, uv + vec2(0.0, -texel.y))[int(channel)];
+          float md = texture2D(uMaskTex, uv + vec2(0.0,  texel.y))[int(channel)];
+
+          float d0 = abs(m - ml);
+          float d1 = abs(m - mr);
+          float d2 = abs(m - mu);
+          float d3 = abs(m - md);
+
+          return clamp(max(max(d0, d1), max(d2, d3)), 0.0, 1.0);
+        }
+
+        void main() {
+          vec4 mask = texture2D(uMaskTex, vUv);
+
+          float isLake = step(0.5, mask.r);   // 0/1
+          float isRiver = step(0.5, mask.g);  // 0/1
+
+          // If neither lake nor river, don't render any water
+          if (isLake < 0.5 && isRiver < 0.5) discard;
+
+          vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+
+          // Flow (encoded in B/A as 0..1)
+          vec2 flow = mask.ba * 2.0 - 1.0;
+          float flowMag = max(length(flow), 1e-4);
+          flow /= flowMag;
+
+          // Compute edges (shoreline / river banks)
+          // We estimate texel size from the mask texture itself.
+          vec2 texel = vec2(1.0 / float(textureSize(uMaskTex, 0).x), 1.0 / float(textureSize(uMaskTex, 0).y));
+
+          // For lakes, edge where lake mask changes; for rivers, edge where river mask changes.
+          float lakeEdge = edgeFactor(vUv, texel, 0.0);
+          float riverEdge = edgeFactor(vUv, texel, 1.0);
+
+          // Waves: lake = broader, river = tighter + advected along flow
+          float t = (uAnimated > 0.5) ? uTime : 0.0;
+
+          float lakeW1 = noise(vWorldPosition.xz * uLakeWaveScale + t * 0.12) * 2.0 - 1.0;
+          float lakeW2 = noise(vWorldPosition.xz * (uLakeWaveScale * 1.7) - t * 0.09) * 2.0 - 1.0;
+
+          vec2 adv = flow * t * uRiverFlowSpeed;
+          float riverW1 = noise((vWorldPosition.xz + adv) * uRiverWaveScale) * 2.0 - 1.0;
+          float riverW2 = noise((vWorldPosition.xz - adv * 0.7) * (uRiverWaveScale * 1.8)) * 2.0 - 1.0;
+
+          // Blend normal perturbation
+          vec3 normal = normalize(vWorldNormal);
+
+          float waveX = mix(lakeW1, riverW1, isRiver);
+          float waveZ = mix(lakeW2, riverW2, isRiver);
+
+          normal.x += waveX * mix(0.06, 0.09, isRiver);
+          normal.z += waveZ * mix(0.06, 0.09, isRiver);
+          normal = normalize(normal);
+
+          // Fresnel
+          float fresnel = uFresnelBias + (1.0 - uFresnelBias) * pow(1.0 - max(dot(viewDir, normal), 0.0), uFresnelPower);
+
+          // Depth tint approximation:
+          // - lakes: deeper away from shoreline (1 - lakeEdge)
+          // - rivers: slightly darker in center (1 - riverEdge)
+          float lakeDepth = clamp(1.0 - lakeEdge, 0.0, 1.0);
+          float riverDepth = clamp(1.0 - riverEdge, 0.0, 1.0);
+
+          vec3 lakeColor = mix(uShallowColor, uDeepColor, pow(lakeDepth, 1.35));
+          vec3 riverColor = mix(uRiverColor * 1.10, uRiverColor * 0.75, pow(riverDepth, 1.25));
+
+          vec3 waterColor = mix(lakeColor, riverColor, isRiver);
+
+          // Spec highlight
+          vec3 lightDir = normalize(vec3(0.25, 1.0, 0.20));
+          float spec = pow(max(dot(reflect(-lightDir, normal), viewDir), 0.0), isRiver > 0.5 ? 42.0 : 36.0);
+          vec3 specColor = vec3(1.0, 0.98, 0.95) * spec * mix(0.22, 0.28, isRiver);
+
+          // Foam:
+          // - stronger on river banks and lake shorelines
+          // - modulated by high-frequency noise so it doesn't look like a flat outline
+          float foamBase = mix(lakeEdge, riverEdge, isRiver);
+          float foamNoise = noise(vWorldPosition.xz * mix(0.55, 0.85, isRiver) + t * mix(0.10, 0.18, isRiver));
+          float foam = clamp(foamBase * (0.55 + foamNoise * 0.85), 0.0, 1.0) * uFoamStrength;
+
+          // Reflection tint
+          vec3 reflectionColor = vec3(0.50, 0.60, 0.70) * uReflectivity;
+
+          // Final
+          vec3 finalColor = waterColor;
+
+          // Blend in reflection via fresnel
+          finalColor = mix(finalColor, reflectionColor, fresnel * uReflectivity);
+
+          // Add foam + spec
+          finalColor += uFoamColor * foam * mix(0.45, 0.70, isRiver);
+          finalColor += specColor;
+
+          // Opacity: slightly thinner near edges, thicker in center
+          float depthAlpha = mix(lakeDepth, riverDepth, isRiver);
+          float alpha = uOpacity * (0.70 + 0.30 * depthAlpha);
+          alpha = clamp(alpha, 0.45, 0.92);
+
+          gl_FragColor = vec4(finalColor, alpha);
+        }
+      `,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
     });
-  }, [microDetailEnabled, worldX, worldY, world.gridSize]);
+  }, [night, animated, maskTex]);
 
-  return <mesh geometry={geometry} material={material} receiveShadow />;
+  // Animate
+  useFrame((_, delta) => {
+    if (!animated) return;
+    shaderMaterial.uniforms.uTime.value += delta;
+  });
+
+  return (
+    <mesh ref={meshRef} geometry={geometry} material={shaderMaterial} position={[0, 0, 0]} frustumCulled={false} />
+  );
 }
