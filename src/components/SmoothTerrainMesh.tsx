@@ -96,7 +96,7 @@ export function SmoothTerrainMesh({
 
     const BANK_CARVE = 1;
     const BED_MIN = 2.4;
-    const BED_MAX = 6;
+    const BED_MAX = 20;
 
     const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
     const carve = (isRiver ? bedCarve + bedNoise : BANK_CARVE) * mask;
