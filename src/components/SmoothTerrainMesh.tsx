@@ -62,34 +62,45 @@ export function SmoothTerrainMesh({
   const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
 
   // Deterministic river carve amount (world units), computed from local context only.
-  const computeRiverCarve = (x: number, y: number, flippedY: number, cell: TerrainCell, size: number) => {
+  const computeRiverMask = (x: number, flippedY: number) => {
+    // 0..1 mask based on distance (radius 2). Deterministic.
+    // 1 = river center, ~0.6 = adjacent, ~0.25 = 2 tiles away, 0 = outside.
+    let best = 0;
+
+    for (let dy = -2; dy <= 2; dy++) {
+      const row = world.terrain[flippedY + dy];
+      if (!row) continue;
+
+      for (let dx = -2; dx <= 2; dx++) {
+        const c = row[x + dx];
+        if (!c?.hasRiver) continue;
+
+        const d = Math.max(Math.abs(dx), Math.abs(dy)); // Chebyshev distance (cheap)
+        const w = d === 0 ? 1 : d === 1 ? 0.6 : 0.25;
+        if (w > best) best = w;
+      }
+    }
+
+    return best; // 0..1
+  };
+
+  const computeRiverCarve = (x: number, y: number, flippedY: number, cell: TerrainCell) => {
     const isRiver = !!cell.hasRiver;
+    const mask = computeRiverMask(x, flippedY);
+    if (mask <= 0) return 0;
 
-    const left = world.terrain[flippedY]?.[x - 1];
-    const right = world.terrain[flippedY]?.[x + 1];
-    const up = world.terrain[flippedY - 1]?.[x];
-    const down = world.terrain[flippedY + 1]?.[x];
-
-    const nearRiver = isRiver || !!left?.hasRiver || !!right?.hasRiver || !!up?.hasRiver || !!down?.hasRiver;
-
-    if (!nearRiver) return 0;
-
-    const riverNeighbors =
-      (left?.hasRiver ? 1 : 0) + (right?.hasRiver ? 1 : 0) + (up?.hasRiver ? 1 : 0) + (down?.hasRiver ? 1 : 0);
-
-    // straight rivers (2 neighbors) still get deep centerFactor
-    const centerFactor = Math.min(1, riverNeighbors / 2);
+    // deep in center, shallow at banks
+    const centerFactor = isRiver ? 1 : mask; // center tiles get full depth
 
     const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed) * 0.6;
 
-    const BANK_CARVE = 0.05; // shallow bank dip (near river)
-    const BED_MIN = 0.12; // edge bed
-    const BED_MAX = 0.3; // deep center bed
+    const BANK_CARVE = 0.05;
+    const BED_MIN = 0.12;
+    const BED_MAX = 0.3;
 
     const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
-    const carve = isRiver ? bedCarve + bedNoise : BANK_CARVE;
+    const carve = (isRiver ? bedCarve + bedNoise : BANK_CARVE) * mask;
 
-    // Carve must be >= 0 (never raises terrain)
     return Math.max(0, carve);
   };
 
