@@ -1,10 +1,10 @@
-// SmoothTerrainMesh - Frontierra Version 2.1
-// Focus: Stable Carving, Deterministic UVs, and Memory Safety
+// SmoothTerrainMesh - Frontierra Version 3.1
+// FIXED: Relative mountain carving to prevent "floating staircases"
 
 import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { WorldData, TerrainCell } from "@/lib/worldData";
-import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET, PATH_HEIGHT_OFFSET } from "@/lib/worldConstants";
+import { WORLD_HEIGHT_SCALE, getWaterLevel, PATH_HEIGHT_OFFSET } from "@/lib/worldConstants";
 import { MaterialKind, getMaterialKind } from "@/lib/materialRegistry";
 import { createTerrainPbrDetailMaterial } from "@/lib/terrainPbrMaterial";
 
@@ -34,7 +34,7 @@ function getMicroVariation(x: number, y: number, seed: number): number {
 
 function getCellMaterialKind(cell: TerrainCell): MaterialKind {
   if (cell.type === "water") return "water";
-  if (cell.hasRiver) return "riverbed";
+  if (cell.hasRiver) return "riverbed" as MaterialKind; // TS Cast
   if (cell.isPath || cell.isBridge) return "path";
   return getMaterialKind(cell.type, cell.elevation, cell.moisture);
 }
@@ -46,7 +46,6 @@ export function SmoothTerrainMesh({
   microDetailEnabled = true,
 }: SmoothTerrainMeshProps) {
   const heightScale = WORLD_HEIGHT_SCALE;
-  const riverDepth = getWaterLevel(world.vars) * heightScale - RIVER_DEPTH_OFFSET;
   const pathMaxHeight = getWaterLevel(world.vars) * heightScale + PATH_HEIGHT_OFFSET;
 
   const geometry = useMemo(() => {
@@ -63,9 +62,10 @@ export function SmoothTerrainMesh({
         const flippedY = size - 1 - y;
         const cell = world.terrain[flippedY]?.[x];
 
+        // 1. Base Ground Elevation
         let h = cell ? cell.elevation * heightScale : 0;
 
-        // --- 1. PROXIMITY-BASED CARVING (Fixes "Scooping" Landmine) ---
+        // 2. Relative River Carving (Fixes the Floating Mountain Rivers)
         if (cell) {
           const left = world.terrain[flippedY]?.[x - 1];
           const right = world.terrain[flippedY]?.[x + 1];
@@ -74,22 +74,15 @@ export function SmoothTerrainMesh({
 
           const riverNeighbors =
             (left?.hasRiver ? 1 : 0) + (right?.hasRiver ? 1 : 0) + (up?.hasRiver ? 1 : 0) + (down?.hasRiver ? 1 : 0);
-          const isNearRiver = cell.hasRiver || riverNeighbors > 0;
 
-          if (isNearRiver) {
-            const centerFactor = Math.min(1, riverNeighbors / 2); // 2 neighbors = full channel
+          if (cell.hasRiver || riverNeighbors > 0) {
+            // How deep the trench is relative to the ground
+            const centerFactor = Math.min(1, riverNeighbors / 2);
+            const carvingDepth = cell.hasRiver ? 0.25 + 0.1 * centerFactor : 0.08;
+
+            // Add deterministic noise to the bed so it isn't a perfect plastic pipe
             const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed) * 0.5;
-
-            // Channel depth calculation
-            const carve = cell.hasRiver ? 0.15 + 0.15 * centerFactor + bedNoise : 0.05; // Gentle dip for banks
-            h -= carve;
-
-            // Clamping the riverbed specifically
-            if (cell.hasRiver) {
-              const softFloor = riverDepth - 0.12 - centerFactor * 0.06;
-              h = Math.max(h, softFloor);
-              h = Math.min(h, riverDepth + 0.02);
-            }
+            h -= carvingDepth + bedNoise;
           }
         }
 
@@ -99,7 +92,6 @@ export function SmoothTerrainMesh({
         positions[vi * 3 + 1] = h;
         positions[vi * 3 + 2] = y;
 
-        // Color and Deterministic UVs
         const kind = cell ? getCellMaterialKind(cell) : "ground";
         const baseColor = BASE_COLORS[kind] || BASE_COLORS.ground;
         const microVar = getMicroVariation(x, y, world.seed);
@@ -109,7 +101,6 @@ export function SmoothTerrainMesh({
         colors[vi * 3 + 1] = Math.min(1, baseColor.g * elevLight);
         colors[vi * 3 + 2] = Math.min(1, baseColor.b * elevLight);
 
-        // UV Fix: Use (size - 1) to match adjacent chunk starting points
         uvs[vi * 2] = (x + worldX * (size - 1)) * 0.08;
         uvs[vi * 2 + 1] = (y + worldY * (size - 1)) * 0.08;
       }
@@ -138,7 +129,7 @@ export function SmoothTerrainMesh({
     geo.setIndex(new THREE.BufferAttribute(indices, 1));
     geo.computeVertexNormals();
     return geo;
-  }, [world, heightScale, riverDepth, pathMaxHeight, worldX, worldY]);
+  }, [world, heightScale, pathMaxHeight, worldX, worldY]);
 
   const material = useMemo(() => {
     return createTerrainPbrDetailMaterial({
@@ -155,11 +146,9 @@ export function SmoothTerrainMesh({
     });
   }, [microDetailEnabled, worldX, worldY, world.gridSize]);
 
-  // SAFE DISPOSAL: Only dispose of geometry.
-  // Materials are often shared or cached by Three.js; disposing them can turn other chunks black.
   useEffect(() => {
     return () => geometry.dispose();
   }, [geometry]);
 
-  return <mesh geometry={geometry} material={material} receiveShadow />;
+  return <mesh geometry={geometry} material={material} receiveShadow castShadow />;
 }
