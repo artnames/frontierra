@@ -2,17 +2,12 @@
 // Uses shared vertices + proper vertex normals for non-faceted appearance
 // CRITICAL: No Math.random() or Date.now() - all rendering is deterministic
 
-import { useMemo } from 'react';
-import * as THREE from 'three';
-import { WorldData, TerrainCell } from '@/lib/worldData';
-import {
-  WORLD_HEIGHT_SCALE,
-  getWaterLevel,
-  RIVER_DEPTH_OFFSET,
-  PATH_HEIGHT_OFFSET,
-} from '@/lib/worldConstants';
-import { MaterialKind, getMaterialKind } from '@/lib/materialRegistry';
-import { createTerrainPbrDetailMaterial } from '@/lib/terrainPbrMaterial';
+import { useMemo } from "react";
+import * as THREE from "three";
+import { WorldData, TerrainCell } from "@/lib/worldData";
+import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET, PATH_HEIGHT_OFFSET } from "@/lib/worldConstants";
+import { MaterialKind, getMaterialKind } from "@/lib/materialRegistry";
+import { createTerrainPbrDetailMaterial } from "@/lib/terrainPbrMaterial";
 
 interface SmoothTerrainMeshProps {
   world: WorldData;
@@ -23,7 +18,7 @@ interface SmoothTerrainMeshProps {
 
 // Base colors per material kind (used for vertex colors)
 const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
-  ground: { r: 0.50, g: 0.44, b: 0.28 },
+  ground: { r: 0.5, g: 0.44, b: 0.28 },
   forest: { r: 0.18, g: 0.35, b: 0.15 },
   mountain: { r: 0.45, g: 0.43, b: 0.42 },
   snow: { r: 0.95, g: 0.95, b: 1.0 },
@@ -50,8 +45,8 @@ function getMicroVariation(x: number, y: number, seed: number): number {
 }
 
 function getCellMaterialKind(cell: TerrainCell): MaterialKind {
-  if (cell.hasRiver) return 'water';
-  if (cell.isPath || cell.isBridge || cell.type === 'path' || cell.type === 'bridge') return 'path';
+  if (cell.hasRiver) return "water";
+  if (cell.isPath || cell.isBridge || cell.type === "path" || cell.type === "bridge") return "path";
   return getMaterialKind(cell.type, cell.elevation, cell.moisture);
 }
 
@@ -94,8 +89,35 @@ export function SmoothTerrainMesh({
         let h = 0;
         if (cell) {
           h = cell.elevation * heightScale;
-          if (cell.hasRiver) h = Math.min(h, riverDepth);
-          if (cell.isPath && !cell.isBridge) h = Math.min(h, pathMaxHeight);
+
+          // ---- River carving (channel + banks) ----
+          const isRiver = !!cell.hasRiver;
+
+          // 4-neighborhood for river proximity (bank shaping)
+          const left = world.terrain[flippedY]?.[x - 1];
+          const right = world.terrain[flippedY]?.[x + 1];
+          const up = world.terrain[flippedY - 1]?.[x];
+          const down = world.terrain[flippedY + 1]?.[x];
+
+          const nearRiver = isRiver || !!left?.hasRiver || !!right?.hasRiver || !!up?.hasRiver || !!down?.hasRiver;
+
+          // Tune these in *world height units*
+          const RIVER_BED_CARVE = 0.14; // deeper channel
+          const RIVER_BANK_CARVE = 0.06; // gentle banks
+
+          if (nearRiver) {
+            h -= isRiver ? RIVER_BED_CARVE : RIVER_BANK_CARVE;
+          }
+
+          // Keep river tiles below the target river depth plane
+          if (isRiver) {
+            h = Math.min(h, riverDepth - 0.02);
+          }
+
+          // Path clamp (keep paths readable above water where relevant)
+          if (cell.isPath && !cell.isBridge) {
+            h = Math.min(h, pathMaxHeight);
+          }
         }
 
         // Position
@@ -104,12 +126,12 @@ export function SmoothTerrainMesh({
         positions[vi * 3 + 2] = y;
 
         // Color based on material kind
-        const kind = cell ? getCellMaterialKind(cell) : 'ground';
+        const kind = cell ? getCellMaterialKind(cell) : "ground";
         const baseColor = BASE_COLORS[kind] || BASE_COLORS.ground;
-        
+
         const microVar = getMicroVariation(x, y, world.seed);
         const elevLight = 0.7 + (cell ? Math.pow(cell.elevation, 0.7) * 0.4 : 0) + microVar;
-        
+
         colors[vi * 3] = Math.min(1, baseColor.r * elevLight);
         colors[vi * 3 + 1] = Math.min(1, baseColor.g * elevLight);
         colors[vi * 3 + 2] = Math.min(1, baseColor.b * elevLight);
@@ -144,11 +166,11 @@ export function SmoothTerrainMesh({
     }
 
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    geo.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
     geo.setIndex(new THREE.BufferAttribute(indices, 1));
-    
+
     // CRITICAL: Compute vertex normals AFTER setting index
     // With indexed geometry, normals are averaged across shared vertices = smooth shading
     geo.computeVertexNormals();
@@ -159,7 +181,7 @@ export function SmoothTerrainMesh({
   // Create PBR material with micro-detail
   const material = useMemo(() => {
     const worldOffset = new THREE.Vector2(worldX * world.gridSize, worldY * world.gridSize);
-    
+
     return createTerrainPbrDetailMaterial({
       detailTexture: null,
       textureInfluence: 0,
@@ -174,7 +196,5 @@ export function SmoothTerrainMesh({
     });
   }, [microDetailEnabled, worldX, worldY, world.gridSize]);
 
-  return (
-    <mesh geometry={geometry} material={material} receiveShadow />
-  );
+  return <mesh geometry={geometry} material={material} receiveShadow />;
 }
