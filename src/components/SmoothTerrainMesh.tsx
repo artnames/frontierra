@@ -134,8 +134,8 @@ export function SmoothTerrainMesh({
             const isRiver = !!cell.hasRiver;
 
             // Ensure visible but bounded carve (still relative to baseH)
-            const MIN_CARVE = isRiver ? 2 : 0.6;
-            const MAX_CARVE = isRiver ? 6.45 : 1.1;
+            const MIN_CARVE = isRiver ? 0.3 : 0.08;
+            const MAX_CARVE = isRiver ? 2.45 : 1.1;
 
             const clampedCarve = Math.min(MAX_CARVE, Math.max(MIN_CARVE, carve));
             h = baseH - clampedCarve;
