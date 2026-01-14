@@ -1,11 +1,11 @@
-// EnhancedWaterPlane.tsx - Conformal River Mesh with Waterfall Detection
-// CRITICAL: Deterministic elevation pinning and slope-based foam logic.
+// EnhancedWaterPlane.tsx - Frontierra Conformal Ribbon Version
+// FIXED: Vertex Welding for continuous flow and Relative Height Pinning for mountains.
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { WorldData } from "@/lib/worldData";
-import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET } from "@/lib/worldConstants";
+import { WORLD_HEIGHT_SCALE } from "@/lib/worldConstants";
 import { getTimeOfDay, isNight } from "@/lib/timeOfDay";
 import { WORLD_A_ID } from "@/lib/worldContext";
 
@@ -17,37 +17,37 @@ interface EnhancedWaterPlaneProps {
 }
 
 const WATER_COLORS = {
-  day: { shallow: new THREE.Color(0.2, 0.5, 0.6), deep: new THREE.Color(0.05, 0.15, 0.25) },
-  night: { shallow: new THREE.Color(0.05, 0.1, 0.15), deep: new THREE.Color(0.01, 0.02, 0.05) },
+  day: { shallow: new THREE.Color(0.15, 0.45, 0.55), deep: new THREE.Color(0.08, 0.25, 0.4) },
+  night: { shallow: new THREE.Color(0.06, 0.18, 0.28), deep: new THREE.Color(0.03, 0.1, 0.18) },
 };
 
 export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = true }: EnhancedWaterPlaneProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
-
   const heightScale = WORLD_HEIGHT_SCALE;
-  const waterLevel = getWaterLevel(world.vars);
-  const waterHeight = waterLevel * heightScale;
-  // Sits slightly above the carved bed (-0.25 carve + 0.20 water offset = 0.05 above bed)
-  const riverDepthOffset = 0.2;
 
-  // 1. GENERATE CONFORMAL GEOMETRY
+  const night = isNight(getTimeOfDay({ worldId: WORLD_A_ID, worldX, worldY }));
+
+  // 1. GENERATE CONFORMAL GEOMETRY (The Ribbon Builder)
   const geometry = useMemo(() => {
     const size = world.gridSize;
     const positions: number[] = [];
     const uvs: number[] = [];
-    const slopes: number[] = []; // Custom attribute for waterfall detection
     const indices: number[] = [];
+
+    // Vertex Map for welding: Ensures shared edges between quads are perfectly smooth
     const vertexMap = new Map<string, number>();
 
-    const addVertex = (vx: number, vy: number, vh: number, vslope: number) => {
-      const key = `${vx.toFixed(2)},${vy.toFixed(2)},${vh.toFixed(2)}`;
+    const addVertex = (vx: number, vy: number, vh: number) => {
+      // Key includes height to ensure mountain slopes weld correctly
+      const key = `${vx},${vy},${vh.toFixed(3)}`;
       if (vertexMap.has(key)) return vertexMap.get(key)!;
 
       const idx = positions.length / 3;
       positions.push(vx, vh, vy);
-      uvs.push((vx + worldX * (size - 1)) * 0.1, (vy + worldY * (size - 1)) * 0.1);
-      slopes.push(vslope);
+
+      // Global UVs for seamless wave movement across chunks
+      uvs.push((vx + worldX * (size - 1)) * 0.15, (vy + worldY * (size - 1)) * 0.15);
 
       vertexMap.set(key, idx);
       return idx;
@@ -58,22 +58,20 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
         const flippedY = size - 1 - y;
         const cell = world.terrain[flippedY]?.[x];
 
+        // Only draw geometry where the world data says there is water or a river
         if (cell?.hasRiver || cell?.type === "water") {
-          // DETERMINISTIC PINNING: Water follows ground height
-          const baseH = cell.elevation * heightScale;
-          const h = cell.hasRiver ? baseH - riverDepthOffset : waterHeight;
+          // RELATIVE PINNING: Sits exactly 0.1 units above the -0.3 terrain carve
+          const waterHeight = cell.elevation * heightScale - 0.2;
 
-          // Waterfall Detection: Check neighboring cell elevations
-          const nextCell = world.terrain[flippedY - 1]?.[x] || cell;
-          const drop = Math.abs(cell.elevation - nextCell.elevation);
-          const slopeIntensity = Math.min(1.0, drop * 5.0); // 0 = flat, 1 = steep drop
+          const v00 = addVertex(x, y, waterHeight);
+          const v10 = addVertex(x + 1, y, waterHeight);
+          const v01 = addVertex(x, y + 1, waterHeight);
+          const v11 = addVertex(x + 1, y + 1, waterHeight);
 
-          const v00 = addVertex(x, y, h, slopeIntensity);
-          const v10 = addVertex(x + 1, y, h, slopeIntensity);
-          const v01 = addVertex(x, y + 1, h, slopeIntensity);
-          const v11 = addVertex(x + 1, y + 1, h, slopeIntensity);
-
-          indices.push(v00, v01, v10, v01, v11, v10);
+          // Triangle 1
+          indices.push(v00, v01, v10);
+          // Triangle 2
+          indices.push(v01, v11, v10);
         }
       }
     }
@@ -81,85 +79,77 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-    geo.setAttribute("slope", new THREE.Float32BufferAttribute(slopes, 1));
     geo.setIndex(indices);
     geo.computeVertexNormals();
     return geo;
-  }, [world, waterHeight, heightScale, worldX, worldY]);
+  }, [world, heightScale, worldX, worldY]);
 
-  // 2. SHADER MATERIAL WITH WATERFALL FOAM
+  // 2. SHADER MATERIAL (Fresnel + Global World-Space Waves)
   const shaderMaterial = useMemo(() => {
-    const isNightTime = isNight(getTimeOfDay({ worldId: WORLD_A_ID, worldX, worldY }));
-    const colors = isNightTime ? WATER_COLORS.night : WATER_COLORS.day;
+    const colors = night ? WATER_COLORS.night : WATER_COLORS.day;
 
     return new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uDeepColor: { value: colors.deep },
         uShallowColor: { value: colors.shallow },
-        uOpacity: { value: isNightTime ? 0.85 : 0.75 },
+        uDeepColor: { value: colors.deep },
+        uOpacity: { value: night ? 0.8 : 0.7 },
       },
       vertexShader: `
-        attribute float slope;
-        varying vec3 vWorldPos;
-        varying float vSlope;
+        varying vec3 vWorldPosition;
         varying vec2 vUv;
         void main() {
           vUv = uv;
-          vSlope = slope;
-          vec4 wp = modelMatrix * vec4(position, 1.0);
-          vWorldPos = wp.xyz;
-          gl_Position = projectionMatrix * viewMatrix * wp;
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPos.xyz;
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
         }
       `,
       fragmentShader: `
         uniform float uTime;
-        uniform vec3 uDeepColor;
         uniform vec3 uShallowColor;
+        uniform vec3 uDeepColor;
         uniform float uOpacity;
-        varying vec3 vWorldPos;
-        varying float vSlope;
+        varying vec3 vWorldPosition;
         varying vec2 vUv;
 
-        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+        }
+
         float noise(vec2 p) {
           vec2 i = floor(p); vec2 f = fract(p);
           f = f * f * (3.0 - 2.0 * f);
-          return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+          return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), 
+                     mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
         }
 
         void main() {
-          // Increase flow speed on slopes (waterfalls)
-          float flowSpeed = 0.4 + (vSlope * 2.5);
-          float t = uTime * flowSpeed;
-          
-          // World-space waves
-          float w1 = noise(vWorldPos.xz * 1.2 + t);
-          float w2 = noise(vWorldPos.xz * 2.0 - t * 0.5);
+          // Waves tied to global world coordinates (prevents tiling seams)
+          float t = uTime * 0.5;
+          float w1 = noise(vWorldPosition.xz * 1.5 + t);
+          float w2 = noise(vWorldPosition.xz * 2.5 - t * 0.6);
           float combined = (w1 + w2) * 0.5;
 
-          vec3 baseColor = mix(uDeepColor, uShallowColor, combined);
+          vec3 finalColor = mix(uDeepColor, uShallowColor, combined);
           
-          // Waterfall Foam Logic
-          // If vSlope is high, mix in white foam based on noise
-          float foamMask = smoothstep(0.4, 0.8, noise(vWorldPos.xz * 4.0 + t * 2.0));
-          vec3 foamColor = vec3(0.9, 0.95, 1.0);
-          vec3 finalColor = mix(baseColor, foamColor, vSlope * foamMask);
-
-          // Subtle highlights
-          float spec = pow(combined, 8.0) * 0.3;
+          // Specular shimmer
+          float spec = pow(combined, 12.0) * 0.4;
           finalColor += spec;
 
           gl_FragColor = vec4(finalColor, uOpacity);
         }
       `,
       transparent: true,
+      side: THREE.DoubleSide,
       depthWrite: false,
     });
-  }, [worldX, worldY]);
+  }, [night]);
 
-  useFrame((_, delta) => {
-    if (materialRef.current) materialRef.current.uniforms.uTime.value += delta;
+  useFrame((state, delta) => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.uTime.value += delta;
+    }
   });
 
   useEffect(() => {
@@ -172,7 +162,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       geometry={geometry}
       material={shaderMaterial}
       onBeforeRender={() => {
-        if (!materialRef.current) materialRef.current = shaderMaterial;
+        materialRef.current = shaderMaterial;
       }}
     />
   );
