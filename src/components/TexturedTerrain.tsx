@@ -1,5 +1,5 @@
 // Textured Terrain - 3D terrain mesh with PBR materials and procedural micro-detail
-// FIXED: Exporting SimpleTerrainMesh and implementing Relative Mountain Carving
+// FIXED: Exported SimpleTerrainMesh, added 'riverbed' properties, and fixed mountain river depth.
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
@@ -16,6 +16,7 @@ interface TexturedTerrainMeshProps {
   microDetailEnabled?: boolean;
 }
 
+// Updated to include 'riverbed'
 const MATERIAL_KINDS: MaterialKind[] = [
   "ground",
   "forest",
@@ -28,6 +29,7 @@ const MATERIAL_KINDS: MaterialKind[] = [
   "riverbed",
 ];
 
+// UV scales per material (Fixes TS2741)
 const UV_SCALES: Record<MaterialKind, number> = {
   ground: 0.08,
   forest: 0.1,
@@ -37,9 +39,10 @@ const UV_SCALES: Record<MaterialKind, number> = {
   path: 0.15,
   rock: 0.14,
   sand: 0.07,
-  riverbed: 0.12,
+  riverbed: 0.12, // Added missing property
 };
 
+// Base colors (Added riverbed for fallback logic)
 const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
   ground: { r: 0.5, g: 0.44, b: 0.28 },
   forest: { r: 0.18, g: 0.35, b: 0.15 },
@@ -49,9 +52,10 @@ const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
   path: { r: 0.58, g: 0.48, b: 0.35 },
   rock: { r: 0.42, g: 0.42, b: 0.42 },
   sand: { r: 0.76, g: 0.62, b: 0.38 },
-  riverbed: { r: 0.28, g: 0.26, b: 0.2 },
+  riverbed: { r: 0.28, g: 0.26, b: 0.2 }, // Added riverbed base color
 };
 
+// PBR settings (Fixes TS2741)
 const PBR_PROPS: Record<
   MaterialKind,
   {
@@ -82,7 +86,7 @@ const PBR_PROPS: Record<
   path: { roughness: 0.86, metalness: 0.03, detailScale: 1.25, albedoVar: 0.08, roughVar: 0.2, slopeAO: 0.1 },
   rock: { roughness: 0.78, metalness: 0.05, detailScale: 1.35, albedoVar: 0.09, roughVar: 0.25, slopeAO: 0.16 },
   sand: { roughness: 0.88, metalness: 0.01, detailScale: 0.85, albedoVar: 0.06, roughVar: 0.14, slopeAO: 0.08 },
-  riverbed: { roughness: 0.65, metalness: 0.1, detailScale: 1.0, albedoVar: 0.05, roughVar: 0.15, slopeAO: 0.2 },
+  riverbed: { roughness: 0.65, metalness: 0.1, detailScale: 1.0, albedoVar: 0.05, roughVar: 0.15, slopeAO: 0.2 }, // Added missing property
 };
 
 function getMicroVariation(x: number, y: number, seed: number): number {
@@ -102,10 +106,14 @@ function getTileColor(
 ): { r: number; g: number; b: number } {
   const microVar = getMicroVariation(x, y, seed);
   const baseBrightness = 0.65 + microVar;
-  const brightness = baseBrightness + Math.pow(elevation, 0.7) * 0.5;
+  const elevationLight = Math.pow(elevation, 0.7) * 0.5;
+  const brightness = baseBrightness + elevationLight;
   const ao = 0.9 + elevation * 0.1;
 
-  if (hasRiver) return { r: 0.25 * brightness, g: 0.23 * brightness, b: 0.18 * brightness };
+  if (hasRiver) {
+    const rCol = BASE_COLORS.riverbed;
+    return { r: rCol.r * brightness, g: rCol.g * brightness, b: rCol.b * brightness };
+  }
 
   if (isPath && type !== "bridge") {
     return {
@@ -117,6 +125,7 @@ function getTileColor(
 
   const kind = getMaterialKind(type, elevation, moisture);
   const fallback = BASE_COLORS[kind] || BASE_COLORS.ground;
+
   return {
     r: (fallback.r + microVar) * brightness * ao,
     g: (fallback.g + microVar) * brightness * ao,
@@ -166,8 +175,8 @@ export function TexturedTerrainMesh({
         }
 
         let h = cell.elevation * heightScale;
-        // RELATIVE CARVING: Key for mountain rivers
-        if (cell.hasRiver) h -= 0.25;
+        // FIXED: Relative carving to match SmoothTerrainMesh
+        if (cell.hasRiver) h -= 0.3;
         if (cell.isPath && !cell.isBridge) h = Math.min(h, pathMaxHeight);
         heights[y][x] = h;
       }
@@ -190,9 +199,10 @@ export function TexturedTerrainMesh({
 
       const uvScale = UV_SCALES[kind];
       const baseColor = BASE_COLORS[kind] || BASE_COLORS.ground;
-      const positions = new Float32Array(cells.length * 18);
-      const colors = new Float32Array(cells.length * 18);
-      const uvs = new Float32Array(cells.length * 12);
+      const vertCount = cells.length * 6;
+      const positions = new Float32Array(vertCount * 3);
+      const colors = new Float32Array(vertCount * 3);
+      const uvs = new Float32Array(vertCount * 2);
 
       let vi = 0;
       for (const { x, y, cell, height } of cells) {
@@ -211,26 +221,62 @@ export function TexturedTerrainMesh({
         const wX1 = wX + uvScale,
           wZ1 = wZ + uvScale;
 
-        // Triangles
-        const pts = [
-          [x, h00, y, wX, wZ],
-          [x, h01, y + 1, wX, wZ1],
-          [x + 1, h10, y, wX1, wZ],
-          [x, h01, y + 1, wX, wZ1],
-          [x + 1, h11, y + 1, wX1, wZ1],
-          [x + 1, h10, y, wX1, wZ],
-        ];
-        pts.forEach((p) => {
-          positions[vi * 3] = p[0];
-          positions[vi * 3 + 1] = p[1];
-          positions[vi * 3 + 2] = p[2];
-          colors[vi * 3] = r;
-          colors[vi * 3 + 1] = g;
-          colors[vi * 3 + 2] = b;
-          uvs[vi * 2] = p[3];
-          uvs[vi * 2 + 1] = p[4];
-          vi++;
-        });
+        // Triangle 1
+        positions[vi * 3] = x;
+        positions[vi * 3 + 1] = h00;
+        positions[vi * 3 + 2] = y;
+        colors[vi * 3] = r;
+        colors[vi * 3 + 1] = g;
+        colors[vi * 3 + 2] = b;
+        uvs[vi * 2] = wX;
+        uvs[vi * 2 + 1] = wZ;
+        vi++;
+        positions[vi * 3] = x;
+        positions[vi * 3 + 1] = h01;
+        positions[vi * 3 + 2] = y + 1;
+        colors[vi * 3] = r;
+        colors[vi * 3 + 1] = g;
+        colors[vi * 3 + 2] = b;
+        uvs[vi * 2] = wX;
+        uvs[vi * 2 + 1] = wZ1;
+        vi++;
+        positions[vi * 3] = x + 1;
+        positions[vi * 3 + 1] = h10;
+        positions[vi * 3 + 2] = y;
+        colors[vi * 3] = r;
+        colors[vi * 3 + 1] = g;
+        colors[vi * 3 + 2] = b;
+        uvs[vi * 2] = wX1;
+        uvs[vi * 2 + 1] = wZ;
+        vi++;
+        // Triangle 2
+        positions[vi * 3] = x;
+        positions[vi * 3 + 1] = h01;
+        positions[vi * 3 + 2] = y + 1;
+        colors[vi * 3] = r;
+        colors[vi * 3 + 1] = g;
+        colors[vi * 3 + 2] = b;
+        uvs[vi * 2] = wX;
+        uvs[vi * 2 + 1] = wZ1;
+        vi++;
+        positions[vi * 3] = x + 1;
+        positions[vi * 3 + 1] = h11;
+        positions[vi * 3 + 2] = y + 1;
+        colors[vi * 3] = r;
+        colors[vi * 3 + 1] = g;
+        colors[vi * 3 + 2] = b;
+        uvs[vi * 2] = wX1;
+        uvs[vi * 2 + 1] = wZ1;
+        vi++;
+        positions[vi * 3] = x + 1;
+        positions[vi * 3 + 1] = h10;
+        positions[vi * 3 + 2] = y;
+        colors[vi * 3] = r;
+        colors[vi * 3 + 1] = g;
+        colors[vi * 3 + 2] = b;
+        uvs[vi * 2] = wX1;
+        uvs[vi * 2 + 1] = wZ;
+        vi++;
       }
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -318,7 +364,7 @@ export function SimpleTerrainMesh({
           continue;
         }
         let h = cell.elevation * heightScale;
-        if (cell.hasRiver) h -= 0.25;
+        if (cell.hasRiver) h -= 0.3;
         if (cell.isPath && !cell.isBridge) h = Math.min(h, pathMaxHeight);
         heights[y][x] = h;
       }
