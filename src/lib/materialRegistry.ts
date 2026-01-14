@@ -1,50 +1,96 @@
-// 1. Texture Influences (Fixes Error at line 38)
-const TEXTURE_INFLUENCES: Record<MaterialKind, number> = {
-  ground: 0.5,
-  forest: 0.7,
-  mountain: 0.8,
-  snow: 0.4,
-  water: 1.0,
-  path: 0.6,
-  rock: 0.9,
-  sand: 0.5,
-  riverbed: 0.85, // New property
-};
+// Material Registry - Deterministic Texture Generation Pipeline
+// CRITICAL: Ensure all types and constants are EXPORTED to resolve TS2305
 
-// 2. PBR Settings (Fixes Error at line 64)
-const MATERIAL_PBR_SETTINGS: Record<
-  MaterialKind,
-  {
-    roughness: number;
-    metalness: number;
-    detailScale: number;
-    albedoVar: number;
-    roughVar: number;
-    slopeAO: number;
+export type MaterialKind = "ground" | "forest" | "mountain" | "snow" | "water" | "path" | "rock" | "sand" | "riverbed"; // Added riverbed to satisfy terrain requirements
+
+export interface MaterialContext {
+  worldId: string;
+  worldX: number;
+  worldY: number;
+  seed: number;
+  vars: number[];
+  tileType: string;
+  elevation: number;
+  moisture: number;
+}
+
+export interface TextureSet {
+  diffuse: HTMLCanvasElement;
+  kind: MaterialKind;
+  context: MaterialContext;
+}
+
+export const TEXTURE_SIZE = 256;
+
+/**
+ * Deterministic hash for caching textures
+ */
+export function computeTextureHash(kind: MaterialKind, ctx: MaterialContext): string {
+  const varsHash = ctx.vars
+    .slice(0, 10)
+    .map((v) => Math.floor(v))
+    .join("-");
+  return `${kind}_${ctx.worldId}_${ctx.worldX}_${ctx.worldY}_${ctx.seed}_${varsHash}`;
+}
+
+/**
+ * Core logic to determine material based on world data
+ */
+export function getMaterialKind(tileType: string, elevation: number, moisture: number): MaterialKind {
+  // Priority: High-altitude snow
+  if (elevation > 0.7) return "snow";
+
+  // High-altitude mountain rock
+  if (tileType === "mountain" && elevation > 0.5) return "rock";
+
+  switch (tileType) {
+    case "water":
+      return "water";
+    case "forest":
+      return "forest";
+    case "mountain":
+      return "mountain";
+    case "path":
+    case "bridge":
+      return "path";
+    case "ground":
+    default:
+      // Sandy ground at low elevations/moisture
+      if (elevation < 0.25 && moisture < 0.3) return "sand";
+      return "ground";
   }
-> = {
-  ground: { roughness: 0.88, metalness: 0.02, detailScale: 0.9, albedoVar: 0.08, roughVar: 0.18, slopeAO: 0.12 },
-  forest: { roughness: 0.95, metalness: 0.01, detailScale: 0.8, albedoVar: 0.1, roughVar: 0.2, slopeAO: 0.05 },
-  mountain: { roughness: 0.8, metalness: 0.05, detailScale: 1.1, albedoVar: 0.12, roughVar: 0.25, slopeAO: 0.3 },
-  snow: { roughness: 0.9, metalness: 0.0, detailScale: 0.7, albedoVar: 0.05, roughVar: 0.1, slopeAO: 0.1 },
-  water: { roughness: 0.15, metalness: 0.6, detailScale: 1.0, albedoVar: 0.05, roughVar: 0.05, slopeAO: 0.0 },
-  path: { roughness: 0.85, metalness: 0.03, detailScale: 0.9, albedoVar: 0.08, roughVar: 0.15, slopeAO: 0.05 },
-  rock: { roughness: 0.75, metalness: 0.08, detailScale: 1.2, albedoVar: 0.15, roughVar: 0.3, slopeAO: 0.4 },
-  sand: { roughness: 0.92, metalness: 0.01, detailScale: 0.8, albedoVar: 0.05, roughVar: 0.12, slopeAO: 0.05 },
-  // Added riverbed
-  riverbed: { roughness: 0.65, metalness: 0.1, detailScale: 1.0, albedoVar: 0.05, roughVar: 0.15, slopeAO: 0.2 },
+}
+
+/**
+ * High-contrast palettes for UI and 3D rendering
+ */
+export const MATERIAL_PALETTES: Record<MaterialKind, { base: string; accent: string; dark: string; light: string }> = {
+  ground: { base: "#8b7355", accent: "#a08060", dark: "#5a4a35", light: "#c4a882" },
+  forest: { base: "#2d5a28", accent: "#3d7a38", dark: "#152814", light: "#5dad48" },
+  mountain: { base: "#6a6872", accent: "#8a8895", dark: "#3a3842", light: "#a5a3b0" },
+  snow: { base: "#e8eaf0", accent: "#f5f7ff", dark: "#b8c0d5", light: "#ffffff" },
+  water: { base: "#2a5a7a", accent: "#3a7a9a", dark: "#183448", light: "#5aadca" },
+  path: { base: "#9a8a70", accent: "#b5a590", dark: "#6a5a40", light: "#d5c5a5" },
+  rock: { base: "#7a7a7a", accent: "#9a9a9a", dark: "#4a4a4a", light: "#bababa" },
+  sand: { base: "#d4b870", accent: "#e4c890", dark: "#a48850", light: "#f4e0a0" },
+  riverbed: { base: "#484232", accent: "#3a3528", dark: "#2a261a", light: "#5a5342" },
 };
 
-// 3. Sorting Logic (Fixes Error at line 147)
-// Inside your useMemo for cellGroups:
-const cellGroups: Record<MaterialKind, any[]> = {
-  ground: [],
-  forest: [],
-  mountain: [],
-  snow: [],
-  water: [],
-  path: [],
-  rock: [],
-  sand: [],
-  riverbed: [], // Added riverbed list
-};
+// --- Cache Management ---
+const textureCache = new Map<string, TextureSet>();
+
+export function getCachedTexture(hash: string): TextureSet | undefined {
+  return textureCache.get(hash);
+}
+
+export function setCachedTexture(hash: string, texture: TextureSet): void {
+  if (textureCache.size > 50) {
+    const firstKey = textureCache.keys().next().value;
+    if (firstKey) textureCache.delete(firstKey);
+  }
+  textureCache.set(hash, texture);
+}
+
+export function clearTextureCache(): void {
+  textureCache.clear();
+}
