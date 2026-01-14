@@ -1,11 +1,11 @@
-// EnhancedWaterPlane.tsx - Frontierra Conformal Ribbon Version
-// FIXED: Vertex Welding for continuous flow and Relative Height Pinning for mountains.
+// EnhancedWaterPlane.tsx - Frontierra Final Conformal Version
+// FIXED: Absolute pinning to riverSurface and vertex welding for continuous flow.
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { WorldData } from "@/lib/worldData";
-import { WORLD_HEIGHT_SCALE } from "@/lib/worldConstants";
+import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET } from "@/lib/worldConstants";
 import { getTimeOfDay, isNight } from "@/lib/timeOfDay";
 import { WORLD_A_ID } from "@/lib/worldContext";
 
@@ -22,32 +22,34 @@ const WATER_COLORS = {
 };
 
 export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = true }: EnhancedWaterPlaneProps) {
-  const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const heightScale = WORLD_HEIGHT_SCALE;
 
+  const waterLevel = getWaterLevel(world.vars);
+  const waterHeight = waterLevel * heightScale;
+  // This MUST match the riverSurface in SmoothTerrainMesh.tsx
+  const riverSurface = waterHeight - RIVER_DEPTH_OFFSET * 0.5;
+
   const night = isNight(getTimeOfDay({ worldId: WORLD_A_ID, worldX, worldY }));
 
-  // 1. GENERATE CONFORMAL GEOMETRY (The Ribbon Builder)
+  // 1. GENERATE WELDED GEOMETRY
   const geometry = useMemo(() => {
     const size = world.gridSize;
     const positions: number[] = [];
     const uvs: number[] = [];
     const indices: number[] = [];
-
-    // Vertex Map for welding: Ensures shared edges between quads are perfectly smooth
     const vertexMap = new Map<string, number>();
 
     const addVertex = (vx: number, vy: number, vh: number) => {
-      // Key includes height to ensure mountain slopes weld correctly
-      const key = `${vx},${vy},${vh.toFixed(3)}`;
+      // Key by coordinate only; height is determined by the surface type
+      const key = `${vx},${vy}`;
       if (vertexMap.has(key)) return vertexMap.get(key)!;
 
       const idx = positions.length / 3;
       positions.push(vx, vh, vy);
 
-      // Global UVs for seamless wave movement across chunks
-      uvs.push((vx + worldX * (size - 1)) * 0.15, (vy + worldY * (size - 1)) * 0.15);
+      // Global UVs for seamless world-space texture flow
+      uvs.push((vx + worldX * (size - 1)) * 0.12, (vy + worldY * (size - 1)) * 0.12);
 
       vertexMap.set(key, idx);
       return idx;
@@ -58,19 +60,17 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
         const flippedY = size - 1 - y;
         const cell = world.terrain[flippedY]?.[x];
 
-        // Only draw geometry where the world data says there is water or a river
         if (cell?.hasRiver || cell?.type === "water") {
-          // RELATIVE PINNING: Sits exactly 0.1 units above the -0.3 terrain carve
-          const waterHeight = cell.elevation * heightScale - 0.2;
+          // PINNING: Use absolute heights, not relative-to-mountain heights.
+          // This prevents water from "climbing" mountains.
+          const h = cell.hasRiver ? riverSurface : waterHeight;
 
-          const v00 = addVertex(x, y, waterHeight);
-          const v10 = addVertex(x + 1, y, waterHeight);
-          const v01 = addVertex(x, y + 1, waterHeight);
-          const v11 = addVertex(x + 1, y + 1, waterHeight);
+          const v00 = addVertex(x, y, h);
+          const v10 = addVertex(x + 1, y, h);
+          const v01 = addVertex(x, y + 1, h);
+          const v11 = addVertex(x + 1, y + 1, h);
 
-          // Triangle 1
           indices.push(v00, v01, v10);
-          // Triangle 2
           indices.push(v01, v11, v10);
         }
       }
@@ -82,24 +82,22 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     geo.setIndex(indices);
     geo.computeVertexNormals();
     return geo;
-  }, [world, heightScale, worldX, worldY]);
+  }, [world, heightScale, riverSurface, waterHeight, worldX, worldY]);
 
-  // 2. SHADER MATERIAL (Fresnel + Global World-Space Waves)
+  // 2. DETEMINISTIC SHADER
   const shaderMaterial = useMemo(() => {
     const colors = night ? WATER_COLORS.night : WATER_COLORS.day;
 
-    return new THREE.ShaderMaterial({
+    const mat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
         uShallowColor: { value: colors.shallow },
         uDeepColor: { value: colors.deep },
-        uOpacity: { value: night ? 0.8 : 0.7 },
+        uOpacity: { value: night ? 0.85 : 0.75 },
       },
       vertexShader: `
         varying vec3 vWorldPosition;
-        varying vec2 vUv;
         void main() {
-          vUv = uv;
           vec4 worldPos = modelMatrix * vec4(position, 1.0);
           vWorldPosition = worldPos.xyz;
           gl_Position = projectionMatrix * viewMatrix * worldPos;
@@ -111,12 +109,8 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
         uniform vec3 uDeepColor;
         uniform float uOpacity;
         varying vec3 vWorldPosition;
-        varying vec2 vUv;
 
-        float hash(vec2 p) {
-          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-        }
-
+        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
         float noise(vec2 p) {
           vec2 i = floor(p); vec2 f = fract(p);
           f = f * f * (3.0 - 2.0 * f);
@@ -125,25 +119,25 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
         }
 
         void main() {
-          // Waves tied to global world coordinates (prevents tiling seams)
           float t = uTime * 0.5;
-          float w1 = noise(vWorldPosition.xz * 1.5 + t);
-          float w2 = noise(vWorldPosition.xz * 2.5 - t * 0.6);
+          float w1 = noise(vWorldPosition.xz * 1.2 + t);
+          float w2 = noise(vWorldPosition.xz * 2.0 - t * 0.4);
           float combined = (w1 + w2) * 0.5;
 
-          vec3 finalColor = mix(uDeepColor, uShallowColor, combined);
+          vec3 color = mix(uDeepColor, uShallowColor, combined);
           
-          // Specular shimmer
-          float spec = pow(combined, 12.0) * 0.4;
-          finalColor += spec;
-
-          gl_FragColor = vec4(finalColor, uOpacity);
+          // Specular highlight
+          float spec = pow(combined, 10.0) * 0.3;
+          gl_FragColor = vec4(color + spec, uOpacity);
         }
       `,
       transparent: true,
       side: THREE.DoubleSide,
-      depthWrite: false,
+      depthWrite: false, // Prevents Z-fighting artifacts on edges
     });
+
+    materialRef.current = mat; // Direct assignment in useMemo for useFrame access
+    return mat;
   }, [night]);
 
   useFrame((state, delta) => {
@@ -153,17 +147,11 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   });
 
   useEffect(() => {
-    return () => geometry.dispose();
-  }, [geometry]);
+    return () => {
+      geometry.dispose();
+      shaderMaterial.dispose();
+    };
+  }, [geometry, shaderMaterial]);
 
-  return (
-    <mesh
-      ref={meshRef}
-      geometry={geometry}
-      material={shaderMaterial}
-      onBeforeRender={() => {
-        materialRef.current = shaderMaterial;
-      }}
-    />
-  );
+  return <mesh geometry={geometry} material={shaderMaterial} />;
 }
