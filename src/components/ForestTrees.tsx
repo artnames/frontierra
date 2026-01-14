@@ -21,6 +21,9 @@ const VegetationRichnessContext = createContext(false);
 // Context to provide procedural textures to vegetation (when richness is enabled)
 const VegetationTexturesContext = createContext<Map<MaterialKind, THREE.CanvasTexture> | null>(null);
 
+// Context to pass shadow settings to all vegetation components
+const VegetationShadowContext = createContext(false);
+
 // Vegetation types enum for variety
 type VegetationType = 'pine' | 'deciduous' | 'bush' | 'birch' | 'willow' | 'deadTree' | 'flower' | 'rock' | 'grassClump' | 'mushroom' | 'fern';
 
@@ -209,11 +212,13 @@ export function ForestTrees({ world, useRichMaterials = false, worldX = 0, world
   return (
     <VegetationRichnessContext.Provider value={useRichMaterials}>
       <VegetationTexturesContext.Provider value={useRichMaterials && isReady ? textures : null}>
-        <group>
-          {vegetation.map((item, i) => (
-            <Vegetation key={i} {...item} />
-          ))}
-        </group>
+        <VegetationShadowContext.Provider value={shadowsEnabled}>
+          <group>
+            {vegetation.map((item, i) => (
+              <Vegetation key={i} {...item} seed={world.seed} />
+            ))}
+          </group>
+        </VegetationShadowContext.Provider>
       </VegetationTexturesContext.Provider>
     </VegetationRichnessContext.Provider>
   );
@@ -225,35 +230,44 @@ const TREE_GROUND_OFFSET = -0.35; // Trees sink deeper into ground for slope sta
 const SMALL_VEG_GROUND_OFFSET = -0.12; // Small plants also need more offset on slopes
 
 // Main vegetation component that renders the appropriate type
-function Vegetation({ x, y, z, scale, type, colorVariant, rotation }: VegetationItem) {
+function Vegetation({ x, y, z, scale, type, colorVariant, rotation, seed }: VegetationItem & { seed: number }) {
+  const shadowsEnabled = useContext(VegetationShadowContext);
+  
   // Apply ground offset based on vegetation type
   const isTree = ['pine', 'deciduous', 'birch', 'willow', 'deadTree'].includes(type);
   const groundOffset = isTree ? TREE_GROUND_OFFSET : SMALL_VEG_GROUND_OFFSET;
   const adjustedY = y + groundOffset;
   
+  // Contact shadow blob for trees (when shadows are enabled)
+  const contactShadow = isTree && shadowsEnabled ? (
+    <ContactShadowBlob x={x} y={adjustedY + 0.02} z={z} scale={scale} seed={seed} />
+  ) : null;
+  
+  const vegProps = { x, y: adjustedY, z, scale, colorVariant, rotation };
+  
   switch (type) {
     case 'pine':
-      return <PineTree x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <>{contactShadow}<PineTree {...vegProps} /></>;
     case 'deciduous':
-      return <DeciduousTree x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <>{contactShadow}<DeciduousTree {...vegProps} /></>;
     case 'bush':
-      return <Bush x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <Bush {...vegProps} />;
     case 'birch':
-      return <BirchTree x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <>{contactShadow}<BirchTree {...vegProps} /></>;
     case 'willow':
-      return <WillowTree x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <>{contactShadow}<WillowTree {...vegProps} /></>;
     case 'deadTree':
-      return <DeadTree x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <>{contactShadow}<DeadTree {...vegProps} /></>;
     case 'flower':
-      return <Flower x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <Flower {...vegProps} />;
     case 'rock':
-      return <Rock x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <Rock {...vegProps} />;
     case 'grassClump':
-      return <GrassClump x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <GrassClump {...vegProps} />;
     case 'mushroom':
-      return <Mushroom x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <Mushroom {...vegProps} />;
     case 'fern':
-      return <Fern x={x} y={adjustedY} z={z} scale={scale} colorVariant={colorVariant} rotation={rotation} />;
+      return <Fern {...vegProps} />;
     default:
       return null;
   }
@@ -266,6 +280,21 @@ interface VegProps {
   scale: number;
   colorVariant: number;
   rotation: number;
+}
+
+// Deterministic contact shadow blob under trees for grounding
+function ContactShadowBlob({ x, y, z, scale, seed }: { x: number; y: number; z: number; scale: number; seed: number }) {
+  // Deterministic size/opacity variation
+  const sizeVariation = seededRandom(x * 17, z * 31, seed + 777);
+  const radius = 0.3 * scale * (0.8 + sizeVariation * 0.4);
+  const opacity = 0.12 + sizeVariation * 0.1; // 0.12-0.22 range
+  
+  return (
+    <mesh position={[x, y, z]} rotation={[-Math.PI / 2, 0, 0]}>
+      <circleGeometry args={[radius, 8]} />
+      <meshBasicMaterial color="#000000" transparent opacity={opacity} depthWrite={false} />
+    </mesh>
+  );
 }
 
 // Enhanced material component that uses MeshStandardMaterial when richness is enabled
@@ -310,24 +339,25 @@ function BarkMaterial({ color, isRich }: { color: string; isRich: boolean }) {
 // Pine tree - tall conifer
 function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
+  const shadows = useContext(VegetationShadowContext);
   const greenShift = Math.floor(colorVariant * 30) - 15;
   const baseGreen = 74 + greenShift;
   
   return (
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
-      <mesh position={[0, 0.4, 0]}>
+      <mesh position={[0, 0.4, 0]} castShadow={shadows} receiveShadow={shadows}>
         <cylinderGeometry args={[0.06, 0.1, 0.8, 6]} />
         <BarkMaterial color="#4a3020" isRich={isRich} />
       </mesh>
-      <mesh position={[0, 1.0, 0]}>
+      <mesh position={[0, 1.0, 0]} castShadow={shadows} receiveShadow={shadows}>
         <coneGeometry args={[0.4, 0.8, 6]} />
         <VegMaterial color={`rgb(26, ${baseGreen}, 26)`} isRich={isRich} />
       </mesh>
-      <mesh position={[0, 1.5, 0]}>
+      <mesh position={[0, 1.5, 0]} castShadow={shadows} receiveShadow={shadows}>
         <coneGeometry args={[0.3, 0.6, 6]} />
         <VegMaterial color={`rgb(31, ${baseGreen + 11}, 32)`} isRich={isRich} />
       </mesh>
-      <mesh position={[0, 1.9, 0]}>
+      <mesh position={[0, 1.9, 0]} castShadow={shadows} receiveShadow={shadows}>
         <coneGeometry args={[0.2, 0.5, 6]} />
         <VegMaterial color={`rgb(37, ${baseGreen + 22}, 40)`} isRich={isRich} />
       </mesh>
@@ -338,24 +368,25 @@ function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 // Deciduous tree - round leafy tree
 function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
+  const shadows = useContext(VegetationShadowContext);
   const greenShift = Math.floor(colorVariant * 40) - 20;
   const baseGreen = 90 + greenShift;
   
   return (
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
-      <mesh position={[0, 0.5, 0]}>
+      <mesh position={[0, 0.5, 0]} castShadow={shadows} receiveShadow={shadows}>
         <cylinderGeometry args={[0.08, 0.12, 1.0, 6]} />
         <BarkMaterial color="#3d2517" isRich={isRich} />
       </mesh>
-      <mesh position={[0, 1.4, 0]}>
+      <mesh position={[0, 1.4, 0]} castShadow={shadows} receiveShadow={shadows}>
         <sphereGeometry args={[0.55, 8, 6]} />
         <VegMaterial color={`rgb(42, ${baseGreen}, 37)`} isRich={isRich} />
       </mesh>
-      <mesh position={[0.25, 1.2, 0.15]}>
+      <mesh position={[0.25, 1.2, 0.15]} castShadow={shadows} receiveShadow={shadows}>
         <sphereGeometry args={[0.35, 6, 5]} />
         <VegMaterial color={`rgb(50, ${baseGreen + 11}, 48)`} isRich={isRich} />
       </mesh>
-      <mesh position={[-0.2, 1.3, -0.1]}>
+      <mesh position={[-0.2, 1.3, -0.1]} castShadow={shadows} receiveShadow={shadows}>
         <sphereGeometry args={[0.3, 6, 5]} />
         <VegMaterial color={`rgb(40, ${baseGreen - 5}, 34)`} isRich={isRich} />
       </mesh>
@@ -366,20 +397,21 @@ function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 // Bush - small shrub
 function Bush({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
+  const shadows = useContext(VegetationShadowContext);
   const greenShift = Math.floor(colorVariant * 35) - 15;
   const baseGreen = 106 + greenShift;
   
   return (
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
-      <mesh position={[0, 0.15, 0]}>
+      <mesh position={[0, 0.15, 0]} castShadow={shadows} receiveShadow={shadows}>
         <cylinderGeometry args={[0.03, 0.05, 0.3, 5]} />
         <BarkMaterial color="#5a4030" isRich={isRich} />
       </mesh>
-      <mesh position={[0, 0.4, 0]}>
+      <mesh position={[0, 0.4, 0]} castShadow={shadows} receiveShadow={shadows}>
         <sphereGeometry args={[0.3, 7, 5]} />
         <VegMaterial color={`rgb(58, ${baseGreen}, 53)`} isRich={isRich} />
       </mesh>
-      <mesh position={[0.12, 0.35, 0.08]}>
+      <mesh position={[0.12, 0.35, 0.08]} castShadow={shadows} receiveShadow={shadows}>
         <sphereGeometry args={[0.18, 5, 4]} />
         <VegMaterial color={`rgb(69, ${baseGreen + 6}, 64)`} isRich={isRich} />
       </mesh>
@@ -390,29 +422,30 @@ function Bush({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 // Birch tree - white bark, slender
 function BirchTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
+  const shadows = useContext(VegetationShadowContext);
   const greenShift = Math.floor(colorVariant * 30) - 10;
   const baseGreen = 140 + greenShift;
   
   return (
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
-      <mesh position={[0, 0.6, 0]}>
+      <mesh position={[0, 0.6, 0]} castShadow={shadows} receiveShadow={shadows}>
         <cylinderGeometry args={[0.05, 0.07, 1.2, 6]} />
         <BarkMaterial color="#e8e0d0" isRich={isRich} />
       </mesh>
       {/* Dark bark marks */}
-      <mesh position={[0.03, 0.4, 0.04]}>
+      <mesh position={[0.03, 0.4, 0.04]} castShadow={shadows}>
         <boxGeometry args={[0.02, 0.08, 0.01]} />
         <BarkMaterial color="#2a2a2a" isRich={isRich} />
       </mesh>
-      <mesh position={[-0.02, 0.7, -0.03]}>
+      <mesh position={[-0.02, 0.7, -0.03]} castShadow={shadows}>
         <boxGeometry args={[0.015, 0.06, 0.01]} />
         <BarkMaterial color="#3a3a3a" isRich={isRich} />
       </mesh>
-      <mesh position={[0, 1.4, 0]}>
+      <mesh position={[0, 1.4, 0]} castShadow={shadows} receiveShadow={shadows}>
         <sphereGeometry args={[0.45, 7, 6]} />
         <VegMaterial color={`rgb(100, ${baseGreen}, 60)`} isRich={isRich} />
       </mesh>
-      <mesh position={[0.2, 1.5, 0.1]}>
+      <mesh position={[0.2, 1.5, 0.1]} castShadow={shadows} receiveShadow={shadows}>
         <sphereGeometry args={[0.25, 6, 5]} />
         <VegMaterial color={`rgb(120, ${baseGreen + 15}, 70)`} isRich={isRich} />
       </mesh>
@@ -423,30 +456,31 @@ function BirchTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 // Willow tree - drooping branches
 function WillowTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
+  const shadows = useContext(VegetationShadowContext);
   const greenShift = Math.floor(colorVariant * 25);
   const baseGreen = 130 + greenShift;
   
   return (
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
-      <mesh position={[0, 0.5, 0]}>
+      <mesh position={[0, 0.5, 0]} castShadow={shadows} receiveShadow={shadows}>
         <cylinderGeometry args={[0.1, 0.15, 1.0, 6]} />
         <BarkMaterial color="#4a3828" isRich={isRich} />
       </mesh>
       {/* Drooping foliage */}
-      <mesh position={[0, 1.2, 0]}>
+      <mesh position={[0, 1.2, 0]} castShadow={shadows} receiveShadow={shadows}>
         <sphereGeometry args={[0.5, 8, 6]} />
         <VegMaterial color={`rgb(80, ${baseGreen}, 50)`} isRich={isRich} />
       </mesh>
       {/* Hanging branches */}
-      <mesh position={[0.35, 0.8, 0]}>
+      <mesh position={[0.35, 0.8, 0]} castShadow={shadows} receiveShadow={shadows}>
         <cylinderGeometry args={[0.15, 0.05, 0.8, 5]} />
         <VegMaterial color={`rgb(70, ${baseGreen - 10}, 45)`} isRich={isRich} />
       </mesh>
-      <mesh position={[-0.3, 0.75, 0.2]}>
+      <mesh position={[-0.3, 0.75, 0.2]} castShadow={shadows} receiveShadow={shadows}>
         <cylinderGeometry args={[0.12, 0.04, 0.7, 5]} />
         <VegMaterial color={`rgb(75, ${baseGreen - 5}, 48)`} isRich={isRich} />
       </mesh>
-      <mesh position={[0.1, 0.7, -0.35]}>
+      <mesh position={[0.1, 0.7, -0.35]} castShadow={shadows} receiveShadow={shadows}>
         <cylinderGeometry args={[0.1, 0.03, 0.6, 5]} />
         <VegMaterial color={`rgb(85, ${baseGreen + 5}, 55)`} isRich={isRich} />
       </mesh>
@@ -457,25 +491,26 @@ function WillowTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 // Dead tree - bare branches
 function DeadTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
+  const shadows = useContext(VegetationShadowContext);
   const grayShift = Math.floor(colorVariant * 20);
   const baseGray = 60 + grayShift;
   
   return (
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
-      <mesh position={[0, 0.5, 0]}>
+      <mesh position={[0, 0.5, 0]} castShadow={shadows} receiveShadow={shadows}>
         <cylinderGeometry args={[0.06, 0.1, 1.0, 5]} />
         <BarkMaterial color={`rgb(${baseGray}, ${baseGray - 10}, ${baseGray - 20})`} isRich={isRich} />
       </mesh>
       {/* Bare branches */}
-      <mesh position={[0.15, 0.9, 0]} rotation={[0, 0, -0.5]}>
+      <mesh position={[0.15, 0.9, 0]} rotation={[0, 0, -0.5]} castShadow={shadows}>
         <cylinderGeometry args={[0.02, 0.03, 0.4, 4]} />
         <BarkMaterial color={`rgb(${baseGray - 5}, ${baseGray - 15}, ${baseGray - 25})`} isRich={isRich} />
       </mesh>
-      <mesh position={[-0.12, 1.0, 0.05]} rotation={[0.2, 0, 0.6]}>
+      <mesh position={[-0.12, 1.0, 0.05]} rotation={[0.2, 0, 0.6]} castShadow={shadows}>
         <cylinderGeometry args={[0.015, 0.025, 0.35, 4]} />
         <BarkMaterial color={`rgb(${baseGray - 8}, ${baseGray - 18}, ${baseGray - 28})`} isRich={isRich} />
       </mesh>
-      <mesh position={[0.05, 1.1, -0.1]} rotation={[-0.3, 0, 0.2]}>
+      <mesh position={[0.05, 1.1, -0.1]} rotation={[-0.3, 0, 0.2]} castShadow={shadows}>
         <cylinderGeometry args={[0.01, 0.02, 0.25, 4]} />
         <BarkMaterial color={`rgb(${baseGray - 3}, ${baseGray - 13}, ${baseGray - 23})`} isRich={isRich} />
       </mesh>
@@ -483,9 +518,10 @@ function DeadTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   );
 }
 
-// Flower - colorful small plant
+// Flower - colorful small plant (receives shadows only, too small to cast meaningful shadows)
 function Flower({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
+  const shadows = useContext(VegetationShadowContext);
   // Different flower colors based on variant
   const flowerColors = [
     '#ff6b8a', // Pink
@@ -502,17 +538,17 @@ function Flower({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   return (
     <group position={[x, y, z]} scale={scale * 0.5} rotation={[0, rotation, 0]}>
       {/* Stem */}
-      <mesh position={[0, 0.15, 0]}>
+      <mesh position={[0, 0.15, 0]} receiveShadow={shadows}>
         <cylinderGeometry args={[0.015, 0.02, 0.3, 4]} />
         <VegMaterial color="#228b22" isRich={isRich} />
       </mesh>
       {/* Flower head */}
-      <mesh position={[0, 0.35, 0]}>
+      <mesh position={[0, 0.35, 0]} receiveShadow={shadows}>
         <sphereGeometry args={[0.08, 6, 5]} />
         <VegMaterial color={flowerColor} isRich={isRich} />
       </mesh>
       {/* Center */}
-      <mesh position={[0, 0.38, 0.05]}>
+      <mesh position={[0, 0.38, 0.05]} receiveShadow={shadows}>
         <sphereGeometry args={[0.03, 4, 4]} />
         <VegMaterial color="#ffd700" isRich={isRich} />
       </mesh>
@@ -523,16 +559,17 @@ function Flower({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 // Rock - natural stone
 function Rock({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
+  const shadows = useContext(VegetationShadowContext);
   const grayBase = 90 + Math.floor(colorVariant * 40);
   
   return (
     <group position={[x, y, z]} scale={scale * 0.6} rotation={[0, rotation, colorVariant * 0.3]}>
-      <mesh position={[0, 0.12, 0]}>
+      <mesh position={[0, 0.12, 0]} castShadow={shadows} receiveShadow={shadows}>
         <dodecahedronGeometry args={[0.2, 0]} />
         <BarkMaterial color={`rgb(${grayBase}, ${grayBase - 5}, ${grayBase - 10})`} isRich={isRich} />
       </mesh>
       {colorVariant > 0.5 && (
-        <mesh position={[0.15, 0.08, 0.1]}>
+        <mesh position={[0.15, 0.08, 0.1]} castShadow={shadows} receiveShadow={shadows}>
           <dodecahedronGeometry args={[0.1, 0]} />
           <BarkMaterial color={`rgb(${grayBase - 15}, ${grayBase - 20}, ${grayBase - 25})`} isRich={isRich} />
         </mesh>
@@ -541,16 +578,17 @@ function Rock({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   );
 }
 
-// Grass clump - tall grass
+// Grass clump - tall grass (receives shadows only)
 function GrassClump({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
+  const shadows = useContext(VegetationShadowContext);
   const greenShift = Math.floor(colorVariant * 40) - 20;
   const baseGreen = 140 + greenShift;
   
   return (
     <group position={[x, y, z]} scale={scale * 0.4} rotation={[0, rotation, 0]}>
       {[0, 0.4, 0.8, 1.2, 1.6].map((angle, i) => (
-        <mesh key={i} position={[Math.sin(angle) * 0.05, 0.15 + i * 0.02, Math.cos(angle) * 0.05]} rotation={[0.1 - i * 0.02, angle, 0]}>
+        <mesh key={i} position={[Math.sin(angle) * 0.05, 0.15 + i * 0.02, Math.cos(angle) * 0.05]} rotation={[0.1 - i * 0.02, angle, 0]} receiveShadow={shadows}>
           <boxGeometry args={[0.02, 0.3 + colorVariant * 0.1, 0.005]} />
           <VegMaterial color={`rgb(${80 + i * 5}, ${baseGreen + i * 3}, ${50 + i * 3})`} isRich={isRich} />
         </mesh>
@@ -559,9 +597,10 @@ function GrassClump({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   );
 }
 
-// Mushroom - forest floor fungus
+// Mushroom - forest floor fungus (receives shadows only)
 function Mushroom({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
+  const shadows = useContext(VegetationShadowContext);
   const mushroomColors = [
     { cap: '#8b4513', spots: '#f5deb3' }, // Brown
     { cap: '#dc143c', spots: '#ffffff' }, // Red with white spots
@@ -574,23 +613,23 @@ function Mushroom({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   return (
     <group position={[x, y, z]} scale={scale * 0.3} rotation={[0, rotation, 0]}>
       {/* Stem */}
-      <mesh position={[0, 0.1, 0]}>
+      <mesh position={[0, 0.1, 0]} receiveShadow={shadows}>
         <cylinderGeometry args={[0.04, 0.05, 0.2, 6]} />
         <VegMaterial color="#f5f5dc" isRich={isRich} />
       </mesh>
       {/* Cap */}
-      <mesh position={[0, 0.22, 0]}>
+      <mesh position={[0, 0.22, 0]} receiveShadow={shadows}>
         <sphereGeometry args={[0.12, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2]} />
         <VegMaterial color={colors.cap} isRich={isRich} />
       </mesh>
       {/* Spots */}
       {colorVariant > 0.3 && (
         <>
-          <mesh position={[0.05, 0.28, 0.03]}>
+          <mesh position={[0.05, 0.28, 0.03]} receiveShadow={shadows}>
             <sphereGeometry args={[0.02, 4, 4]} />
             <VegMaterial color={colors.spots} isRich={isRich} />
           </mesh>
-          <mesh position={[-0.04, 0.26, -0.05]}>
+          <mesh position={[-0.04, 0.26, -0.05]} receiveShadow={shadows}>
             <sphereGeometry args={[0.015, 4, 4]} />
             <VegMaterial color={colors.spots} isRich={isRich} />
           </mesh>
@@ -600,9 +639,10 @@ function Mushroom({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   );
 }
 
-// Fern - forest understory plant
+// Fern - forest understory plant (receives shadows only)
 function Fern({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
+  const shadows = useContext(VegetationShadowContext);
   const greenShift = Math.floor(colorVariant * 30);
   const baseGreen = 120 + greenShift;
   
@@ -614,7 +654,7 @@ function Fern({ x, y, z, scale, colorVariant, rotation }: VegProps) {
         const tilt = 0.4 + colorVariant * 0.2;
         return (
           <group key={i} rotation={[tilt, angle, 0]}>
-            <mesh position={[0, 0.15, 0.1]}>
+            <mesh position={[0, 0.15, 0.1]} receiveShadow={shadows}>
               <boxGeometry args={[0.08, 0.02, 0.25]} />
               <VegMaterial color={`rgb(${50 + i * 5}, ${baseGreen + i * 2}, ${40 + i * 3})`} isRich={isRich} />
             </mesh>
