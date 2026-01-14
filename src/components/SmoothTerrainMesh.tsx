@@ -94,9 +94,9 @@ export function SmoothTerrainMesh({
 
     const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed) * 0.6;
 
-    const BANK_CARVE = 0.05;
-    const BED_MIN = 0.12;
-    const BED_MAX = 0.3;
+    const BANK_CARVE = 0.5;
+    const BED_MIN = 1.2;
+    const BED_MAX = 3;
 
     const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
     const carve = (isRiver ? bedCarve + bedNoise : BANK_CARVE) * mask;
