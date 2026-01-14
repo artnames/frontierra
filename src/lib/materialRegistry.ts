@@ -2,7 +2,7 @@
 // Uses @nexart/ui-renderer to generate procedural textures from deterministic inputs.
 // CRITICAL: No Math.random(), no Date, no network calls. All textures reproducible.
 
-export type MaterialKind = "ground" | "forest" | "mountain" | "snow" | "water" | "path" | "rock" | "sand";
+export type MaterialKind = "ground" | "forest" | "mountain" | "snow" | "water" | "path" | "rock" | "riverbed" | "sand";
 
 export interface MaterialContext {
   worldId: string;
@@ -79,12 +79,6 @@ export const MATERIAL_PALETTES: Record<MaterialKind, { base: string; accent: str
     accent: "#3d7a38",
     dark: "#152814", // Deep shadow green
     light: "#5dad48", // Bright canopy
-  },
-  riverbed: {
-    base: "#3b3328",
-    accent: "#4a4033",
-    dark: "#241f18",
-    light: "#6a5a45",
   },
   mountain: {
     base: "#6a6872", // Cool blue-grey rock
