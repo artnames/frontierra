@@ -12,7 +12,7 @@ export function getWaterLevel(vars: number[]): number {
 }
 
 // River depth below water level (in world units, not scaled)
-export const RIVER_DEPTH_OFFSET = 3;
+export const RIVER_DEPTH_OFFSET = 1.5;
 
 // Path max height above water (in world units, not scaled)
 export const PATH_HEIGHT_OFFSET = 0.8;
