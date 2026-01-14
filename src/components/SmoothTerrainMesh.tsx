@@ -153,19 +153,19 @@ export function SmoothTerrainMesh({
         const kind = cell ? getCellMaterialKind(cell) : "ground";
         let baseColor = BASE_COLORS[kind] || BASE_COLORS.ground;
 
-        // Wet tint: river + up to 2 tiles out get a bluish shift (deterministic)
         if (cell) {
           const mask = computeRiverMask(x, flippedY); // 0..1
           if (mask > 0) {
-            const waterC = BASE_COLORS.water;
+            // Darker than water so the transparent surface still pops
+            const wetBed = { r: 0.06, g: 0.14, b: 0.18 };
 
-            // river center more blue, banks slightly blue
-            const wet = Math.min(1, mask * 0.85);
+            // Keep subtle; center is stronger, banks weaker
+            const wet = Math.min(1, mask * 0.45);
 
             baseColor = {
-              r: baseColor.r * (1 - wet) + waterC.r * wet,
-              g: baseColor.g * (1 - wet) + waterC.g * wet,
-              b: baseColor.b * (1 - wet) + waterC.b * wet,
+              r: baseColor.r * (1 - wet) + wetBed.r * wet,
+              g: baseColor.g * (1 - wet) + wetBed.g * wet,
+              b: baseColor.b * (1 - wet) + wetBed.b * wet,
             };
           }
         }
