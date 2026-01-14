@@ -86,6 +86,12 @@ export const MATERIAL_PALETTES: Record<MaterialKind, { base: string; accent: str
     dark: "#3a3842", // Deep crevice
     light: "#a5a3b0", // Sunlit stone
   },
+  riverbed: {
+    base: "#3b3328",
+    accent: "#4a4033",
+    dark: "#241f18",
+    light: "#6a5a45",
+  },
   snow: {
     base: "#e8eaf0", // Blue-white snow
     accent: "#f5f7ff",
