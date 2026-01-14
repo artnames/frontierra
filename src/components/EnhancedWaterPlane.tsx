@@ -2,50 +2,13 @@ import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { WorldData, TerrainCell } from "@/lib/worldData";
-import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET } from "@/lib/worldConstants";
+import { WORLD_HEIGHT_SCALE, getWaterLevel } from "@/lib/worldConstants";
 
 interface EnhancedWaterPlaneProps {
   world: WorldData;
   worldX?: number;
   worldY?: number;
   animated?: boolean;
-}
-
-function microVar(x: number, y: number, seed: number) {
-  const n = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.1) * 43758.5453;
-  return (n - Math.floor(n)) * 0.15 - 0.075;
-}
-
-// Must match SmoothTerrainMesh’s carve logic (deterministic)
-function riverCarve(world: WorldData, x: number, y: number, fy: number, cell: TerrainCell) {
-  const isRiver = !!cell.hasRiver;
-
-  const left = world.terrain[fy]?.[x - 1];
-  const right = world.terrain[fy]?.[x + 1];
-  const up = world.terrain[fy - 1]?.[x];
-  const down = world.terrain[fy + 1]?.[x];
-
-  const nearRiver = isRiver || !!left?.hasRiver || !!right?.hasRiver || !!up?.hasRiver || !!down?.hasRiver;
-
-  if (!nearRiver) return 0;
-
-  const riverNeighbors =
-    (left?.hasRiver ? 1 : 0) + (right?.hasRiver ? 1 : 0) + (up?.hasRiver ? 1 : 0) + (down?.hasRiver ? 1 : 0);
-
-  const centerFactor = Math.min(1, riverNeighbors / 2);
-  const bedNoise = microVar(x * 3.1, y * 3.1, world.seed) * 0.6;
-
-  const BANK_CARVE = 0.05;
-  const BED_MIN = 0.12;
-  const BED_MAX = 0.3;
-
-  const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
-  const carve = isRiver ? bedCarve + bedNoise : BANK_CARVE;
-
-  const MIN_CARVE = isRiver ? 0.1 : 0.02;
-  const MAX_CARVE = isRiver ? 0.45 : 0.1;
-
-  return Math.min(MAX_CARVE, Math.max(MIN_CARVE, Math.max(0, carve)));
 }
 
 function buildWaterGeometry(
@@ -87,12 +50,11 @@ function buildWaterGeometry(
       const c = world.terrain[fy]?.[x];
       if (!c || !pickCell(c)) continue;
 
-      // compute per-vertex height from the vertex's own cell sample (stable + deterministic)
+      // per-vertex height from the vertex's own cell sample (stable + deterministic)
       const c00 = world.terrain[fy]?.[x];
       const c10 = world.terrain[fy]?.[x + 1];
       const c01 = world.terrain[fy - 1]?.[x];
       const c11 = world.terrain[fy - 1]?.[x + 1];
-
       if (!c00 || !c10 || !c01 || !c11) continue;
 
       const h00 = heightAtVertex(c00, x, y, fy);
@@ -108,9 +70,8 @@ function buildWaterGeometry(
       indices.push(v00, v01, v10);
       indices.push(v01, v11, v10);
 
-      // edge detection: if any neighbor cell in this quad isn’t water of this kind, mark edge
+      // edge detection
       const interior = isPicked(fy, x) && isPicked(fy, x + 1) && isPicked(fy - 1, x) && isPicked(fy - 1, x + 1);
-
       if (!interior) {
         edge[v00] = 0;
         edge[v10] = 0;
@@ -135,11 +96,10 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   const heightScale = WORLD_HEIGHT_SCALE;
   const waterHeight = getWaterLevel(world.vars) * heightScale;
 
+  // River water: rl = gl - 0.5 (your rule), with a tiny lift to avoid z-fighting.
   const riverGeo = useMemo(() => {
     const SURFACE_LIFT = 0.02;
-
-    // One consistent river surface (prevents “painted tile following terrain”)
-    const riverSurface = waterHeight - RIVER_DEPTH_OFFSET * 0.5;
+    const RIVER_SURFACE_OFFSET = 0.5; // rl = gl - 0.5
 
     return buildWaterGeometry(
       world,
@@ -147,16 +107,19 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       worldY,
       (c) => !!c.hasRiver,
       (cell) => {
-        // Don’t ever let river water sit ABOVE the local terrain (prevents “water climbing hills”)
-        const baseH = cell.elevation * heightScale;
-        const bankClearance = 0.01;
+        const gl = cell.elevation * heightScale;
+        const rl = gl - RIVER_SURFACE_OFFSET;
 
-        const surface = Math.min(riverSurface, baseH - bankClearance);
-        return surface + SURFACE_LIFT;
+        // Safety: never allow water to be above local ground (prevents “floating sheets” on banks)
+        const bankClearance = 0.01;
+        const clamped = Math.min(rl, gl - bankClearance);
+
+        return clamped + SURFACE_LIFT;
       },
     );
-  }, [world, worldX, worldY, heightScale, waterHeight]);
+  }, [world, worldX, worldY, heightScale]);
 
+  // Lakes/ocean: flat plane at waterHeight
   const lakeGeo = useMemo(() => {
     const SURFACE_LIFT = 0.02;
     return buildWaterGeometry(
@@ -164,7 +127,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       worldX,
       worldY,
       (c) => c.type === "water",
-      () => waterHeight + SURFACE_LIFT, // flat lakes/ocean
+      () => waterHeight + SURFACE_LIFT,
     );
   }, [world, worldX, worldY, waterHeight]);
 
@@ -213,8 +176,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
 
           vec3 col = mix(uDeep, uShallow, w);
 
-          // soften tile edge: edge vertices fade out slightly + get a little foam tint
-          float edgeFade = smoothstep(0.0, 1.0, vEdge); // 0 at boundary, 1 inside
+          float edgeFade = smoothstep(0.0, 1.0, vEdge);
           float a = uOpacity * mix(0.25, 1.0, edgeFade);
 
           float foam = (1.0 - edgeFade) * 0.18;
@@ -224,7 +186,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
         }
       `,
       transparent: true,
-      side: THREE.FrontSide, // IMPORTANT: avoids backface “sheets”
+      side: THREE.FrontSide,
       depthWrite: false,
     });
 
