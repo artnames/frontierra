@@ -123,7 +123,7 @@ export function SmoothTerrainMesh({
             // Carve profile (world height units)
             const BANK_CARVE = 0.05; // gentle bank dip
             const BED_MIN = 0.1; // shallow edge bed
-            const BED_MAX = 0.22; // deep center bed
+            const BED_MAX = 0.28; // deep center bed
             const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
 
             const carve = isRiver ? bedCarve + bedVar : BANK_CARVE;
@@ -132,7 +132,7 @@ export function SmoothTerrainMesh({
             // Soft constraints: avoid flattening everything to one plane
             if (isRiver) {
               // Let center be deeper than riverDepth; edges slightly higher
-              const softFloor = riverDepth - 0.08 - centerFactor * 0.06;
+              const softFloor = riverDepth - 0.12 - centerFactor * 0.06;
               const softCeil = riverDepth + 0.02;
               h = Math.max(h, softFloor);
               h = Math.min(h, softCeil);
