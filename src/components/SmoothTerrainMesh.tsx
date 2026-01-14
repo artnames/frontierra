@@ -22,7 +22,7 @@ const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
   mountain: { r: 0.45, g: 0.43, b: 0.42 },
   snow: { r: 0.95, g: 0.95, b: 1.0 },
   water: { r: 0.15, g: 0.35, b: 0.45 },
-  riverbed: { r: 0.1, g: 0.22, b: 0.3 },
+  riverbed: { r: 0.22, g: 0.26, b: 0.3 },
   path: { r: 0.58, g: 0.48, b: 0.35 },
   rock: { r: 0.42, g: 0.42, b: 0.42 },
   sand: { r: 0.76, g: 0.62, b: 0.38 },
