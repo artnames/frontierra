@@ -1,11 +1,11 @@
-// EnhancedWaterPlane - Frontierra Version
-// Fixed: Follows river paths, seamless waves, and correct ground alignment.
+// EnhancedWaterPlane - Frontierra Version 3.0
+// Fixes: Quad-bleed, floating sheets, and tiling blobs.
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { WorldData } from "@/lib/worldData";
-import { WORLD_HEIGHT_SCALE, getWaterLevel } from "@/lib/worldConstants";
+import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET } from "@/lib/worldConstants";
 import { getTimeOfDay, isNight } from "@/lib/timeOfDay";
 import { WORLD_A_ID } from "@/lib/worldContext";
 
@@ -16,88 +16,83 @@ interface EnhancedWaterPlaneProps {
   animated?: boolean;
 }
 
-const WATER_COLORS = {
-  day: { shallow: new THREE.Color(0.2, 0.5, 0.6), deep: new THREE.Color(0.05, 0.15, 0.25) },
-  night: { shallow: new THREE.Color(0.05, 0.1, 0.15), deep: new THREE.Color(0.01, 0.02, 0.05) },
-};
-
 export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = true }: EnhancedWaterPlaneProps) {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
-  const heightScale = WORLD_HEIGHT_SCALE;
-  const waterHeight = getWaterLevel(world.vars) * heightScale;
 
-  // 1. GENERATE GEOMETRY (Only where water actually is)
+  const heightScale = WORLD_HEIGHT_SCALE;
+  const waterLevel = getWaterLevel(world.vars);
+  const waterHeight = waterLevel * heightScale;
+  const riverDepth = waterHeight - RIVER_DEPTH_OFFSET * 0.5; // Sits slightly above the bed carving
+
+  // 1. GENERATE SELECTIVE GEOMETRY
   const geometry = useMemo(() => {
     const size = world.gridSize;
-    const positions = new Float32Array(size * size * 3);
-    const uvs = new Float32Array(size * size * 2);
+    const positions: number[] = [];
+    const uvs: number[] = [];
     const indices: number[] = [];
 
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const vi = y * size + x;
-        positions[vi * 3] = x;
-        positions[vi * 3 + 1] = 0; // Local Y is 0, we move the whole mesh to waterHeight
-        positions[vi * 3 + 2] = y;
+    // Map to keep track of added vertices to allow welding (sharing)
+    const vertexMap = new Map<string, number>();
 
-        // Global UVs for seamless wave animation across chunks
-        uvs[vi * 2] = (x + worldX * (size - 1)) * 0.1;
-        uvs[vi * 2 + 1] = (y + worldY * (size - 1)) * 0.1;
-      }
-    }
+    const addVertex = (x: number, y: number, height: number) => {
+      const key = `${x},${y},${height}`;
+      if (vertexMap.has(key)) return vertexMap.get(key)!;
+
+      const idx = positions.length / 3;
+      positions.push(x, height, y);
+
+      // Global UVs for seamless textures
+      uvs.push((x + worldX * (size - 1)) * 0.1, (y + worldY * (size - 1)) * 0.1);
+
+      vertexMap.set(key, idx);
+      return idx;
+    };
 
     for (let y = 0; y < size - 1; y++) {
       for (let x = 0; x < size - 1; x++) {
         const flippedY = size - 1 - y;
-        const c00 = world.terrain[flippedY]?.[x];
-        const c10 = world.terrain[flippedY]?.[x + 1];
-        const c01 = world.terrain[flippedY - 1]?.[x];
-        const c11 = world.terrain[flippedY - 1]?.[x + 1];
+        const cell = world.terrain[flippedY]?.[x];
 
-        // Only create triangles if one of the corners is water or river
-        if (
-          c00?.hasRiver ||
-          c00?.type === "water" ||
-          c10?.hasRiver ||
-          c10?.type === "water" ||
-          c01?.hasRiver ||
-          c01?.type === "water" ||
-          c11?.hasRiver ||
-          c11?.type === "water"
-        ) {
-          const v00 = y * size + x,
-            v10 = y * size + (x + 1),
-            v01 = (y + 1) * size + x,
-            v11 = (y + 1) * size + (x + 1);
-          indices.push(v00, v01, v10, v01, v11, v10);
+        // ONLY draw if this specific cell is water or river
+        if (cell?.hasRiver || cell?.type === "water") {
+          const h = cell.hasRiver ? riverDepth : waterHeight;
+          const epsilon = 0.01; // Tiny lift to prevent Z-fighting with bed
+
+          // Define corners for this cell quad
+          const v00 = addVertex(x, y, h + epsilon);
+          const v10 = addVertex(x + 1, y, h + epsilon);
+          const v01 = addVertex(x, y + 1, h + epsilon);
+          const v11 = addVertex(x + 1, y + 1, h + epsilon);
+
+          // Triangulate
+          indices.push(v00, v01, v10);
+          indices.push(v01, v11, v10);
         }
       }
     }
 
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
     geo.setIndex(indices);
+    geo.computeVertexNormals();
     return geo;
-  }, [world, worldX, worldY]);
+  }, [world, waterHeight, riverDepth, worldX, worldY]);
 
-  // 2. SHADER MATERIAL
+  // 2. SHADER MATERIAL (Removing the 'Chunk Blob' Logic)
   const shaderMaterial = useMemo(() => {
-    const colors = isNight(getTimeOfDay({ worldId: WORLD_A_ID, worldX, worldY }))
-      ? WATER_COLORS.night
-      : WATER_COLORS.day;
+    const isNightTime = isNight(getTimeOfDay({ worldId: WORLD_A_ID, worldX, worldY }));
+
     return new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uShallowColor: { value: colors.shallow },
-        uDeepColor: { value: colors.deep },
-        uOpacity: { value: 0.75 },
+        uDeepColor: { value: isNightTime ? new THREE.Color(0x020a10) : new THREE.Color(0x082540) },
+        uShallowColor: { value: isNightTime ? new THREE.Color(0x0a1a25) : new THREE.Color(0x206080) },
+        uOpacity: { value: isNightTime ? 0.85 : 0.7 },
       },
       vertexShader: `
-        varying vec2 vUv;
         varying vec3 vWorldPos;
         void main() {
-          vUv = uv;
           vec4 wp = modelMatrix * vec4(position, 1.0);
           vWorldPos = wp.xyz;
           gl_Position = projectionMatrix * viewMatrix * wp;
@@ -105,10 +100,9 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       `,
       fragmentShader: `
         uniform float uTime;
-        uniform vec3 uShallowColor;
         uniform vec3 uDeepColor;
+        uniform vec3 uShallowColor;
         uniform float uOpacity;
-        varying vec2 vUv;
         varying vec3 vWorldPos;
 
         float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
@@ -119,18 +113,20 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
         }
 
         void main() {
-          // Waves based on world position (seamless)
-          float n = noise(vWorldPos.xz * 1.5 + uTime * 0.5) * 0.5 + 0.5;
-          float n2 = noise(vWorldPos.xz * 2.5 - uTime * 0.3) * 0.5 + 0.5;
-          
-          // Mix colors based on noise for a "moving water" look
-          vec3 color = mix(uDeepColor, uShallowColor, n * n2);
-          
-          // Edge foam / highlight
-          float foam = smoothstep(0.7, 0.95, n * n2);
-          color += foam * 0.15;
+          // Deterministic World-Space Waves
+          float t = uTime * 0.4;
+          float w1 = noise(vWorldPos.xz * 0.8 + t);
+          float w2 = noise(vWorldPos.xz * 1.2 - t * 0.8);
+          float combined = (w1 + w2) * 0.5;
 
-          gl_FragColor = vec4(color, uOpacity);
+          // Subtle color variation based on wave height
+          vec3 finalColor = mix(uDeepColor, uShallowColor, combined);
+          
+          // Add a simple specular reflection
+          float spec = pow(combined, 4.0) * 0.2;
+          finalColor += spec;
+
+          gl_FragColor = vec4(finalColor, uOpacity);
         }
       `,
       transparent: true,
@@ -146,11 +142,5 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     return () => geometry.dispose();
   }, [geometry]);
 
-  return (
-    <mesh
-      geometry={geometry}
-      material={shaderMaterial}
-      position={[0, waterHeight + 0.02, 0]} // sits 0.02 above the "base" to prevent flickering
-    />
-  );
+  return <mesh ref={meshRef} geometry={geometry} material={shaderMaterial} />;
 }
