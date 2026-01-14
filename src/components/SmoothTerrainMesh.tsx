@@ -6,7 +6,7 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import { WorldData, TerrainCell } from "@/lib/worldData";
 import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET, PATH_HEIGHT_OFFSET } from "@/lib/worldConstants";
-import { MaterialKind, getMaterialKind } from "@/lib/materialRegistry";
+import { getMaterialKind } from "@/lib/materialRegistry";
 import { createTerrainPbrDetailMaterial } from "@/lib/terrainPbrMaterial";
 
 interface SmoothTerrainMeshProps {
@@ -17,17 +17,19 @@ interface SmoothTerrainMeshProps {
 }
 
 // Base colors per material kind (used for vertex colors)
-const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
+const BASE_COLORS = {
   ground: { r: 0.5, g: 0.44, b: 0.28 },
   forest: { r: 0.18, g: 0.35, b: 0.15 },
   mountain: { r: 0.45, g: 0.43, b: 0.42 },
   snow: { r: 0.95, g: 0.95, b: 1.0 },
   water: { r: 0.15, g: 0.35, b: 0.45 },
-  riverbed: { r: 0.28, g: 0.26, b: 0.2 }, // dark wet soil/rock
+  riverbed: { r: 0.28, g: 0.26, b: 0.2 }, // dark wet soil/rock (river bottom)
   path: { r: 0.58, g: 0.48, b: 0.35 },
   rock: { r: 0.42, g: 0.42, b: 0.42 },
   sand: { r: 0.76, g: 0.62, b: 0.38 },
-};
+} as const;
+
+type ColorKind = keyof typeof BASE_COLORS;
 
 // PBR tuning - subtle micro-detail
 const PBR_SETTINGS = {
@@ -45,15 +47,17 @@ function getMicroVariation(x: number, y: number, seed: number): number {
   return (n - Math.floor(n)) * 0.15 - 0.075; // ~[-0.075..0.075]
 }
 
-function getCellMaterialKind(cell: TerrainCell): MaterialKind {
-  // Lakes / oceans stay water
+function getCellColorKind(cell: TerrainCell): ColorKind {
+  // Lakes / oceans stay water (their surface may still be handled elsewhere)
   if (cell.type === "water") return "water";
 
-  // Rivers should read as carved riverbed. (Water surface is rendered separately.)
+  // Rivers should show a carved riverbed (water surface is rendered separately)
   if (cell.hasRiver) return "riverbed";
 
   if (cell.isPath || cell.isBridge || cell.type === "path" || cell.type === "bridge") return "path";
-  return getMaterialKind(cell.type, cell.elevation, cell.moisture);
+
+  const k = getMaterialKind(cell.type, cell.elevation, cell.moisture);
+  return k in BASE_COLORS ? (k as ColorKind) : "ground";
 }
 
 /**
@@ -65,7 +69,7 @@ export function SmoothTerrainMesh({
   worldX = 0,
   worldY = 0,
   microDetailEnabled = true,
-)}: SmoothTerrainMeshProps) {
+}: SmoothTerrainMeshProps) {
   const heightScale = WORLD_HEIGHT_SCALE;
   const waterLevel = getWaterLevel(world.vars);
   const waterHeight = waterLevel * heightScale;
@@ -118,20 +122,21 @@ export function SmoothTerrainMesh({
 
             // Subtle deterministic bed variation (prevents uniform trench)
             const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed);
-            const bedVar = bedNoise * 0.6;
+            const bedVar = bedNoise * 0.6; // small
 
             // Carve profile (world height units)
             const BANK_CARVE = 0.05; // gentle bank dip
             const BED_MIN = 0.1; // shallow edge bed
             const BED_MAX = 0.28; // deep center bed
-            const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
 
+            const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
             const carve = isRiver ? bedCarve + bedVar : BANK_CARVE;
+
             h -= carve;
 
-            // Soft constraints: avoid flattening everything to one plane
+            // Soft constraints: keep a real channel without collapsing to a single flat plane
             if (isRiver) {
-              // Let center be deeper than riverDepth; edges slightly higher
+              // Center can be deeper than riverDepth; edges slightly higher
               const softFloor = riverDepth - 0.12 - centerFactor * 0.06;
               const softCeil = riverDepth + 0.02;
               h = Math.max(h, softFloor);
@@ -150,9 +155,9 @@ export function SmoothTerrainMesh({
         positions[vi * 3 + 1] = h;
         positions[vi * 3 + 2] = y;
 
-        // Color based on material kind
-        const kind = cell ? getCellMaterialKind(cell) : "ground";
-        const baseColor = BASE_COLORS[kind] || BASE_COLORS.ground;
+        // Color based on kind
+        const kind: ColorKind = cell ? getCellColorKind(cell) : "ground";
+        const baseColor = BASE_COLORS[kind];
 
         const microVar = getMicroVariation(x, y, world.seed);
         const elevLight = 0.7 + (cell ? Math.pow(cell.elevation, 0.7) * 0.4 : 0) + microVar;
@@ -222,3 +227,6 @@ export function SmoothTerrainMesh({
 
   return <mesh geometry={geometry} material={material} receiveShadow />;
 }
+
+// Optional: allows default-import style too, without breaking named import.
+export default SmoothTerrainMesh;
