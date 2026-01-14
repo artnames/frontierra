@@ -1,5 +1,5 @@
-// TexturedTerrain.tsx
-// FIXED: Implementing Relative Carving and Exporting SimpleTerrainMesh
+// Textured Terrain - 3D terrain mesh with PBR materials and procedural micro-detail
+// FIXED: Exported SimpleTerrainMesh, added 'riverbed' properties, and implemented relative carving.
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
@@ -16,6 +16,7 @@ interface TexturedTerrainMeshProps {
   microDetailEnabled?: boolean;
 }
 
+// Added 'riverbed' to the MaterialKind registry
 const MATERIAL_KINDS: MaterialKind[] = [
   "ground",
   "forest",
@@ -28,6 +29,7 @@ const MATERIAL_KINDS: MaterialKind[] = [
   "riverbed",
 ];
 
+// UV scales per material (Fixed TS2741)
 const UV_SCALES: Record<MaterialKind, number> = {
   ground: 0.08,
   forest: 0.1,
@@ -40,6 +42,7 @@ const UV_SCALES: Record<MaterialKind, number> = {
   riverbed: 0.12,
 };
 
+// Base colors per material kind (Fixed TS2741)
 const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
   ground: { r: 0.5, g: 0.44, b: 0.28 },
   forest: { r: 0.18, g: 0.35, b: 0.15 },
@@ -52,24 +55,85 @@ const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
   riverbed: { r: 0.28, g: 0.26, b: 0.2 },
 };
 
+// PBR tuning per kind (Fixed TS2741)
 const PBR_PROPS: Record<
   MaterialKind,
-  { roughness: number; metalness: number; detailScale: number; albedoVar: number; roughVar: number; slopeAO: number }
+  {
+    roughness: number;
+    metalness: number;
+    transparent?: boolean;
+    opacity?: number;
+    detailScale: number;
+    albedoVar: number;
+    roughVar: number;
+    slopeAO: number;
+  }
 > = {
   ground: { roughness: 0.92, metalness: 0.02, detailScale: 0.9, albedoVar: 0.08, roughVar: 0.18, slopeAO: 0.12 },
   forest: { roughness: 0.94, metalness: 0.02, detailScale: 0.95, albedoVar: 0.07, roughVar: 0.16, slopeAO: 0.1 },
   mountain: { roughness: 0.8, metalness: 0.04, detailScale: 1.1, albedoVar: 0.08, roughVar: 0.22, slopeAO: 0.14 },
   snow: { roughness: 0.68, metalness: 0.01, detailScale: 0.7, albedoVar: 0.05, roughVar: 0.1, slopeAO: 0.06 },
-  water: { roughness: 0.22, metalness: 0.1, detailScale: 0.6, albedoVar: 0.03, roughVar: 0.08, slopeAO: 0.0 },
+  water: {
+    roughness: 0.22,
+    metalness: 0.1,
+    transparent: true,
+    opacity: 0.85,
+    detailScale: 0.6,
+    albedoVar: 0.03,
+    roughVar: 0.08,
+    slopeAO: 0.0,
+  },
   path: { roughness: 0.86, metalness: 0.03, detailScale: 1.25, albedoVar: 0.08, roughVar: 0.2, slopeAO: 0.1 },
   rock: { roughness: 0.78, metalness: 0.05, detailScale: 1.35, albedoVar: 0.09, roughVar: 0.25, slopeAO: 0.16 },
   sand: { roughness: 0.88, metalness: 0.01, detailScale: 0.85, albedoVar: 0.06, roughVar: 0.14, slopeAO: 0.08 },
   riverbed: { roughness: 0.65, metalness: 0.1, detailScale: 1.0, albedoVar: 0.05, roughVar: 0.15, slopeAO: 0.2 },
 };
 
+function getMicroVariation(x: number, y: number, seed: number): number {
+  const n = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.1) * 43758.5453;
+  return (n - Math.floor(n)) * 0.15 - 0.075;
+}
+
+function getTileColor(
+  type: TerrainCell["type"],
+  elevation: number,
+  moisture: number,
+  hasRiver: boolean,
+  isPath: boolean,
+  x: number,
+  y: number,
+  seed: number,
+): { r: number; g: number; b: number } {
+  const microVar = getMicroVariation(x, y, seed);
+  const brightness = 0.65 + microVar + Math.pow(elevation, 0.7) * 0.5;
+  const ao = 0.9 + elevation * 0.1;
+
+  if (hasRiver) {
+    const rc = BASE_COLORS.riverbed;
+    return { r: rc.r * brightness, g: rc.g * brightness, b: rc.b * brightness };
+  }
+
+  if (isPath && type !== "bridge") {
+    return {
+      r: (0.62 + microVar) * brightness * ao,
+      g: (0.52 + microVar) * brightness * ao,
+      b: (0.38 + microVar * 0.5) * brightness * ao,
+    };
+  }
+
+  const kind = getMaterialKind(type, elevation, moisture);
+  const fallback = BASE_COLORS[kind] || BASE_COLORS.ground;
+
+  return {
+    r: (fallback.r + microVar) * brightness * ao,
+    g: (fallback.g + microVar) * brightness * ao,
+    b: (fallback.b + microVar) * brightness * ao,
+  };
+}
+
 function getCellMaterialKind(cell: TerrainCell): MaterialKind {
   if (cell.hasRiver) return "riverbed";
-  if (cell.isPath || cell.isBridge) return "path";
+  if (cell.isPath || cell.isBridge || cell.type === "path" || cell.type === "bridge") return "path";
   return getMaterialKind(cell.type, cell.elevation, cell.moisture);
 }
 
@@ -77,6 +141,7 @@ export function TexturedTerrainMesh({
   world,
   worldX = 0,
   worldY = 0,
+  texturesEnabled = true,
   microDetailEnabled = true,
 }: TexturedTerrainMeshProps) {
   const heightScale = WORLD_HEIGHT_SCALE;
@@ -84,7 +149,8 @@ export function TexturedTerrainMesh({
 
   const geometriesPerKind = useMemo(() => {
     const size = world.gridSize;
-    const cellsByKind: Record<MaterialKind, any[]> = {
+    // Fixed TS2741 by adding riverbed
+    const cellsByKind: Record<MaterialKind, { x: number; y: number; cell: TerrainCell; height: number }[]> = {
       ground: [],
       forest: [],
       mountain: [],
@@ -96,21 +162,25 @@ export function TexturedTerrainMesh({
       riverbed: [],
     };
 
-    // Step 1: Compute heights with negative carving for rivers
     const heights: number[][] = [];
     for (let y = 0; y < size; y++) {
       heights[y] = [];
       for (let x = 0; x < size; x++) {
         const fY = size - 1 - y;
         const cell = world.terrain[fY]?.[x];
-        let h = (cell?.elevation || 0) * heightScale;
-        if (cell?.hasRiver) h -= 0.3; // Physical trench carving
-        if (cell?.isPath && !cell?.isBridge) h = Math.min(h, pathMaxHeight);
+        if (!cell) {
+          heights[y][x] = 0;
+          continue;
+        }
+
+        let h = cell.elevation * heightScale;
+        // RELATIVE CARVING: Physically drops ground into a trench
+        if (cell.hasRiver) h -= 0.3;
+        if (cell.isPath && !cell.isBridge) h = Math.min(h, pathMaxHeight);
         heights[y][x] = h;
       }
     }
 
-    // Step 2: Build Mesh
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const fY = size - 1 - y;
@@ -125,36 +195,87 @@ export function TexturedTerrainMesh({
     for (const kind of MATERIAL_KINDS) {
       const cells = cellsByKind[kind];
       if (cells.length === 0) continue;
-      const baseColor = BASE_COLORS[kind] || BASE_COLORS.ground;
-      const positions = new Float32Array(cells.length * 18);
-      const colors = new Float32Array(cells.length * 18);
-      const uvs = new Float32Array(cells.length * 12);
-      let vi = 0;
 
+      const uvScale = UV_SCALES[kind];
+      const baseColor = BASE_COLORS[kind] || BASE_COLORS.ground;
+      const vertCount = cells.length * 6;
+      const positions = new Float32Array(vertCount * 3);
+      const colors = new Float32Array(vertCount * 3);
+      const uvs = new Float32Array(vertCount * 2);
+
+      let vi = 0;
       for (const { x, y, height } of cells) {
         const h00 = height,
           h10 = heights[y]?.[x + 1] ?? height,
           h01 = heights[y + 1]?.[x] ?? height,
           h11 = heights[y + 1]?.[x + 1] ?? height;
-        const pts = [
-          [x, h00, y, 0, 0],
-          [x, h01, y + 1, 0, 1],
-          [x + 1, h10, y, 1, 0],
-          [x, h01, y + 1, 0, 1],
-          [x + 1, h11, y + 1, 1, 1],
-          [x + 1, h10, y, 1, 0],
-        ];
-        pts.forEach((p) => {
-          positions[vi * 3] = p[0];
-          positions[vi * 3 + 1] = p[1];
-          positions[vi * 3 + 2] = p[2];
-          colors[vi * 3] = baseColor.r;
-          colors[vi * 3 + 1] = baseColor.g;
-          colors[vi * 3 + 2] = baseColor.b;
-          uvs[vi * 2] = (x + worldX * (size - 1)) * 0.1;
-          uvs[vi * 2 + 1] = (y + worldY * (size - 1)) * 0.1;
-          vi++;
-        });
+        const microVar = getMicroVariation(x, y, world.seed);
+        const elevLight = 0.7 + Math.pow(cell.elevation, 0.7) * 0.4 + microVar;
+        const r = Math.min(1, baseColor.r * elevLight),
+          g = Math.min(1, baseColor.g * elevLight),
+          b = Math.min(1, baseColor.b * elevLight);
+
+        const wX = (x + worldX * (size - 1)) * uvScale,
+          wZ = (y + worldY * (size - 1)) * uvScale;
+        const wX1 = wX + uvScale,
+          wZ1 = wZ + uvScale;
+
+        // Triangle 1
+        positions[vi * 3] = x;
+        positions[vi * 3 + 1] = h00;
+        positions[vi * 3 + 2] = y;
+        colors[vi * 3] = r;
+        colors[vi * 3 + 1] = g;
+        colors[vi * 3 + 2] = b;
+        uvs[vi * 2] = wX;
+        uvs[vi * 2 + 1] = wZ;
+        vi++;
+        positions[vi * 3] = x;
+        positions[vi * 3 + 1] = h01;
+        positions[vi * 3 + 2] = y + 1;
+        colors[vi * 3] = r;
+        colors[vi * 3 + 1] = g;
+        colors[vi * 3 + 2] = b;
+        uvs[vi * 2] = wX;
+        uvs[vi * 2 + 1] = wZ1;
+        vi++;
+        positions[vi * 3] = x + 1;
+        positions[vi * 3 + 1] = h10;
+        positions[vi * 3 + 2] = y;
+        colors[vi * 3] = r;
+        colors[vi * 3 + 1] = g;
+        colors[vi * 3 + 2] = b;
+        uvs[vi * 2] = wX1;
+        uvs[vi * 2 + 1] = wZ;
+        vi++;
+        // Triangle 2
+        positions[vi * 3] = x;
+        positions[vi * 3 + 1] = h01;
+        positions[vi * 3 + 2] = y + 1;
+        colors[vi * 3] = r;
+        colors[vi * 3 + 1] = g;
+        colors[vi * 3 + 2] = b;
+        uvs[vi * 2] = wX;
+        uvs[vi * 2 + 1] = wZ1;
+        vi++;
+        positions[vi * 3] = x + 1;
+        positions[vi * 3 + 1] = h11;
+        positions[vi * 3 + 2] = y + 1;
+        colors[vi * 3] = r;
+        colors[vi * 3 + 1] = g;
+        colors[vi * 3 + 2] = b;
+        uvs[vi * 2] = wX1;
+        uvs[vi * 2 + 1] = wZ1;
+        vi++;
+        positions[vi * 3] = x + 1;
+        positions[vi * 3 + 1] = h10;
+        positions[vi * 3 + 2] = y;
+        colors[vi * 3] = r;
+        colors[vi * 3 + 1] = g;
+        colors[vi * 3 + 2] = b;
+        uvs[vi * 2] = wX1;
+        uvs[vi * 2 + 1] = wZ;
+        vi++;
       }
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -168,6 +289,7 @@ export function TexturedTerrainMesh({
 
   const materialsPerKind = useMemo(() => {
     const mats: Map<MaterialKind, THREE.MeshStandardMaterial> = new Map();
+    const worldOffset = new THREE.Vector2(worldX * (world.gridSize - 1), worldY * (world.gridSize - 1));
     for (const kind of MATERIAL_KINDS) {
       if (!geometriesPerKind.has(kind)) continue;
       const pbr = PBR_PROPS[kind];
@@ -177,19 +299,22 @@ export function TexturedTerrainMesh({
           detailTexture: null,
           textureInfluence: 0,
           microDetailEnabled,
-          worldOffset: new THREE.Vector2(worldX * (world.gridSize - 1), worldY * (world.gridSize - 1)),
+          worldOffset,
           detailScale: pbr.detailScale,
           albedoVariation: pbr.albedoVar,
           roughnessVariation: pbr.roughVar,
           slopeAO: pbr.slopeAO,
           baseRoughness: pbr.roughness,
           baseMetalness: pbr.metalness,
+          transparent: pbr.transparent,
+          opacity: pbr.opacity,
         }),
       );
     }
     return mats;
   }, [geometriesPerKind, microDetailEnabled, worldX, worldY, world.gridSize]);
 
+  // Cleanup to prevent memory leaks in open world
   useEffect(() => {
     return () => {
       geometriesPerKind.forEach((g) => g.dispose());
@@ -206,15 +331,91 @@ export function TexturedTerrainMesh({
   );
 }
 
-export function SimpleTerrainMesh({
-  world,
-  worldX = 0,
-  worldY = 0,
-}: {
+// FIXED: Exported SimpleTerrainMesh and updated Props to resolve TS2305/TS2322
+export interface SimpleTerrainMeshProps {
   world: WorldData;
+  microDetailEnabled?: boolean;
+  fogEnabled?: boolean;
   worldX?: number;
   worldY?: number;
-}) {
-  // Same height logic as above but simplified for fallback
-  return <TexturedTerrainMesh world={world} worldX={worldX} worldY={worldY} microDetailEnabled={false} />;
+}
+
+export function SimpleTerrainMesh({
+  world,
+  microDetailEnabled = true,
+  fogEnabled = true,
+  worldX = 0,
+  worldY = 0,
+}: SimpleTerrainMeshProps) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const heightScale = WORLD_HEIGHT_SCALE;
+  const pathMaxHeight = getWaterLevel(world.vars) * heightScale + PATH_HEIGHT_OFFSET;
+
+  const geometry = useMemo(() => {
+    const size = world.gridSize;
+    const heights: number[][] = [];
+    for (let y = 0; y < size; y++) {
+      heights[y] = [];
+      for (let x = 0; x < size; x++) {
+        const fY = size - 1 - y;
+        const cell = world.terrain[fY]?.[x];
+        if (!cell) {
+          heights[y][x] = 0;
+          continue;
+        }
+        let h = cell.elevation * heightScale;
+        if (cell.hasRiver) h -= 0.3; // Relative Carving sync
+        if (cell.isPath && !cell.isBridge) h = Math.min(h, pathMaxHeight);
+        heights[y][x] = h;
+      }
+    }
+
+    const cellCount = (size - 1) * (size - 1);
+    const positions = new Float32Array(cellCount * 18);
+    const colors = new Float32Array(cellCount * 18);
+
+    let vi = 0;
+    for (let y = 0; y < size - 1; y++) {
+      for (let x = 0; x < size - 1; x++) {
+        const flippedY = size - 1 - y;
+        const cell = world.terrain[flippedY]?.[x];
+        const h00 = heights[y][x],
+          h10 = heights[y][x + 1],
+          h01 = heights[y + 1]?.[x] ?? h00,
+          h11 = heights[y + 1]?.[x + 1] ?? h10;
+        const { r, g, b } = cell
+          ? getTileColor(cell.type, cell.elevation, cell.moisture, cell.hasRiver, cell.isPath, x, flippedY, world.seed)
+          : { r: 0.5, g: 0.5, b: 0.5 };
+
+        const pts = [
+          [x, h00, y],
+          [x, h01, y + 1],
+          [x + 1, h10, y],
+          [x, h01, y + 1],
+          [x + 1, h11, y + 1],
+          [x + 1, h10, y],
+        ];
+        pts.forEach((p) => {
+          positions[vi * 3] = p[0];
+          positions[vi * 3 + 1] = p[1];
+          positions[vi * 3 + 2] = p[2];
+          colors[vi * 3] = r;
+          colors[vi * 3 + 1] = g;
+          colors[vi * 3 + 2] = b;
+          vi++;
+        });
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }, [world, heightScale, pathMaxHeight]);
+
+  return (
+    <mesh ref={meshRef} geometry={geometry} receiveShadow>
+      <meshStandardMaterial vertexColors side={THREE.DoubleSide} roughness={0.85} metalness={0.05} />
+    </mesh>
+  );
 }
