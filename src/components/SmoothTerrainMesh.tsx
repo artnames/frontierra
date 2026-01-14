@@ -5,7 +5,7 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import { WorldData, TerrainCell } from "@/lib/worldData";
-import { WORLD_HEIGHT_SCALE, getWaterLevel, PATH_HEIGHT_OFFSET } from "@/lib/worldConstants";
+import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET, PATH_HEIGHT_OFFSET } from "@/lib/worldConstants";
 import { MaterialKind, getMaterialKind } from "@/lib/materialRegistry";
 import { createTerrainPbrDetailMaterial } from "@/lib/terrainPbrMaterial";
 
@@ -22,7 +22,7 @@ const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
   mountain: { r: 0.45, g: 0.43, b: 0.42 },
   snow: { r: 0.95, g: 0.95, b: 1.0 },
   water: { r: 0.15, g: 0.35, b: 0.45 },
-  riverbed: { r: 0.28, g: 0.26, b: 0.2 },
+  riverbed: { r: 0.1, g: 0.22, b: 0.3 },
   path: { r: 0.58, g: 0.48, b: 0.35 },
   rock: { r: 0.42, g: 0.42, b: 0.42 },
   sand: { r: 0.76, g: 0.62, b: 0.38 },
@@ -58,11 +58,13 @@ export function SmoothTerrainMesh({
   const heightScale = WORLD_HEIGHT_SCALE;
   const waterLevel = getWaterLevel(world.vars);
   const waterHeight = waterLevel * heightScale;
+
   const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
 
-  // Deterministic 0..1 mask around the river (radius 2).
-  // 1 = river center, 0.6 = adjacent, 0.25 = 2 tiles away, 0 = outside.
+  // Deterministic river carve amount (world units), computed from local context only.
   const computeRiverMask = (x: number, flippedY: number) => {
+    // 0..1 mask based on distance (radius 2). Deterministic.
+    // 1 = river center, ~0.6 = adjacent, ~0.25 = 2 tiles away, 0 = outside.
     let best = 0;
 
     for (let dy = -2; dy <= 2; dy++) {
@@ -73,13 +75,33 @@ export function SmoothTerrainMesh({
         const c = row[x + dx];
         if (!c?.hasRiver) continue;
 
-        const d = Math.max(Math.abs(dx), Math.abs(dy)); // Chebyshev distance
+        const d = Math.max(Math.abs(dx), Math.abs(dy)); // Chebyshev distance (cheap)
         const w = d === 0 ? 1 : d === 1 ? 0.6 : 0.25;
         if (w > best) best = w;
       }
     }
 
-    return best;
+    return best; // 0..1
+  };
+
+  const computeRiverCarve = (x: number, y: number, flippedY: number, cell: TerrainCell) => {
+    const isRiver = !!cell.hasRiver;
+    const mask = computeRiverMask(x, flippedY);
+    if (mask <= 0) return 0;
+
+    // deep in center, shallow at banks
+    const centerFactor = isRiver ? 1 : mask; // center tiles get full depth
+
+    const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed) * 0.6;
+
+    const BANK_CARVE = 0.05;
+    const BED_MIN = 0.12;
+    const BED_MAX = 0.3;
+
+    const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
+    const carve = (isRiver ? bedCarve + bedNoise : BANK_CARVE) * mask;
+
+    return Math.max(0, carve);
   };
 
   const geometry = useMemo(() => {
@@ -93,10 +115,6 @@ export function SmoothTerrainMesh({
     const uvs = new Float32Array(vertCount * 2);
     const indices = new Uint32Array(indexCount);
 
-    // Your rule depths (world units)
-    const RIVER_BED_DEPTH = 1.0; // rb = gl - 1
-    const BANK_DIP = 0.25; // shallow bank ring dip
-
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const vi = y * size + x;
@@ -106,21 +124,23 @@ export function SmoothTerrainMesh({
         let h = 0;
 
         if (cell) {
-          const gl = cell.elevation * heightScale; // ground level at this vertex
-          h = gl;
+          const baseH = cell.elevation * heightScale;
+          h = baseH;
 
-          // Apply river carving ONLY once (no second overwrite)
-          const mask = computeRiverMask(x, flippedY);
+          // Carve riverbed relative to baseH only (cannot ever go above baseH)
+          const carve = computeRiverCarve(x, y, flippedY, cell);
 
-          if (cell.hasRiver) {
-            // River bed: gl - 1
-            h = gl - RIVER_BED_DEPTH;
-          } else if (mask > 0) {
-            // Bank ring: small dip proportional to mask (prevents harsh “trench edge”)
-            h = gl - BANK_DIP * mask;
+          if (carve > 0) {
+            const isRiver = !!cell.hasRiver;
+
+            // Ensure visible but bounded carve (still relative to baseH)
+            const MIN_CARVE = isRiver ? 0.1 : 0.02;
+            const MAX_CARVE = isRiver ? 0.45 : 0.1;
+
+            const clampedCarve = Math.min(MAX_CARVE, Math.max(MIN_CARVE, carve));
+            h = baseH - clampedCarve;
           }
 
-          // Paths should not float above their max height (keep your original behavior)
           if (cell.isPath && !cell.isBridge) {
             h = Math.min(h, pathMaxHeight);
           }
