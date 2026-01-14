@@ -128,7 +128,7 @@ export function SmoothTerrainMesh({
           h = baseH;
 
           // Carve riverbed relative to baseH only (cannot ever go above baseH)
-          const carve = computeRiverCarve(x, y, flippedY, cell, size);
+          const carve = computeRiverCarve(x, y, flippedY, cell);
 
           if (carve > 0) {
             const isRiver = !!cell.hasRiver;
