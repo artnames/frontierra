@@ -22,7 +22,7 @@ const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
   mountain: { r: 0.45, g: 0.43, b: 0.42 },
   snow: { r: 0.95, g: 0.95, b: 1.0 },
   water: { r: 0.15, g: 0.35, b: 0.45 },
-  riverbed: { r: 0.1, g: 0.22, b: 0.3 },
+  riverbed: { r: 0.28, g: 0.26, b: 0.2 },
   path: { r: 0.58, g: 0.48, b: 0.35 },
   rock: { r: 0.42, g: 0.42, b: 0.42 },
   sand: { r: 0.76, g: 0.62, b: 0.38 },
@@ -151,7 +151,24 @@ export function SmoothTerrainMesh({
         positions[vi * 3 + 2] = y;
 
         const kind = cell ? getCellMaterialKind(cell) : "ground";
-        const baseColor = BASE_COLORS[kind] || BASE_COLORS.ground;
+        let baseColor = BASE_COLORS[kind] || BASE_COLORS.ground;
+
+        // Wet tint: river + up to 2 tiles out get a bluish shift (deterministic)
+        if (cell) {
+          const mask = computeRiverMask(x, flippedY); // 0..1
+          if (mask > 0) {
+            const waterC = BASE_COLORS.water;
+
+            // river center more blue, banks slightly blue
+            const wet = Math.min(1, mask * 0.85);
+
+            baseColor = {
+              r: baseColor.r * (1 - wet) + waterC.r * wet,
+              g: baseColor.g * (1 - wet) + waterC.g * wet,
+              b: baseColor.b * (1 - wet) + waterC.b * wet,
+            };
+          }
+        }
 
         const microVar = getMicroVariation(x, y, world.seed);
         const elevLight = 0.7 + (cell ? Math.pow(cell.elevation, 0.7) * 0.4 : 0) + microVar;
