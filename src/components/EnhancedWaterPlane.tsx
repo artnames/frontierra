@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { WorldData, TerrainCell } from "@/lib/worldData";
-import { WORLD_HEIGHT_SCALE, getWaterLevel } from "@/lib/worldConstants";
+import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET } from "@/lib/worldConstants";
 
 interface EnhancedWaterPlaneProps {
   world: WorldData;
@@ -17,6 +17,7 @@ function buildWaterGeometry(
   worldY: number,
   pickCell: (cell: TerrainCell) => boolean,
   heightAtVertex: (cell: TerrainCell, x: number, y: number, fy: number) => number,
+  edgeFloor = 0, // NEW: keep some opacity on thin shapes like rivers
 ) {
   const size = world.gridSize;
 
@@ -50,7 +51,6 @@ function buildWaterGeometry(
       const c = world.terrain[fy]?.[x];
       if (!c || !pickCell(c)) continue;
 
-      // per-vertex height from the vertex's own cell sample (stable + deterministic)
       const c00 = world.terrain[fy]?.[x];
       const c10 = world.terrain[fy]?.[x + 1];
       const c01 = world.terrain[fy - 1]?.[x];
@@ -70,13 +70,15 @@ function buildWaterGeometry(
       indices.push(v00, v01, v10);
       indices.push(v01, v11, v10);
 
-      // edge detection
       const interior = isPicked(fy, x) && isPicked(fy, x + 1) && isPicked(fy - 1, x) && isPicked(fy - 1, x + 1);
+
+      // NEW: don’t kill opacity on thin rivers — keep a minimum edge value
       if (!interior) {
-        edge[v00] = 0;
-        edge[v10] = 0;
-        edge[v01] = 0;
-        edge[v11] = 0;
+        const e = Math.max(edgeFloor, 0);
+        edge[v00] = Math.min(edge[v00], e);
+        edge[v10] = Math.min(edge[v10], e);
+        edge[v01] = Math.min(edge[v01], e);
+        edge[v11] = Math.min(edge[v11], e);
       }
     }
   }
@@ -96,10 +98,15 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   const heightScale = WORLD_HEIGHT_SCALE;
   const waterHeight = getWaterLevel(world.vars) * heightScale;
 
-  // River water: rl = gl - 0.5 (your rule), with a tiny lift to avoid z-fighting.
   const riverGeo = useMemo(() => {
     const SURFACE_LIFT = 0.02;
-    const RIVER_SURFACE_OFFSET = 0.5; // rl = gl - 0.5
+    const bankClearance = 0.01;
+
+    // Your rule:
+    // gl = baseH
+    // rb = gl - RIVER_DEPTH_OFFSET
+    // rl = rb + 0.5*RIVER_DEPTH_OFFSET = gl - 0.5*RIVER_DEPTH_OFFSET
+    const halfDepth = RIVER_DEPTH_OFFSET * 0.5;
 
     return buildWaterGeometry(
       world,
@@ -108,18 +115,16 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       (c) => !!c.hasRiver,
       (cell) => {
         const gl = cell.elevation * heightScale;
-        const rl = gl - RIVER_SURFACE_OFFSET;
+        const rl = gl - halfDepth;
 
-        // Safety: never allow water to be above local ground (prevents “floating sheets” on banks)
-        const bankClearance = 0.01;
-        const clamped = Math.min(rl, gl - bankClearance);
-
-        return clamped + SURFACE_LIFT;
+        // never above local ground
+        const surface = Math.min(rl, gl - bankClearance);
+        return surface + SURFACE_LIFT;
       },
+      0.45, // edgeFloor: keep opacity on thin rivers
     );
   }, [world, worldX, worldY, heightScale]);
 
-  // Lakes/ocean: flat plane at waterHeight
   const lakeGeo = useMemo(() => {
     const SURFACE_LIFT = 0.02;
     return buildWaterGeometry(
@@ -128,6 +133,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       worldY,
       (c) => c.type === "water",
       () => waterHeight + SURFACE_LIFT,
+      0.0,
     );
   }, [world, worldX, worldY, waterHeight]);
 
@@ -176,8 +182,8 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
 
           vec3 col = mix(uDeep, uShallow, w);
 
-          float edgeFade = smoothstep(0.0, 1.0, vEdge);
-          float a = uOpacity * mix(0.55, 1.0, edgeFade);
+          float edgeFade = smoothstep(0.0, 1.0, vEdge); // 0 at boundary, 1 inside
+          float a = uOpacity * mix(0.35, 1.0, edgeFade); // NEW: higher minimum alpha
 
           float foam = (1.0 - edgeFade) * 0.18;
           col += foam;
@@ -188,6 +194,9 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       transparent: true,
       side: THREE.FrontSide,
       depthWrite: false,
+      polygonOffset: true, // NEW: reduce z-fighting
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
 
     matRef.current = m;
