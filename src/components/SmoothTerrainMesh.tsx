@@ -1,12 +1,11 @@
-// SmoothTerrainMesh - Terrain with indexed geometry for smooth shading
-// Uses shared vertices + proper vertex normals for non-faceted appearance
-// CRITICAL: No Math.random() or Date.now() - all rendering is deterministic
+// SmoothTerrainMesh - Frontierra Version 2.1
+// Focus: Stable Carving, Deterministic UVs, and Memory Safety
 
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { WorldData, TerrainCell } from "@/lib/worldData";
 import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET, PATH_HEIGHT_OFFSET } from "@/lib/worldConstants";
-import { getMaterialKind } from "@/lib/materialRegistry";
+import { MaterialKind, getMaterialKind } from "@/lib/materialRegistry";
 import { createTerrainPbrDetailMaterial } from "@/lib/terrainPbrMaterial";
 
 interface SmoothTerrainMeshProps {
@@ -16,54 +15,30 @@ interface SmoothTerrainMeshProps {
   microDetailEnabled?: boolean;
 }
 
-// Base colors per material kind (used for vertex colors)
-const BASE_COLORS = {
+const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
   ground: { r: 0.5, g: 0.44, b: 0.28 },
   forest: { r: 0.18, g: 0.35, b: 0.15 },
   mountain: { r: 0.45, g: 0.43, b: 0.42 },
   snow: { r: 0.95, g: 0.95, b: 1.0 },
   water: { r: 0.15, g: 0.35, b: 0.45 },
-  riverbed: { r: 0.28, g: 0.26, b: 0.2 }, // dark wet soil/rock (river bottom)
+  riverbed: { r: 0.28, g: 0.26, b: 0.2 },
   path: { r: 0.58, g: 0.48, b: 0.35 },
   rock: { r: 0.42, g: 0.42, b: 0.42 },
   sand: { r: 0.76, g: 0.62, b: 0.38 },
-} as const;
-
-type ColorKind = keyof typeof BASE_COLORS;
-
-// PBR tuning - subtle micro-detail
-const PBR_SETTINGS = {
-  roughness: 0.88,
-  metalness: 0.02,
-  detailScale: 0.9,
-  albedoVar: 0.08,
-  roughVar: 0.18,
-  slopeAO: 0.12,
 };
 
-// Deterministic micro-variation for organic feel
 function getMicroVariation(x: number, y: number, seed: number): number {
   const n = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.1) * 43758.5453;
-  return (n - Math.floor(n)) * 0.15 - 0.075; // ~[-0.075..0.075]
+  return (n - Math.floor(n)) * 0.15 - 0.075;
 }
 
-function getCellColorKind(cell: TerrainCell): ColorKind {
-  // Lakes / oceans stay water (their surface may still be handled elsewhere)
+function getCellMaterialKind(cell: TerrainCell): MaterialKind {
   if (cell.type === "water") return "water";
-
-  // Rivers should show a carved riverbed (water surface is rendered separately)
   if (cell.hasRiver) return "riverbed";
-
-  if (cell.isPath || cell.isBridge || cell.type === "path" || cell.type === "bridge") return "path";
-
-  const k = getMaterialKind(cell.type, cell.elevation, cell.moisture);
-  return k in BASE_COLORS ? (k as ColorKind) : "ground";
+  if (cell.isPath || cell.isBridge) return "path";
+  return getMaterialKind(cell.type, cell.elevation, cell.moisture);
 }
 
-/**
- * Creates INDEXED geometry with shared vertices for smooth normal interpolation.
- * This is the key to eliminating the faceted/low-poly look.
- */
 export function SmoothTerrainMesh({
   world,
   worldX = 0,
@@ -71,94 +46,62 @@ export function SmoothTerrainMesh({
   microDetailEnabled = true,
 }: SmoothTerrainMeshProps) {
   const heightScale = WORLD_HEIGHT_SCALE;
-  const waterLevel = getWaterLevel(world.vars);
-  const waterHeight = waterLevel * heightScale;
+  const riverDepth = getWaterLevel(world.vars) * heightScale - RIVER_DEPTH_OFFSET;
+  const pathMaxHeight = getWaterLevel(world.vars) * heightScale + PATH_HEIGHT_OFFSET;
 
-  // Base target heights
-  const riverDepth = waterHeight - RIVER_DEPTH_OFFSET;
-  const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
-
-  // Build indexed geometry with shared vertices
   const geometry = useMemo(() => {
     const size = world.gridSize;
     const vertCount = size * size;
-    const cellCount = (size - 1) * (size - 1);
-    const indexCount = cellCount * 6; // 2 triangles per cell
-
     const positions = new Float32Array(vertCount * 3);
     const colors = new Float32Array(vertCount * 3);
     const uvs = new Float32Array(vertCount * 2);
-    const indices = new Uint32Array(indexCount);
+    const indices = new Uint32Array((size - 1) * (size - 1) * 6);
 
-    // First pass: create vertices (one per grid point, shared across triangles)
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const vi = y * size + x;
         const flippedY = size - 1 - y;
         const cell = world.terrain[flippedY]?.[x];
 
-        // Height calculation
-        let h = 0;
+        let h = cell ? cell.elevation * heightScale : 0;
+
+        // --- 1. PROXIMITY-BASED CARVING (Fixes "Scooping" Landmine) ---
         if (cell) {
-          h = cell.elevation * heightScale;
-
-          // ---- River carving (channel + banks + center depth) ----
-          const isRiver = !!cell.hasRiver;
-
-          // 4-neighborhood for river proximity
           const left = world.terrain[flippedY]?.[x - 1];
           const right = world.terrain[flippedY]?.[x + 1];
           const up = world.terrain[flippedY - 1]?.[x];
           const down = world.terrain[flippedY + 1]?.[x];
 
-          const nearRiver = isRiver || !!left?.hasRiver || !!right?.hasRiver || !!up?.hasRiver || !!down?.hasRiver;
+          const riverNeighbors =
+            (left?.hasRiver ? 1 : 0) + (right?.hasRiver ? 1 : 0) + (up?.hasRiver ? 1 : 0) + (down?.hasRiver ? 1 : 0);
+          const isNearRiver = cell.hasRiver || riverNeighbors > 0;
 
-          if (nearRiver) {
-            // How "center of river" are we? (more river neighbors => more centered)
-            const riverNeighbors =
-              (left?.hasRiver ? 1 : 0) + (right?.hasRiver ? 1 : 0) + (up?.hasRiver ? 1 : 0) + (down?.hasRiver ? 1 : 0);
+          if (isNearRiver) {
+            const centerFactor = Math.min(1, riverNeighbors / 2); // 2 neighbors = full channel
+            const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed) * 0.5;
 
-            const centerFactor = Math.min(1, riverNeighbors / 3); // 0..1
-
-            // Subtle deterministic bed variation (prevents uniform trench)
-            const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed);
-            const bedVar = bedNoise * 0.6; // small
-
-            // Carve profile (world height units)
-            const BANK_CARVE = 0.05; // gentle bank dip
-            const BED_MIN = 0.1; // shallow edge bed
-            const BED_MAX = 0.28; // deep center bed
-
-            const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
-            const carve = isRiver ? bedCarve + bedVar : BANK_CARVE;
-
+            // Channel depth calculation
+            const carve = cell.hasRiver ? 0.15 + 0.15 * centerFactor + bedNoise : 0.05; // Gentle dip for banks
             h -= carve;
 
-            // Soft constraints: keep a real channel without collapsing to a single flat plane
-            if (isRiver) {
-              // Center can be deeper than riverDepth; edges slightly higher
+            // Clamping the riverbed specifically
+            if (cell.hasRiver) {
               const softFloor = riverDepth - 0.12 - centerFactor * 0.06;
-              const softCeil = riverDepth + 0.02;
               h = Math.max(h, softFloor);
-              h = Math.min(h, softCeil);
+              h = Math.min(h, riverDepth + 0.02);
             }
-          }
-
-          // Path clamp (keep paths readable above water where relevant)
-          if (cell.isPath && !cell.isBridge) {
-            h = Math.min(h, pathMaxHeight);
           }
         }
 
-        // Position
+        if (cell?.isPath && !cell?.isBridge) h = Math.min(h, pathMaxHeight);
+
         positions[vi * 3] = x;
         positions[vi * 3 + 1] = h;
         positions[vi * 3 + 2] = y;
 
-        // Color based on kind
-        const kind: ColorKind = cell ? getCellColorKind(cell) : "ground";
-        const baseColor = BASE_COLORS[kind];
-
+        // Color and Deterministic UVs
+        const kind = cell ? getCellMaterialKind(cell) : "ground";
+        const baseColor = BASE_COLORS[kind] || BASE_COLORS.ground;
         const microVar = getMicroVariation(x, y, world.seed);
         const elevLight = 0.7 + (cell ? Math.pow(cell.elevation, 0.7) * 0.4 : 0) + microVar;
 
@@ -166,29 +109,22 @@ export function SmoothTerrainMesh({
         colors[vi * 3 + 1] = Math.min(1, baseColor.g * elevLight);
         colors[vi * 3 + 2] = Math.min(1, baseColor.b * elevLight);
 
-        // UVs (world-aligned)
-        const worldAbsX = x + worldX * size;
-        const worldAbsZ = y + worldY * size;
-        uvs[vi * 2] = worldAbsX * 0.08;
-        uvs[vi * 2 + 1] = worldAbsZ * 0.08;
+        // UV Fix: Use (size - 1) to match adjacent chunk starting points
+        uvs[vi * 2] = (x + worldX * (size - 1)) * 0.08;
+        uvs[vi * 2 + 1] = (y + worldY * (size - 1)) * 0.08;
       }
     }
 
-    // Second pass: create indices (referencing shared vertices)
     let ii = 0;
     for (let y = 0; y < size - 1; y++) {
       for (let x = 0; x < size - 1; x++) {
-        const v00 = y * size + x;
-        const v10 = y * size + (x + 1);
-        const v01 = (y + 1) * size + x;
-        const v11 = (y + 1) * size + (x + 1);
-
-        // Triangle 1: v00, v01, v10
+        const v00 = y * size + x,
+          v10 = y * size + (x + 1),
+          v01 = (y + 1) * size + x,
+          v11 = (y + 1) * size + (x + 1);
         indices[ii++] = v00;
         indices[ii++] = v01;
         indices[ii++] = v10;
-
-        // Triangle 2: v01, v11, v10
         indices[ii++] = v01;
         indices[ii++] = v11;
         indices[ii++] = v10;
@@ -200,33 +136,30 @@ export function SmoothTerrainMesh({
     geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     geo.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
     geo.setIndex(new THREE.BufferAttribute(indices, 1));
-
-    // CRITICAL: Compute vertex normals AFTER setting index
     geo.computeVertexNormals();
-
     return geo;
   }, [world, heightScale, riverDepth, pathMaxHeight, worldX, worldY]);
 
-  // Create PBR material with micro-detail
   const material = useMemo(() => {
-    const worldOffset = new THREE.Vector2(worldX * world.gridSize, worldY * world.gridSize);
-
     return createTerrainPbrDetailMaterial({
       detailTexture: null,
       textureInfluence: 0,
       microDetailEnabled,
-      worldOffset,
-      detailScale: PBR_SETTINGS.detailScale,
-      albedoVariation: PBR_SETTINGS.albedoVar,
-      roughnessVariation: PBR_SETTINGS.roughVar,
-      slopeAO: PBR_SETTINGS.slopeAO,
-      baseRoughness: PBR_SETTINGS.roughness,
-      baseMetalness: PBR_SETTINGS.metalness,
+      worldOffset: new THREE.Vector2(worldX * (world.gridSize - 1), worldY * (world.gridSize - 1)),
+      detailScale: 0.9,
+      albedoVariation: 0.08,
+      roughnessVariation: 0.18,
+      slopeAO: 0.12,
+      baseRoughness: 0.88,
+      baseMetalness: 0.02,
     });
   }, [microDetailEnabled, worldX, worldY, world.gridSize]);
 
+  // SAFE DISPOSAL: Only dispose of geometry.
+  // Materials are often shared or cached by Three.js; disposing them can turn other chunks black.
+  useEffect(() => {
+    return () => geometry.dispose();
+  }, [geometry]);
+
   return <mesh geometry={geometry} material={material} receiveShadow />;
 }
-
-// Optional: allows default-import style too, without breaking named import.
-export default SmoothTerrainMesh;
