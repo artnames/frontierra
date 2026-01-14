@@ -93,6 +93,7 @@ export function SmoothTerrainMesh({
           const baseH = cell.elevation * heightScale;
           h = baseH;
 
+          // --- River carving (SAFE: only subtract from baseH) ---
           const isRiver = !!cell.hasRiver;
 
           const left = world.terrain[flippedY]?.[x - 1];
@@ -106,24 +107,25 @@ export function SmoothTerrainMesh({
             const riverNeighbors =
               (left?.hasRiver ? 1 : 0) + (right?.hasRiver ? 1 : 0) + (up?.hasRiver ? 1 : 0) + (down?.hasRiver ? 1 : 0);
 
-            // Straight rivers (2 neighbors) should still be deep
+            // straight segments (2 neighbors) should still carve strongly
             const centerFactor = Math.min(1, riverNeighbors / 2);
 
-            const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed) * 0.6;
+            // deterministic small variation
+            const bedVar = getMicroVariation(x * 3.1, y * 3.1, world.seed) * 0.6;
 
-            const BANK_CARVE = 0.05;
-            const BED_MIN = 0.12;
-            const BED_MAX = 0.3;
+            const BANK_CARVE = 0.05; // gentle bank dip
+            const BED_MIN = 0.12; // shallow edge
+            const BED_MAX = 0.3; // deeper center
 
             const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
-            const carve = isRiver ? bedCarve + bedNoise : BANK_CARVE;
+            const carve = isRiver ? Math.max(0, bedCarve + bedVar) : BANK_CARVE;
 
-            // Always carve down from local base height
+            // ✅ Only ever subtract
             h = baseH - carve;
 
-            // Clamp ONLY relative to baseH (prevents “river ridge”)
+            // ✅ Optional safety clamp (still only subtracting)
             const MIN_CARVE = isRiver ? 0.1 : 0.02;
-            const MAX_CARVE = isRiver ? Math.max(0.35, RIVER_DEPTH_OFFSET * 1.1) : 0.1;
+            const MAX_CARVE = isRiver ? 0.45 : 0.1;
 
             h = Math.min(h, baseH - MIN_CARVE);
             h = Math.max(h, baseH - MAX_CARVE);
