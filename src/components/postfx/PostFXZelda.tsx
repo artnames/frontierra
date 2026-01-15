@@ -9,6 +9,7 @@ import {
   ToneMapping,
   ColorDepth,
   Noise,
+  Outline,
 } from "@react-three/postprocessing";
 import { BlendFunction, ToneMappingMode } from "postprocessing";
 
@@ -18,6 +19,7 @@ export interface PostFXZeldaProps {
   enabled?: boolean;
   bloomEnabled?: boolean;
   vignetteEnabled?: boolean;
+  outlineEnabled?: boolean;
   strength?: PostFXStrength;
 }
 
@@ -39,7 +41,8 @@ export function PostFXZelda({
   enabled = true,
   bloomEnabled = true,
   vignetteEnabled = true,
-  strength = "strong",
+  outlineEnabled = true,
+  strength = "zelda",
 }: PostFXZeldaProps) {
   if (!enabled) return null;
 
@@ -47,40 +50,47 @@ export function PostFXZelda({
   const isStrong = strength === "strong";
   const isZelda = strength === "zelda";
 
-  // The “stylized” part:
-  // - ColorDepth reduces gradient smoothness -> painterly / gamey
-  // - Noise adds dithering so banding looks intentional instead of ugly
-  const bits = isSubtle ? 24 : isStrong ? 16 : 12; // 12 is clearly stylized
+  const bits = isSubtle ? 24 : isStrong ? 16 : 12;
 
   return (
     <PostFXErrorBoundary>
-      <EffectComposer multisampling={0}>
+      <EffectComposer multisampling={0} enableNormalPass>
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
 
+        {/* Stronger “game palette” */}
         <HueSaturation
           blendFunction={BlendFunction.NORMAL}
-          saturation={isSubtle ? 0.14 : isStrong ? 0.28 : 0.38}
+          saturation={isSubtle ? 0.16 : isStrong ? 0.3 : 0.42}
           hue={0}
         />
-
         <BrightnessContrast
           brightness={isSubtle ? 0.01 : isStrong ? 0.03 : 0.04}
-          contrast={isSubtle ? 0.1 : isStrong ? 0.18 : 0.24}
+          contrast={isSubtle ? 0.12 : isStrong ? 0.2 : 0.28}
         />
 
-        {/* Posterize the image (biggest visible style jump) */}
+        {/* Toon-ish banding + controlled dithering */}
         <ColorDepth bits={bits} />
-
-        {/* Dither so the posterization feels “painted” not “broken” */}
         <Noise
           premultiply
           blendFunction={BlendFunction.SOFT_LIGHT}
-          opacity={isSubtle ? 0.035 : isStrong ? 0.05 : 0.065}
+          opacity={isSubtle ? 0.03 : isStrong ? 0.05 : 0.065}
         />
+
+        {/* OUTLINES (the big win) */}
+        {outlineEnabled && (
+          <Outline
+            blendFunction={BlendFunction.NORMAL}
+            edgeStrength={isZelda ? 3.5 : isStrong ? 2.6 : 1.8}
+            pulseSpeed={0}
+            visibleEdgeColor={0x050505}
+            hiddenEdgeColor={0x050505}
+            width={isZelda ? 2.2 : isStrong ? 1.8 : 1.4} // thicker edges
+          />
+        )}
 
         {bloomEnabled && (
           <Bloom
-            intensity={isSubtle ? 0.18 : isStrong ? 0.35 : 0.45}
+            intensity={isSubtle ? 0.18 : isStrong ? 0.32 : 0.42}
             luminanceThreshold={isSubtle ? 0.88 : isStrong ? 0.82 : 0.78}
             luminanceSmoothing={0.15}
             mipmapBlur
