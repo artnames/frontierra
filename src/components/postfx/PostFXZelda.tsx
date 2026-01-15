@@ -1,79 +1,88 @@
 /**
  * PostFXZelda - Stylized post-processing for a Zelda-ish illustrated look
  *
- * Goals:
- * - Stronger color grading + contrast (less “plain”)
- * - Depth grounding via SSAO (requires NormalPass)
- * - Stable AA via FXAA (no SMAA texture-loader crashes)
- * - Subtle bloom + vignette
+ * IMPORTANT:
+ * - SMAA is intentionally NOT used because it can crash in some Vite/preview builds
+ *   with "Cannot read properties of undefined (reading 'length')".
+ * - SSAO is also disabled by default because it requires NormalPass wiring.
  *
- * Deterministic: no randomness, no time-driven variation required.
+ * This stack is stable + visibly changes the look:
+ * 1) HueSaturation (color pop)
+ * 2) BrightnessContrast (punch)
+ * 3) Bloom (soft highlight glow)
+ * 4) Vignette (framing)
  */
 
-import {
-  EffectComposer,
-  Bloom,
-  Vignette,
-  HueSaturation,
-  BrightnessContrast,
-  SSAO,
-  FXAA,
-} from "@react-three/postprocessing";
+import { useMemo } from "react";
+import { EffectComposer, Bloom, Vignette, HueSaturation, BrightnessContrast } from "@react-three/postprocessing";
 import { BlendFunction } from "postprocessing";
+
+export type PostFXStrength = "subtle" | "strong";
 
 export interface PostFXZeldaProps {
   enabled?: boolean;
+  strength?: PostFXStrength;
+
+  // Keep these for future expansion, but they won't crash anything right now.
+  aoEnabled?: boolean; // intentionally unused in the safe version
   bloomEnabled?: boolean;
   vignetteEnabled?: boolean;
-  grainEnabled?: boolean;
-  aaEnabled?: boolean;
 }
 
 export function PostFXZelda({
   enabled = true,
-  aoEnabled = true,
+  strength = "strong",
   bloomEnabled = true,
   vignetteEnabled = true,
-  strength = "default",
 }: PostFXZeldaProps) {
+  const settings = useMemo(() => {
+    // Tuned to be clearly visible but not “Instagram filter”.
+    if (strength === "subtle") {
+      return {
+        saturation: 0.1,
+        brightness: 0.01,
+        contrast: 0.05,
+        bloomIntensity: 0.16,
+        bloomThreshold: 0.88,
+        vignetteOffset: 0.22,
+        vignetteDarkness: 0.35,
+      };
+    }
+    return {
+      saturation: 0.22,
+      brightness: 0.02,
+      contrast: 0.1,
+      bloomIntensity: 0.28,
+      bloomThreshold: 0.84,
+      vignetteOffset: 0.25,
+      vignetteDarkness: 0.45,
+    };
+  }, [strength]);
+
   if (!enabled) return null;
 
-  // Stronger grading so you *actually* see a difference.
-  const grade =
-    strength === "soft"
-      ? { sat: 0.12, bright: 0.01, contrast: 0.06, bloom: 0.18, vig: 0.35 }
-      : strength === "strong"
-        ? { sat: 0.28, bright: 0.03, contrast: 0.14, bloom: 0.28, vig: 0.55 }
-        : { sat: 0.2, bright: 0.02, contrast: 0.1, bloom: 0.22, vig: 0.45 };
-
   return (
-    <EffectComposer multisampling={0} enableNormalPass>
-      {/* Stable AA (no async assets) */}
-      <FXAA />
+    <EffectComposer multisampling={0}>
+      <HueSaturation blendFunction={BlendFunction.NORMAL} hue={0} saturation={settings.saturation} />
 
-      {/* Depth grounding */}
-      {aoEnabled && (
-        <SSAO
-          blendFunction={BlendFunction.MULTIPLY}
-          samples={16}
-          radius={6}
-          intensity={18}
-          luminanceInfluence={0.55}
-          bias={0.03}
+      <BrightnessContrast brightness={settings.brightness} contrast={settings.contrast} />
+
+      {bloomEnabled && (
+        <Bloom
+          intensity={settings.bloomIntensity}
+          luminanceThreshold={settings.bloomThreshold}
+          luminanceSmoothing={0.15}
+          mipmapBlur
         />
       )}
 
-      {/* Color grading */}
-      <HueSaturation blendFunction={BlendFunction.NORMAL} hue={0} saturation={grade.sat} />
-
-      {/* Punch */}
-      <BrightnessContrast brightness={grade.bright} contrast={grade.contrast} />
-
-      {/* Subtle highlight bloom (water/spec) */}
-      {bloomEnabled && <Bloom intensity={grade.bloom} luminanceThreshold={0.82} luminanceSmoothing={0.18} mipmapBlur />}
-
-      {/* Frame focus */}
-      {vignetteEnabled && <Vignette offset={0.25} darkness={grade.vig} blendFunction={BlendFunction.NORMAL} />}
+      {vignetteEnabled && (
+        <Vignette
+          offset={settings.vignetteOffset}
+          darkness={settings.vignetteDarkness}
+          blendFunction={BlendFunction.NORMAL}
+        />
+      )}
     </EffectComposer>
   );
 }
