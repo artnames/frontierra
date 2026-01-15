@@ -2,8 +2,8 @@
 // Uses debounced NexArt generation with atomic world swap
 
 import { useState, useCallback, useEffect } from "react";
-import { Canvas } from "@react-three/fiber";
-import { WorldData, distanceToObject, isWorldValid, getElevationAt } from "@/lib/worldData";
+import { Canvas, useThree, useFrame } from "@react-three/fiber";
+import { WorldData, distanceToObject } from "@/lib/worldData";
 import { useNexArtWorld } from "@/hooks/useNexArtWorld";
 import { WorldAction, ReplayFrame, DeterminismTest } from "@/lib/worldContract";
 import {
@@ -29,7 +29,6 @@ import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { useVisualSettings } from "@/hooks/useVisualSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
 import * as THREE from "three";
-import { useThree, useFrame } from "@react-three/fiber";
 import { Selection, Select } from "@react-three/postprocessing";
 
 export type InteractionMode = "explore" | "editor";
@@ -46,7 +45,6 @@ interface FirstPersonSceneProps {
   worldY?: number;
   useTextures?: boolean;
   showVegetation?: boolean;
-  // Graphics settings
   fogEnabled?: boolean;
   microDetailEnabled?: boolean;
   shadowsEnabled?: boolean;
@@ -94,21 +92,15 @@ function FirstPersonScene({
     world,
     onPositionChange: handlePositionChange,
     enabled: !isReplaying,
-    allowVerticalMovement: interactionMode === "editor", // Explore mode = ground-locked
+    allowVerticalMovement: interactionMode === "editor",
   });
 
   return (
     <>
-      {/* Scene configuration - renderer, tone mapping, shadows */}
       <SceneSetup worldX={worldX} worldY={worldY} shadowsEnabled={shadowsEnabled} />
-
-      {/* 3D Sky dome - world space, camera independent */}
       <SkyDome worldX={worldX} worldY={worldY} />
-
-      {/* Enhanced atmosphere with FogExp2 and improved lighting */}
       <EnhancedAtmosphere worldX={worldX} worldY={worldY} fogEnabled={fogEnabled} shadowsEnabled={shadowsEnabled} />
 
-      {/* Terrain - use smooth shading mesh when enabled, otherwise textured/simple */}
       {smoothShading ? (
         <SmoothTerrainMesh world={world} worldX={worldX} worldY={worldY} microDetailEnabled={microDetailEnabled} />
       ) : useTextures ? (
@@ -129,9 +121,9 @@ function FirstPersonScene({
         />
       )}
 
-      {/* Enhanced water with fresnel + animation */}
       <EnhancedWaterPlane world={world} worldX={worldX} worldY={worldY} animated={waterAnimation} />
       <Bridges world={world} />
+
       {showVegetation && (
         <ForestTrees
           world={world}
@@ -141,8 +133,8 @@ function FirstPersonScene({
           shadowsEnabled={shadowsEnabled}
         />
       )}
+
       <PlantedObject world={world} isDiscovered={isDiscovered} />
-      {/* Grid overlay hidden by default in explore mode */}
       {interactionMode === "editor" && <GridOverlay world={world} />}
 
       {actions.map((action, i) => (
@@ -178,10 +170,10 @@ interface WorldExplorerProps {
   interactionMode?: InteractionMode;
   onModeChange?: (mode: InteractionMode) => void;
   worldContext?: { worldX: number; worldY: number };
-  showDebugHUD?: boolean; // Control debug visibility
-  isOwnLand?: boolean; // If true, player is on their own land (suppress discovery toast)
-  mappingVersion?: "v1" | "v2"; // V2 enables archetype-aware generation
-  microOverrides?: Map<number, number>; // Manual overrides for V2 micro vars
+  showDebugHUD?: boolean;
+  isOwnLand?: boolean;
+  mappingVersion?: "v1" | "v2";
+  microOverrides?: Map<number, number>;
 }
 
 export function WorldExplorer({
@@ -203,20 +195,18 @@ export function WorldExplorer({
 }: WorldExplorerProps) {
   const worldX = worldContext?.worldX ?? 0;
   const worldY = worldContext?.worldY ?? 0;
+
   const [position, setPosition] = useState({ x: 0, y: 0, z: 0 });
   const [isDiscovered, setIsDiscovered] = useState(false);
   const [showDiscoveryBanner, setShowDiscoveryBanner] = useState(false);
   const [actions, setActions] = useState<WorldAction[]>(initialActions);
 
-  // Mobile detection
   const isMobile = useIsMobile();
 
-  // Handle mobile joystick movement
   const handleMobileMove = useCallback((forward: boolean, backward: boolean, left: boolean, right: boolean) => {
     setMobileMovement(forward, backward, left, right);
   }, []);
 
-  // Visual settings (localStorage only, no server sync)
   const {
     materialRichness,
     showVegetation,
@@ -230,7 +220,6 @@ export function WorldExplorer({
     waterAnimation,
   } = useVisualSettings();
 
-  // Use debounced NexArt generation hook with V2 support
   const { world, isLoading, isVerifying, error } = useNexArtWorld({
     seed,
     vars,
@@ -240,26 +229,18 @@ export function WorldExplorer({
     microOverrides,
   });
 
-  // Track previous mode to detect changes
   const [prevMode, setPrevMode] = useState<InteractionMode>(interactionMode);
 
-  // Handle mode changes - set camera position accordingly
-  // Only trigger when mode actually changes, not on every world update
   useEffect(() => {
     if (world && interactionMode !== prevMode) {
       setPrevMode(interactionMode);
-      if (interactionMode === "editor") {
-        setCameraToEditorView(world);
-      } else {
-        setCameraToExploreView(world);
-      }
+      if (interactionMode === "editor") setCameraToEditorView(world);
+      else setCameraToExploreView(world);
     }
   }, [interactionMode, prevMode, world]);
 
   useEffect(() => {
-    if (isDiscovered && !showDiscoveryBanner) {
-      setShowDiscoveryBanner(true);
-    }
+    if (isDiscovered && !showDiscoveryBanner) setShowDiscoveryBanner(true);
   }, [isDiscovered, showDiscoveryBanner]);
 
   useEffect(() => {
@@ -279,7 +260,6 @@ export function WorldExplorer({
     setIsDiscovered(discovered);
   }, []);
 
-  // Ambient audio based on terrain and settings
   useAmbientAudio({
     world,
     playerPosition: { x: position.x, y: position.y },
@@ -293,7 +273,6 @@ export function WorldExplorer({
 
   const isInvalid = (deterministicTest && !deterministicTest.isValid) || error !== null;
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="relative w-full h-full flex items-center justify-center bg-background">
@@ -305,7 +284,6 @@ export function WorldExplorer({
     );
   }
 
-  // NexArt failure - NO FALLBACK
   if (error || !world) {
     return (
       <div className="relative w-full h-full flex items-center justify-center bg-destructive/10">
@@ -327,7 +305,6 @@ export function WorldExplorer({
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-black">
-      {/* Verifying overlay (non-blocking) */}
       {isVerifying && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
           <div className="terminal-panel px-4 py-2 flex items-center gap-2 bg-background/90">
@@ -349,7 +326,6 @@ export function WorldExplorer({
         </div>
       )}
 
-      {/* 3D Canvas */}
       <Canvas
         camera={{ fov: 45, near: 0.01, far: 1000 }}
         gl={{ antialias: false }}
@@ -357,11 +333,9 @@ export function WorldExplorer({
         style={{ position: "absolute", inset: 0 }}
         onCreated={({ gl }) => {
           gl.outputColorSpace = THREE.SRGBColorSpace;
-          gl.outputColorSpace = THREE.SRGBColorSpace;
-          gl.toneMapping = THREE.NoToneMapping; // IMPORTANT for postprocessing ToneMapping
+          gl.toneMapping = THREE.NoToneMapping; // let postfx ToneMapping handle it
         }}
       >
-        {/* IMPORTANT: Selection must wrap both Select() content AND the EffectComposer */}
         <Selection>
           <Select enabled>
             <group>
@@ -386,23 +360,12 @@ export function WorldExplorer({
             </group>
           </Select>
 
-          <PostFXZelda enabled bloomEnabled vignetteEnabled strength="strong" />
+          <PostFXZelda enabled strength="strong" outlineEnabled bloomEnabled vignetteEnabled />
         </Selection>
       </Canvas>
 
-      {/* Replay mode indicator */}
-      {isReplaying && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-          <div className="terminal-panel px-4 py-2 flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-            <span className="text-xs text-accent font-display uppercase tracking-wider">
-              Replay Mode — Camera Locked
-            </span>
-          </div>
-        </div>
-      )}
+      {!isReplaying && <DiscoveryToast worldX={worldX} worldY={worldY} isOwnLand={isOwnLand} />}
 
-      {/* Minimal Position HUD - only in editor mode or when showDebugHUD is true */}
       {!isReplaying && (interactionMode === "editor" || showDebugHUD) && (
         <div className="absolute top-4 left-4 terminal-panel p-3 pointer-events-none opacity-80">
           <div className="text-xs space-y-1">
@@ -420,64 +383,12 @@ export function WorldExplorer({
         </div>
       )}
 
-      {/* Minimal Controls hint */}
-      {!isReplaying && interactionMode === "editor" && (
-        <div className="absolute bottom-4 left-4 terminal-panel p-3 pointer-events-none opacity-70">
-          <div className="text-xs text-muted-foreground space-y-1">
-            <div>
-              <span className="text-primary">WASD</span> — Move
-            </div>
-            <div>
-              <span className="text-primary">Mouse drag</span> — Look
-            </div>
-            <div>
-              <span className="text-primary">Space/Shift</span> — Up/Down
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Discovery Toast */}
-      {!isReplaying && <DiscoveryToast worldX={worldX} worldY={worldY} isOwnLand={isOwnLand} />}
-
-      {/* Discovery Banner */}
-      {showDiscoveryBanner && !isReplaying && (
-        <div
-          className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 
-          terminal-panel p-6 text-center transition-all duration-500
-          ${isDiscovered ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}
-        >
-          <div className="text-2xl font-display font-bold text-primary glow-text mb-2">DISCOVERED</div>
-          <div className="text-sm text-muted-foreground">
-            Object Type:{" "}
-            <span className="text-accent">
-              {["Tower", "Crystal", "Monument", "Flag", "Beacon"][world.plantedObject.type]}
-            </span>
-          </div>
-          <div className="text-xs text-muted-foreground mt-2">
-            Location: ({world.plantedObject.x}, {world.plantedObject.y})
-          </div>
-        </div>
-      )}
-
-      {/* Time of Day + Proximity indicator */}
       {!isReplaying && (
         <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
           <TimeOfDayHUD worldX={worldX} worldY={worldY} />
-          {!isDiscovered && (
-            <div className="terminal-panel p-3 pointer-events-none">
-              <div className="text-xs">
-                <span className="text-muted-foreground">DISTANCE TO OBJECT:</span>
-                <div className="data-value text-lg font-mono mt-1">
-                  {distanceToObject(world, position.x, position.y).toFixed(1)}
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Mobile Controls */}
       {isMobile && !isReplaying && interactionMode === "explore" && (
         <div className="absolute bottom-6 left-6 z-20">
           <MobileControls onMove={handleMobileMove} />
