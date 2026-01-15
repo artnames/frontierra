@@ -386,7 +386,7 @@ export function WorldExplorer({
             </group>
           </Select>
 
-          <PostFXZelda enabled aoEnabled bloomEnabled vignetteEnabled outlineEnabled strength="strong" />
+          <PostFXZelda enabled strength="strong" aoEnabled={false} />
         </Selection>
       </Canvas>
 
