@@ -101,8 +101,8 @@ export function PostFXZelda({
 
         {vignetteEnabled && (
           <Vignette
-            offset={isSubtle ? 0.18 : isStrong ? 0.25 : 0.28}
-            darkness={isSubtle ? 0.32 : isStrong ? 0.48 : 0.55}
+            offset={isSubtle ? 0 : isStrong ? 0.25 : 0.28}
+            darkness={isSubtle ? 1 : isStrong ? 0.48 : 0.55}
             blendFunction={BlendFunction.NORMAL}
           />
         )}
