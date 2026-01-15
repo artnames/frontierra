@@ -34,16 +34,11 @@ export function SceneSetup({ worldX = 0, worldY = 0, shadowsEnabled = true }: Sc
   const twilight = isTwilight(timeOfDay);
   
   // Configure renderer once on mount
+  // Note: outputColorSpace, toneMapping, and toneMappingExposure are set in Canvas onCreated
   useEffect(() => {
-    // Enable proper color management
-    gl.outputColorSpace = THREE.SRGBColorSpace;
-
     // Use modern light units (better PBR response)
     // @ts-expect-error - present in Three r160, but TS types may vary
     gl.useLegacyLights = false;
-
-    // ACES Filmic tone mapping for natural color response
-    gl.toneMapping = THREE.ACESFilmicToneMapping;
 
     // Configure shadow maps if enabled
     if (shadowsEnabled) {
@@ -55,14 +50,17 @@ export function SceneSetup({ worldX = 0, worldY = 0, shadowsEnabled = true }: Sc
   }, [gl, shadowsEnabled]);
   
   // Update exposure based on time of day
+  // Base exposure is set to 1.25 in Canvas onCreated for post-FX pipeline
+  // We modulate it here for day/night cycle
   useFrame(() => {
-    let exposure = EXPOSURE_DAY;
+    const baseExposure = 1.25;
+    let multiplier = 1.0;
     if (night) {
-      exposure = EXPOSURE_NIGHT;
+      multiplier = EXPOSURE_NIGHT / EXPOSURE_DAY; // ~0.75
     } else if (twilight) {
-      exposure = EXPOSURE_TWILIGHT;
+      multiplier = EXPOSURE_TWILIGHT / EXPOSURE_DAY; // ~0.9
     }
-    gl.toneMappingExposure = exposure;
+    gl.toneMappingExposure = baseExposure * multiplier;
   });
   
   // Set scene background to match fog color for seamless atmosphere

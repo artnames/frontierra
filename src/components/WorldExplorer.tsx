@@ -25,6 +25,7 @@ import { ForestTrees } from '@/components/ForestTrees';
 import { PlacedBeaconMesh } from '@/components/ActionSystem';
 import { SkyDome } from '@/components/SkyDome';
 import { TimeOfDayHUD } from '@/components/TimeOfDayHUD';
+import { PostFXZelda } from '@/components/postfx/PostFXZelda';
 import { DiscoveryToast } from '@/components/DiscoveryToast';
 import { MobileControls } from '@/components/MobileControls';
 import { useAmbientAudio } from '@/hooks/useAmbientAudio';
@@ -373,6 +374,12 @@ export function WorldExplorer({
         gl={{ antialias: true }}
         shadows={shadowsEnabled}
         style={{ position: 'absolute', inset: 0 }}
+        onCreated={({ gl }) => {
+          // Cinematic tone mapping for game-like look
+          gl.outputColorSpace = THREE.SRGBColorSpace;
+          gl.toneMapping = THREE.ACESFilmicToneMapping;
+          gl.toneMappingExposure = 1.25;
+        }}
       >
         <FirstPersonScene 
           world={world} 
@@ -391,6 +398,14 @@ export function WorldExplorer({
           shadowsEnabled={shadowsEnabled}
           smoothShading={smoothShading}
           waterAnimation={waterAnimation}
+        />
+        
+        {/* Post-processing: Zelda-inspired stylized look */}
+        <PostFXZelda 
+          enabled={true}
+          aoEnabled={true}
+          bloomEnabled={true}
+          vignetteEnabled={true}
         />
       </Canvas>
       
