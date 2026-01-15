@@ -1,15 +1,14 @@
-import React from "react";
+import { memo } from "react";
 import {
   EffectComposer,
   Bloom,
   Vignette,
   HueSaturation,
   BrightnessContrast,
-  FXAA,
-  ToneMapping,
-  ColorDepth,
   Noise,
+  FXAA,
   Outline,
+  ToneMapping,
 } from "@react-three/postprocessing";
 import { BlendFunction, ToneMappingMode } from "postprocessing";
 
@@ -17,32 +16,21 @@ export type PostFXStrength = "subtle" | "strong" | "zelda";
 
 export interface PostFXZeldaProps {
   enabled?: boolean;
+  strength?: PostFXStrength;
+
+  outlineEnabled?: boolean;
   bloomEnabled?: boolean;
   vignetteEnabled?: boolean;
-  outlineEnabled?: boolean;
-  strength?: PostFXStrength;
+  noiseEnabled?: boolean;
 }
 
-class PostFXErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
-  state = { hasError: false };
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  componentDidCatch(err: any) {
-    console.warn("[PostFXZelda] disabled due to runtime error:", err);
-  }
-  render() {
-    if (this.state.hasError) return null;
-    return this.props.children;
-  }
-}
-
-export function PostFXZelda({
+export const PostFXZelda = memo(function PostFXZelda({
   enabled = true,
+  strength = "zelda",
+  outlineEnabled = true,
   bloomEnabled = true,
   vignetteEnabled = true,
-  outlineEnabled = true,
-  strength = "zelda",
+  noiseEnabled = true,
 }: PostFXZeldaProps) {
   if (!enabled) return null;
 
@@ -50,57 +38,60 @@ export function PostFXZelda({
   const isStrong = strength === "strong";
   const isZelda = strength === "zelda";
 
-  const bits = isSubtle ? 24 : isStrong ? 16 : 12;
+  // Push values hard enough that you *see* it instantly.
+  const sat = isSubtle ? 0.18 : isStrong ? 0.38 : 0.62;
+  const bright = isSubtle ? 0.02 : isStrong ? 0.04 : 0.06;
+  const contrast = isSubtle ? 0.12 : isStrong ? 0.22 : 0.34;
+
+  const vignetteDark = isSubtle ? 0.45 : isStrong ? 0.68 : 0.82;
+  const vignetteOffset = isSubtle ? 0.12 : isStrong ? 0.06 : 0.02;
+
+  const bloomIntensity = isSubtle ? 0.18 : isStrong ? 0.35 : 0.55;
+  const bloomThreshold = isSubtle ? 0.88 : isStrong ? 0.84 : 0.8;
+
+  const edgeStrength = isZelda ? 6.0 : isStrong ? 4.0 : 2.5;
+  const edgeWidth = isZelda ? 3.0 : isStrong ? 2.2 : 1.6;
 
   return (
-    <PostFXErrorBoundary>
-      <EffectComposer multisampling={0} enableNormalPass>
-        <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+    <EffectComposer multisampling={0} enableNormalPass enableDepthPass>
+      {/* IMPORTANT: keep renderer on NoToneMapping (in Canvas onCreated),
+          then do tone mapping here so grading "sticks". */}
+      <ToneMapping
+        mode={ToneMappingMode.ACES_FILMIC}
+        resolution={256}
+        whitePoint={16.0}
+        middleGrey={0.6}
+        minLuminance={0.01}
+        averageLuminance={0.6}
+        adaptationRate={1.0}
+      />
 
-        {/* Stronger “game palette” */}
-        <HueSaturation
+      <HueSaturation hue={0} saturation={sat} />
+      <BrightnessContrast brightness={bright} contrast={contrast} />
+
+      {bloomEnabled && (
+        <Bloom intensity={bloomIntensity} luminanceThreshold={bloomThreshold} luminanceSmoothing={0.12} mipmapBlur />
+      )}
+
+      {/* OUTLINES: works well for normal Meshes. Instanced meshes (trees) may not outline. */}
+      {outlineEnabled && (
+        <Outline
           blendFunction={BlendFunction.NORMAL}
-          saturation={isSubtle ? 0.16 : isStrong ? 0.3 : 0.42}
-          hue={0}
+          edgeStrength={edgeStrength}
+          width={edgeWidth}
+          pulseSpeed={0}
+          visibleEdgeColor={0x050505}
+          hiddenEdgeColor={0x050505}
         />
-        <BrightnessContrast
-          brightness={isSubtle ? 0.01 : isStrong ? 0.03 : 0.04}
-          contrast={isSubtle ? 0.12 : isStrong ? 0.2 : 0.28}
-        />
+      )}
 
-        {/* Toon-ish banding + controlled dithering */}
-        <ColorDepth bits={bits} />
-        <Noise
-          premultiply
-          blendFunction={BlendFunction.SOFT_LIGHT}
-          opacity={isSubtle ? 0.03 : isStrong ? 0.05 : 0.065}
-        />
+      <FXAA />
 
-        {/* OUTLINES (the big win) */}
-        {outlineEnabled && (
-          <Outline
-            blendFunction={BlendFunction.NORMAL}
-            edgeStrength={isZelda ? 3.5 : isStrong ? 2.6 : 1.8}
-            pulseSpeed={0}
-            visibleEdgeColor={0x050505}
-            hiddenEdgeColor={0x050505}
-            width={isZelda ? 2.2 : isStrong ? 1.8 : 1.4} // thicker edges
-          />
-        )}
+      {vignetteEnabled && (
+        <Vignette eskil={false} offset={vignetteOffset} darkness={vignetteDark} blendFunction={BlendFunction.NORMAL} />
+      )}
 
-        {bloomEnabled && (
-          <Bloom
-            intensity={isSubtle ? 0.18 : isStrong ? 0.32 : 0.42}
-            luminanceThreshold={isSubtle ? 0.88 : isStrong ? 0.82 : 0.78}
-            luminanceSmoothing={0.15}
-            mipmapBlur
-          />
-        )}
-
-        <FXAA />
-
-        {vignetteEnabled && <Vignette offset={0.0} darkness={1.0} blendFunction={BlendFunction.NORMAL} />}
-      </EffectComposer>
-    </PostFXErrorBoundary>
+      {noiseEnabled && <Noise premultiply opacity={isSubtle ? 0.03 : isStrong ? 0.05 : 0.07} />}
+    </EffectComposer>
   );
-}
+});
