@@ -326,169 +326,163 @@ export function WorldExplorer({
   }
 
   return (
-  <div className="relative w-full h-full overflow-hidden bg-black">
-    {/* Verifying overlay (non-blocking) */}
-    {isVerifying && (
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-        <div className="terminal-panel px-4 py-2 flex items-center gap-2 bg-background/90">
-          <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-muted-foreground">Verifying world...</span>
-        </div>
-      </div>
-    )}
-
-    {isInvalid && !error && (
-      <div className="absolute inset-0 z-20 pointer-events-none">
-        <div className="absolute inset-0 bg-destructive/10 animate-pulse" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-          <div className="terminal-panel p-6 border-destructive bg-destructive/20 text-center">
-            <div className="text-3xl font-display font-bold text-destructive mb-2">⚠ WORLD INVALID</div>
-            <div className="text-sm text-destructive/80">Determinism broken — hash mismatch detected</div>
+    <div className="relative w-full h-full overflow-hidden bg-black">
+      {/* Verifying overlay (non-blocking) */}
+      {isVerifying && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <div className="terminal-panel px-4 py-2 flex items-center gap-2 bg-background/90">
+            <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs text-muted-foreground">Verifying world...</span>
           </div>
         </div>
-      </div>
-    )}
+      )}
 
-    {/* 3D Canvas */}
-    <Canvas
-      camera={{ fov: 45, near: 0.01, far: 1000 }}
-      gl={{ antialias: false }}
-      shadows={shadowsEnabled}
-      style={{ position: "absolute", inset: 0 }}
-      onCreated={({ gl }) => {
-        gl.outputColorSpace = THREE.SRGBColorSpace;
-        gl.toneMapping = THREE.ACESFilmicToneMapping;
-        gl.toneMappingExposure = 1.25;
-      }}
-    >
-      {/* IMPORTANT: Selection must wrap both Select() content AND the EffectComposer */}
-      <Selection>
-        <Select enabled>
-          <group>
-            <FirstPersonScene
-              world={world}
-              actions={actions}
-              onPositionChange={handlePositionChange}
-              onDiscovery={handleDiscovery}
-              replayFrame={replayFrame}
-              isReplaying={isReplaying}
-              interactionMode={interactionMode}
-              worldX={worldX}
-              worldY={worldY}
-              useTextures={materialRichness}
-              showVegetation={showVegetation}
-              fogEnabled={fogEnabled}
-              microDetailEnabled={microDetailEnabled}
-              shadowsEnabled={shadowsEnabled}
-              smoothShading={smoothShading}
-              waterAnimation={waterAnimation}
-            />
-          </group>
-        </Select>
-
-        <PostFXZelda
-          enabled
-          aoEnabled
-          bloomEnabled
-          vignetteEnabled
-          outlineEnabled
-          strength="strong"
-        />
-      </Selection>
-    </Canvas>
-
-    {/* Replay mode indicator */}
-    {isReplaying && (
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-        <div className="terminal-panel px-4 py-2 flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-          <span className="text-xs text-accent font-display uppercase tracking-wider">
-            Replay Mode — Camera Locked
-          </span>
-        </div>
-      </div>
-    )}
-
-    {/* Minimal Position HUD - only in editor mode or when showDebugHUD is true */}
-    {!isReplaying && (interactionMode === "editor" || showDebugHUD) && (
-      <div className="absolute top-4 left-4 terminal-panel p-3 pointer-events-none opacity-80">
-        <div className="text-xs space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">POS:</span>
-            <span className="data-value font-mono">
-              ({position.x.toFixed(1)}, {position.y.toFixed(1)})
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">ALT:</span>
-            <span className="data-value font-mono">{position.z.toFixed(1)}</span>
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* Minimal Controls hint */}
-    {!isReplaying && interactionMode === "editor" && (
-      <div className="absolute bottom-4 left-4 terminal-panel p-3 pointer-events-none opacity-70">
-        <div className="text-xs text-muted-foreground space-y-1">
-          <div>
-            <span className="text-primary">WASD</span> — Move
-          </div>
-          <div>
-            <span className="text-primary">Mouse drag</span> — Look
-          </div>
-          <div>
-            <span className="text-primary">Space/Shift</span> — Up/Down
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* Discovery Toast */}
-    {!isReplaying && <DiscoveryToast worldX={worldX} worldY={worldY} isOwnLand={isOwnLand} />}
-
-    {/* Discovery Banner */}
-    {showDiscoveryBanner && !isReplaying && (
-      <div
-        className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 
-          terminal-panel p-6 text-center transition-all duration-500
-          ${isDiscovered ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}
-      >
-        <div className="text-2xl font-display font-bold text-primary glow-text mb-2">DISCOVERED</div>
-        <div className="text-sm text-muted-foreground">
-          Object Type:{" "}
-          <span className="text-accent">
-            {["Tower", "Crystal", "Monument", "Flag", "Beacon"][world.plantedObject.type]}
-          </span>
-        </div>
-        <div className="text-xs text-muted-foreground mt-2">
-          Location: ({world.plantedObject.x}, {world.plantedObject.y})
-        </div>
-      </div>
-    )}
-
-    {/* Time of Day + Proximity indicator */}
-    {!isReplaying && (
-      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
-        <TimeOfDayHUD worldX={worldX} worldY={worldY} />
-        {!isDiscovered && (
-          <div className="terminal-panel p-3 pointer-events-none">
-            <div className="text-xs">
-              <span className="text-muted-foreground">DISTANCE TO OBJECT:</span>
-              <div className="data-value text-lg font-mono mt-1">
-                {distanceToObject(world, position.x, position.y).toFixed(1)}
-              </div>
+      {isInvalid && !error && (
+        <div className="absolute inset-0 z-20 pointer-events-none">
+          <div className="absolute inset-0 bg-destructive/10 animate-pulse" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+            <div className="terminal-panel p-6 border-destructive bg-destructive/20 text-center">
+              <div className="text-3xl font-display font-bold text-destructive mb-2">⚠ WORLD INVALID</div>
+              <div className="text-sm text-destructive/80">Determinism broken — hash mismatch detected</div>
             </div>
           </div>
-        )}
-      </div>
-    )}
+        </div>
+      )}
 
-    {/* Mobile Controls */}
-    {isMobile && !isReplaying && interactionMode === "explore" && (
-      <div className="absolute bottom-6 left-6 z-20">
-        <MobileControls onMove={handleMobileMove} />
-      </div>
-    )}
-  </div>
-);
+      {/* 3D Canvas */}
+      <Canvas
+        camera={{ fov: 45, near: 0.01, far: 1000 }}
+        gl={{ antialias: false }}
+        shadows={shadowsEnabled}
+        style={{ position: "absolute", inset: 0 }}
+        onCreated={({ gl }) => {
+          gl.outputColorSpace = THREE.SRGBColorSpace;
+          gl.toneMapping = THREE.ACESFilmicToneMapping;
+          gl.toneMappingExposure = 1.25;
+        }}
+      >
+        {/* IMPORTANT: Selection must wrap both Select() content AND the EffectComposer */}
+        <Selection>
+          <Select enabled>
+            <group>
+              <FirstPersonScene
+                world={world}
+                actions={actions}
+                onPositionChange={handlePositionChange}
+                onDiscovery={handleDiscovery}
+                replayFrame={replayFrame}
+                isReplaying={isReplaying}
+                interactionMode={interactionMode}
+                worldX={worldX}
+                worldY={worldY}
+                useTextures={materialRichness}
+                showVegetation={showVegetation}
+                fogEnabled={fogEnabled}
+                microDetailEnabled={microDetailEnabled}
+                shadowsEnabled={shadowsEnabled}
+                smoothShading={smoothShading}
+                waterAnimation={waterAnimation}
+              />
+            </group>
+          </Select>
+
+          <PostFXZelda enabled aoEnabled bloomEnabled vignetteEnabled outlineEnabled strength="strong" />
+        </Selection>
+      </Canvas>
+
+      {/* Replay mode indicator */}
+      {isReplaying && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+          <div className="terminal-panel px-4 py-2 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+            <span className="text-xs text-accent font-display uppercase tracking-wider">
+              Replay Mode — Camera Locked
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Minimal Position HUD - only in editor mode or when showDebugHUD is true */}
+      {!isReplaying && (interactionMode === "editor" || showDebugHUD) && (
+        <div className="absolute top-4 left-4 terminal-panel p-3 pointer-events-none opacity-80">
+          <div className="text-xs space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">POS:</span>
+              <span className="data-value font-mono">
+                ({position.x.toFixed(1)}, {position.y.toFixed(1)})
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">ALT:</span>
+              <span className="data-value font-mono">{position.z.toFixed(1)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Minimal Controls hint */}
+      {!isReplaying && interactionMode === "editor" && (
+        <div className="absolute bottom-4 left-4 terminal-panel p-3 pointer-events-none opacity-70">
+          <div className="text-xs text-muted-foreground space-y-1">
+            <div>
+              <span className="text-primary">WASD</span> — Move
+            </div>
+            <div>
+              <span className="text-primary">Mouse drag</span> — Look
+            </div>
+            <div>
+              <span className="text-primary">Space/Shift</span> — Up/Down
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discovery Toast */}
+      {!isReplaying && <DiscoveryToast worldX={worldX} worldY={worldY} isOwnLand={isOwnLand} />}
+
+      {/* Discovery Banner */}
+      {showDiscoveryBanner && !isReplaying && (
+        <div
+          className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 
+          terminal-panel p-6 text-center transition-all duration-500
+          ${isDiscovered ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}
+        >
+          <div className="text-2xl font-display font-bold text-primary glow-text mb-2">DISCOVERED</div>
+          <div className="text-sm text-muted-foreground">
+            Object Type:{" "}
+            <span className="text-accent">
+              {["Tower", "Crystal", "Monument", "Flag", "Beacon"][world.plantedObject.type]}
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground mt-2">
+            Location: ({world.plantedObject.x}, {world.plantedObject.y})
+          </div>
+        </div>
+      )}
+
+      {/* Time of Day + Proximity indicator */}
+      {!isReplaying && (
+        <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+          <TimeOfDayHUD worldX={worldX} worldY={worldY} />
+          {!isDiscovered && (
+            <div className="terminal-panel p-3 pointer-events-none">
+              <div className="text-xs">
+                <span className="text-muted-foreground">DISTANCE TO OBJECT:</span>
+                <div className="data-value text-lg font-mono mt-1">
+                  {distanceToObject(world, position.x, position.y).toFixed(1)}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mobile Controls */}
+      {isMobile && !isReplaying && interactionMode === "explore" && (
+        <div className="absolute bottom-6 left-6 z-20">
+          <MobileControls onMove={handleMobileMove} />
+        </div>
+      )}
+    </div>
+  );
+}
