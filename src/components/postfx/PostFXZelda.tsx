@@ -1,88 +1,126 @@
 /**
  * PostFXZelda - Stylized post-processing for a Zelda-ish illustrated look
  *
- * IMPORTANT:
- * - SMAA is intentionally NOT used because it can crash in some Vite/preview builds
- *   with "Cannot read properties of undefined (reading 'length')".
- * - SSAO is also disabled by default because it requires NormalPass wiring.
- *
- * This stack is stable + visibly changes the look:
- * 1) HueSaturation (color pop)
- * 2) BrightnessContrast (punch)
- * 3) Bloom (soft highlight glow)
- * 4) Vignette (framing)
+ * Key fixes:
+ * - SSAO needs NormalPass  -> EffectComposer enableNormalPass
+ * - SMAA can crash in some builds (async textures) -> use FXAA instead (stable)
+ * - Add Outline to actually stylize the scene (cel/ink vibe)
  */
 
-import { useMemo } from "react";
-import { EffectComposer, Bloom, Vignette, HueSaturation, BrightnessContrast } from "@react-three/postprocessing";
+import { Suspense, useMemo } from "react";
+import {
+  EffectComposer,
+  Bloom,
+  Vignette,
+  HueSaturation,
+  BrightnessContrast,
+  SSAO,
+  FXAA,
+  Outline,
+} from "@react-three/postprocessing";
 import { BlendFunction } from "postprocessing";
-
-export type PostFXStrength = "subtle" | "strong";
 
 export interface PostFXZeldaProps {
   enabled?: boolean;
-  strength?: PostFXStrength;
-
-  // Keep these for future expansion, but they won't crash anything right now.
-  aoEnabled?: boolean; // intentionally unused in the safe version
+  aoEnabled?: boolean;
   bloomEnabled?: boolean;
   vignetteEnabled?: boolean;
+  outlineEnabled?: boolean;
+  strength?: "subtle" | "strong";
 }
 
 export function PostFXZelda({
   enabled = true,
-  strength = "strong",
+  aoEnabled = true,
   bloomEnabled = true,
   vignetteEnabled = true,
+  outlineEnabled = true,
+  strength = "strong",
 }: PostFXZeldaProps) {
-  const settings = useMemo(() => {
-    // Tuned to be clearly visible but not “Instagram filter”.
+  if (!enabled) return null;
+
+  const tune = useMemo(() => {
     if (strength === "subtle") {
       return {
-        saturation: 0.1,
+        sat: 0.12,
+        contrast: 0.06,
         brightness: 0.01,
-        contrast: 0.05,
-        bloomIntensity: 0.16,
+        bloomIntensity: 0.14,
         bloomThreshold: 0.88,
-        vignetteOffset: 0.22,
         vignetteDarkness: 0.35,
+        aoRadius: 2.0,
+        aoIntensity: 12,
+        outlineStrength: 1.2,
+        outlineWidth: 0.006,
       };
     }
     return {
-      saturation: 0.22,
+      sat: 0.22,
+      contrast: 0.12,
       brightness: 0.02,
-      contrast: 0.1,
-      bloomIntensity: 0.28,
+      bloomIntensity: 0.22,
       bloomThreshold: 0.84,
-      vignetteOffset: 0.25,
       vignetteDarkness: 0.45,
+      aoRadius: 3.5,
+      aoIntensity: 18,
+      outlineStrength: 1.8,
+      outlineWidth: 0.008,
     };
   }, [strength]);
 
-  if (!enabled) return null;
+  // Only enable NormalPass if we use effects that need it (SSAO, Outline).
+  const needsNormalPass = aoEnabled || outlineEnabled;
 
   return (
-    <EffectComposer multisampling={0}>
-      <HueSaturation blendFunction={BlendFunction.NORMAL} hue={0} saturation={settings.saturation} />
+    <Suspense fallback={null}>
+      <EffectComposer multisampling={0} enableNormalPass={needsNormalPass}>
+        {/* Stylized outline = biggest “Zelda-ish” lever */}
+        {outlineEnabled && (
+          <Outline
+            blendFunction={BlendFunction.NORMAL}
+            edgeStrength={tune.outlineStrength}
+            width={tune.outlineWidth}
+            // Keep these conservative to avoid flicker
+            visibleEdgeColor={0x0b0b0f}
+            hiddenEdgeColor={0x0b0b0f}
+          />
+        )}
 
-      <BrightnessContrast brightness={settings.brightness} contrast={settings.contrast} />
+        {/* AO for grounding (SSAO is fine if tuned + NormalPass enabled) */}
+        {aoEnabled && (
+          <SSAO
+            blendFunction={BlendFunction.MULTIPLY}
+            samples={16}
+            radius={tune.aoRadius}
+            intensity={tune.aoIntensity}
+            luminanceInfluence={0.4}
+            bias={0.03}
+          />
+        )}
 
-      {bloomEnabled && (
-        <Bloom
-          intensity={settings.bloomIntensity}
-          luminanceThreshold={settings.bloomThreshold}
-          luminanceSmoothing={0.15}
-          mipmapBlur
-        />
-      )}
+        {/* Color grading */}
+        <HueSaturation blendFunction={BlendFunction.NORMAL} saturation={tune.sat} hue={0} />
 
-      {vignetteEnabled && (
-        <Vignette
-          offset={settings.vignetteOffset}
-          darkness={settings.vignetteDarkness}
-          blendFunction={BlendFunction.NORMAL}
-        />
-      )}
-    </EffectComposer>
+        <BrightnessContrast brightness={tune.brightness} contrast={tune.contrast} />
+
+        {/* Bloom for water/spec highlights */}
+        {bloomEnabled && (
+          <Bloom
+            intensity={tune.bloomIntensity}
+            luminanceThreshold={tune.bloomThreshold}
+            luminanceSmoothing={0.15}
+            mipmapBlur
+          />
+        )}
+
+        {/* FXAA = stable AA (no async textures like SMAA) */}
+        <FXAA />
+
+        {/* Frame */}
+        {vignetteEnabled && (
+          <Vignette offset={0.25} darkness={tune.vignetteDarkness} blendFunction={BlendFunction.NORMAL} />
+        )}
+      </EffectComposer>
+    </Suspense>
   );
 }
