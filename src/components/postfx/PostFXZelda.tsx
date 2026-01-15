@@ -80,7 +80,7 @@ export function PostFXZelda({
         {outlineEnabled && (
           <Outline
             blendFunction={BlendFunction.NORMAL}
-            edgeStrength={isZelda ? 30.5 : isStrong ? 2.6 : 1.8}
+            edgeStrength={isZelda ? 3.5 : isStrong ? 2.6 : 1.8}
             pulseSpeed={0}
             visibleEdgeColor={0x050505}
             hiddenEdgeColor={0x050505}
