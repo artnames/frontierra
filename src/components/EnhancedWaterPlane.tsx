@@ -108,8 +108,8 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   // rl = rb + WATER_ABOVE_BED = gl - BED_DEPTH + WATER_ABOVE_BED
   //
   // Tune these two numbers to get “deeper carve + visible water column” feel.
-  const BED_DEPTH = 1.0; // how far the bed is carved down from ground
-  const WATER_ABOVE_BED = 0.5; // how high water sits above bed
+  const BED_DEPTH = 2.0; // how far the bed is carved down from ground
+  const WATER_ABOVE_BED = 0.3; // how high water sits above bed
 
   const riverGeo = useMemo(() => {
     const SURFACE_LIFT = 0.02; // z-fight safety
@@ -131,7 +131,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
 
         return surface + SURFACE_LIFT;
       },
-      0.35, // IMPORTANT: keep opacity on thin river edges
+      0.55, // IMPORTANT: keep opacity on thin river edges
     );
   }, [world, worldX, worldY, heightScale]);
 
