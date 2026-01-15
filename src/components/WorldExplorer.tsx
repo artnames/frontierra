@@ -327,10 +327,13 @@ export function WorldExplorer({
       )}
 
       <Canvas
+        camera={{ fov: 45, near: 0.01, far: 1000 }}
         gl={{ antialias: false }}
+        shadows={shadowsEnabled}
+        style={{ position: "absolute", inset: 0 }}
         onCreated={({ gl }) => {
           gl.outputColorSpace = THREE.SRGBColorSpace;
-          gl.toneMapping = THREE.NoToneMapping;
+          gl.toneMapping = THREE.NoToneMapping; // let postfx ToneMapping handle it
         }}
       >
         <Selection>
