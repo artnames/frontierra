@@ -30,6 +30,7 @@ import { useVisualSettings } from "@/hooks/useVisualSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
 import * as THREE from "three";
 import { useThree, useFrame } from "@react-three/fiber";
+import { Selection, Select } from "@react-three/postprocessing";
 
 export type InteractionMode = "explore" | "editor";
 
@@ -349,18 +350,22 @@ export function WorldExplorer({
       )}
 
       {/* 3D Canvas - sky dome rendered inside */}
-      <Canvas
-        camera={{ fov: 45, near: 0.01, far: 1000 }}
-        gl={{ antialias: false }}
-        shadows={shadowsEnabled}
-        style={{ position: "absolute", inset: 0 }}
-        onCreated={({ gl }) => {
-          // Cinematic tone mapping for game-like look
-          gl.outputColorSpace = THREE.SRGBColorSpace;
-          gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.25;
-        }}
-      >
+<Canvas
+  camera={{ fov: 45, near: 0.01, far: 1000 }}
+  gl={{ antialias: false }}
+  shadows={shadowsEnabled}
+  style={{ position: "absolute", inset: 0 }}
+  onCreated={({ gl }) => {
+    gl.outputColorSpace = THREE.SRGBColorSpace;
+    gl.toneMapping = THREE.ACESFilmicToneMapping;
+    gl.toneMappingExposure = 1.25;
+  }}
+>
+  {/* IMPORTANT: Selection must wrap both the selected objects and the composer */}
+  <Selection>
+    {/* Select must wrap actual Object3D content (meshes / groups) */}
+    <Select enabled>
+      <group>
         <FirstPersonScene
           world={world}
           actions={actions}
@@ -379,9 +384,22 @@ export function WorldExplorer({
           smoothShading={smoothShading}
           waterAnimation={waterAnimation}
         />
+      </group>
+    </Select>
+
+    <PostFXZelda
+      enabled
+      aoEnabled
+      bloomEnabled
+      vignetteEnabled
+      outlineEnabled
+      strength="strong"
+    />
+  </Selection>
+</Canvas>
 
         {/* Post-processing: Zelda-inspired stylized look */}
-        <PostFXZelda enabled aoEnabled bloomEnabled vignetteEnabled outlineEnabled strength="strong" />
+        <PostFXZelda enabled strength="strong" />
       </Canvas>
 
       {/* Replay mode indicator */}
