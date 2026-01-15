@@ -2,25 +2,24 @@
  * PostFXZelda - Stylized post-processing for a game-like illustrated look
  * 
  * Effects pipeline (in order):
- * 1. N8AO - Contact ambient occlusion for depth and grounding
- * 2. Outline - Subtle edge detection for illustrated feel
- * 3. HueSaturation - Warm color grading boost
- * 4. BrightnessContrast - Punch up the image
- * 5. Bloom - Subtle glow on highlights (water, specular)
- * 6. SMAA - Anti-aliasing without blur
- * 7. Vignette - Frame the scene, draw focus to center
+ * 1. SSAO - Screen-space ambient occlusion for depth
+ * 2. HueSaturation - Warm color grading boost
+ * 3. BrightnessContrast - Punch up the image
+ * 4. Bloom - Subtle glow on highlights (water, specular)
+ * 5. SMAA - Anti-aliasing without blur
+ * 6. Vignette - Frame the scene, draw focus to center
  * 
  * All effects are deterministic - no randomness or time-based variation.
  */
 
 import { 
   EffectComposer, 
-  N8AO,
   Bloom,
   Vignette,
   SMAA,
   HueSaturation,
   BrightnessContrast,
+  SSAO,
 } from '@react-three/postprocessing';
 import { BlendFunction } from 'postprocessing';
 
@@ -46,24 +45,21 @@ export function PostFXZelda({
   return (
     <EffectComposer multisampling={0}>
       {/* 
-        N8AO - Contact Ambient Occlusion
+        SSAO - Screen Space Ambient Occlusion
         Creates depth and grounding by darkening crevices and contact points.
         
-        aoRadius: 2.2 - Medium spread for natural look without halo artifacts
-        intensity: 1.35 - Strong but not overwhelming, visible on terrain folds
-        distanceFalloff: 0.6 - Gradual falloff prevents harsh edges
-        
         Tuning tips:
-        - Increase aoRadius for softer, broader shadows
+        - Increase radius for softer, broader shadows
         - Decrease intensity if dark areas look muddy
-        - Lower distanceFalloff for tighter contact shadows
       */}
       {aoEnabled && (
-        <N8AO
-          aoRadius={2.2}
-          intensity={1.35}
-          distanceFalloff={0.6}
-          halfRes={true} // Half resolution for performance (mobile-friendly)
+        <SSAO
+          blendFunction={BlendFunction.MULTIPLY}
+          samples={16}
+          radius={5}
+          intensity={20}
+          luminanceInfluence={0.5}
+          bias={0.035}
         />
       )}
       
@@ -81,7 +77,7 @@ export function PostFXZelda({
       <HueSaturation
         blendFunction={BlendFunction.NORMAL}
         saturation={0.18}
-        hue={0} // No hue shift - keep natural colors
+        hue={0}
       />
       
       {/* 
@@ -154,18 +150,6 @@ export function PostFXZelda({
           blendFunction={BlendFunction.NORMAL}
         />
       )}
-      
-      {/* 
-        DOF (Depth of Field) - DISABLED by default
-        Can add focus effect but blurs important gameplay elements.
-        Uncomment for cinematic screenshots only.
-        
-        <DepthOfField
-          focusDistance={0.02}
-          focalLength={0.05}
-          bokehScale={3}
-        />
-      */}
     </EffectComposer>
   );
 }
