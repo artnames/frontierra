@@ -381,7 +381,7 @@ export function WorldExplorer({
         />
 
         {/* Post-processing: Zelda-inspired stylized look */}
-        <PostFXZelda enabled strength="strong" />
+        <PostFXZelda enabled aoEnabled bloomEnabled vignetteEnabled outlineEnabled strength="strong" />
       </Canvas>
 
       {/* Replay mode indicator */}
