@@ -357,8 +357,8 @@ export function WorldExplorer({
         style={{ position: "absolute", inset: 0 }}
         onCreated={({ gl }) => {
           gl.outputColorSpace = THREE.SRGBColorSpace;
-          gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.25;
+          gl.outputColorSpace = THREE.SRGBColorSpace;
+          gl.toneMapping = THREE.NoToneMapping; // IMPORTANT for postprocessing ToneMapping
         }}
       >
         {/* IMPORTANT: Selection must wrap both Select() content AND the EffectComposer */}
