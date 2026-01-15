@@ -1,124 +1,89 @@
 /**
- * PostFXZelda - Stylized post-processing (stable + deterministic)
+ * PostFXZelda - Stylized post-processing (safe in Vite/Lovable preview)
+ * Goal: noticeable art direction without crashing.
  *
- * Key stability choices:
- * - Uses FXAA instead of SMAA (SMAA is a common source of undefined.length crashes)
- * - Enables NormalPass when SSAO is enabled
- * - Guards against zero-size mount
+ * IMPORTANT:
+ * - We intentionally avoid SMAA + SSAO here (common crash sources in preview builds).
+ * - We use ToneMapping effect, so set renderer.toneMapping = NoToneMapping in <Canvas>.
  */
 
-import { Suspense, useMemo } from "react";
-import { useThree } from "@react-three/fiber";
+import React from "react";
 import {
   EffectComposer,
   Bloom,
   Vignette,
   HueSaturation,
   BrightnessContrast,
-  SSAO,
   FXAA,
-  Noise,
+  ToneMapping,
 } from "@react-three/postprocessing";
-import { BlendFunction } from "postprocessing";
+import { BlendFunction, ToneMappingMode } from "postprocessing";
 
-type Strength = "subtle" | "strong";
+export type PostFXStrength = "subtle" | "strong";
 
 export interface PostFXZeldaProps {
   enabled?: boolean;
-  strength?: Strength;
-  aoEnabled?: boolean;
   bloomEnabled?: boolean;
   vignetteEnabled?: boolean;
-  noiseEnabled?: boolean;
+  strength?: PostFXStrength;
+}
+
+class PostFXErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err: any) {
+    console.warn("[PostFXZelda] disabled due to runtime error:", err);
+  }
+  render() {
+    if (this.state.hasError) return null; // keep the game running
+    return this.props.children;
+  }
 }
 
 export function PostFXZelda({
   enabled = true,
-  strength = "strong",
-  aoEnabled = true,
   bloomEnabled = true,
   vignetteEnabled = true,
-  noiseEnabled = true,
+  strength = "strong",
 }: PostFXZeldaProps) {
-  const { size } = useThree();
-
-  // Prevent mount-time edge cases (0x0)
   if (!enabled) return null;
-  if (!size?.width || !size?.height) return null;
 
-  const tuned = useMemo(() => {
-    if (strength === "subtle") {
-      return {
-        sat: 0.12,
-        bright: 0.01,
-        contrast: 0.06,
-        bloomIntensity: 0.18,
-        bloomThreshold: 0.86,
-        vignetteDarkness: 0.38,
-        vignetteOffset: 0.22,
-        noiseOpacity: 0.03,
-        aoIntensity: 6,
-        aoRadius: 3.5,
-        aoBias: 0.03,
-      };
-    }
-    // strong
-    return {
-      sat: 0.28,
-      bright: 0.02,
-      contrast: 0.14,
-      bloomIntensity: 0.35,
-      bloomThreshold: 0.82,
-      vignetteDarkness: 0.52,
-      vignetteOffset: 0.28,
-      noiseOpacity: 0.05,
-      aoIntensity: 10,
-      aoRadius: 4.5,
-      aoBias: 0.03,
-    };
-  }, [strength]);
+  const strong = strength === "strong";
 
   return (
-    <Suspense fallback={null}>
-      {/* enableNormalPass is required for SSAO */}
-      <EffectComposer multisampling={0} enableNormalPass>
-        {aoEnabled && (
-          <SSAO
-            blendFunction={BlendFunction.MULTIPLY}
-            samples={16}
-            radius={tuned.aoRadius}
-            intensity={tuned.aoIntensity}
-            luminanceInfluence={0.5}
-            bias={tuned.aoBias}
-          />
-        )}
+    <PostFXErrorBoundary>
+      <EffectComposer multisampling={0}>
+        {/* Tone mapping in post (avoid double tone mapping) */}
+        <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
 
-        <HueSaturation blendFunction={BlendFunction.NORMAL} hue={0} saturation={tuned.sat} />
+        {/* Zelda-ish grade: more saturation + punch */}
+        <HueSaturation blendFunction={BlendFunction.NORMAL} saturation={strong ? 0.28 : 0.16} hue={0} />
+        <BrightnessContrast brightness={strong ? 0.03 : 0.015} contrast={strong ? 0.14 : 0.08} />
 
-        <BrightnessContrast brightness={tuned.bright} contrast={tuned.contrast} />
-
+        {/* Soft highlight glow */}
         {bloomEnabled && (
           <Bloom
-            intensity={tuned.bloomIntensity}
-            luminanceThreshold={tuned.bloomThreshold}
+            intensity={strong ? 0.35 : 0.22}
+            luminanceThreshold={strong ? 0.8 : 0.86}
             luminanceSmoothing={0.15}
             mipmapBlur
           />
         )}
 
-        {noiseEnabled && <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={tuned.noiseOpacity} />}
-
-        {/* Stable AA */}
+        {/* Anti-aliasing that doesn't require texture assets */}
         <FXAA />
 
+        {/* Frame it */}
         {vignetteEnabled && (
           <Vignette
+            offset={strong ? 0.25 : 0.18}
+            darkness={strong ? 0.45 : 0.35}
             blendFunction={BlendFunction.NORMAL}
-            offset={tuned.vignetteOffset}
-            darkness={tuned.vignetteDarkness}
           />
         )}
       </EffectComposer>
-    </Suspense>
+    </PostFXErrorBoundary>
   );
 }
