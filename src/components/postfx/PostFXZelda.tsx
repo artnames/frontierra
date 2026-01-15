@@ -23,11 +23,10 @@ import { BlendFunction } from "postprocessing";
 
 export interface PostFXZeldaProps {
   enabled?: boolean;
-  aoEnabled?: boolean;
   bloomEnabled?: boolean;
   vignetteEnabled?: boolean;
-  /** Optional: tone down the punch for mobile */
-  strength?: "soft" | "default" | "strong";
+  grainEnabled?: boolean;
+  aaEnabled?: boolean;
 }
 
 export function PostFXZelda({
