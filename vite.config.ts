@@ -17,9 +17,8 @@ export default defineConfig(({ mode }) => ({
     },
   },
 
-  // ✅ one build block
+  // Fix runtime "require is not defined" coming from Emotion / mixed CJS
   build: {
-    sourcemap: true,
     commonjsOptions: {
       transformMixedEsModules: true,
     },
