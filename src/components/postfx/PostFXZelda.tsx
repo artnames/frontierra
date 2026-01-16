@@ -1,5 +1,5 @@
 // src/components/postfx/PostFXZelda.tsx
-import { memo } from "react";
+import React, { memo, useEffect, useState } from "react";
 import {
   EffectComposer,
   Bloom,
@@ -24,7 +24,18 @@ export interface PostFXZeldaProps {
   vignetteEnabled?: boolean;
   noiseEnabled?: boolean;
 }
-
+class OutlineBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err: any) {
+    console.warn("[PostFX] Outline disabled due to error:", err);
+  }
+  render() {
+    return this.state.hasError ? null : this.props.children;
+  }
+}
 export const PostFXZelda = memo(function PostFXZelda({
   enabled = true,
   strength = "zelda",
@@ -34,6 +45,21 @@ export const PostFXZelda = memo(function PostFXZelda({
   noiseEnabled = true,
 }: PostFXZeldaProps) {
   if (!enabled) return null;
+
+  const [outlineReady, setOutlineReady] = useState(false);
+
+  useEffect(() => {
+    let raf1 = requestAnimationFrame(() => {
+      let raf2 = requestAnimationFrame(() => setOutlineReady(true));
+      // @ts-ignore
+      PostFXZelda.__raf2 = raf2;
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      // @ts-ignore
+      if (PostFXZelda.__raf2) cancelAnimationFrame(PostFXZelda.__raf2);
+    };
+  }, []);
 
   const isSubtle = strength === "subtle";
   const isStrong = strength === "strong";
@@ -72,16 +98,18 @@ export const PostFXZelda = memo(function PostFXZelda({
       )}
 
       {/* ✅ Stable: outline objects in THREE layer 1 (no Selection/Select) */}
-      {outlineEnabled && (
-        <Outline
-          selectionLayer={1}
-          blendFunction={BlendFunction.NORMAL}
-          edgeStrength={edgeStrength}
-          width={edgeWidth}
-          pulseSpeed={0}
-          visibleEdgeColor={0x050505}
-          hiddenEdgeColor={0x050505}
-        />
+      {outlineEnabled && outlineReady && (
+        <OutlineBoundary>
+          <Outline
+            selectionLayer={1}
+            blendFunction={BlendFunction.NORMAL}
+            edgeStrength={edgeStrength}
+            width={edgeWidth}
+            pulseSpeed={0}
+            visibleEdgeColor={0x050505}
+            hiddenEdgeColor={0x050505}
+          />
+        </OutlineBoundary>
       )}
 
       <FXAA />
