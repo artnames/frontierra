@@ -1,5 +1,5 @@
 // src/components/postfx/PostFXZelda.tsx
-import React, { memo } from "react";
+import React, { memo, useEffect, useState } from "react";
 import {
   EffectComposer,
   Bloom,
