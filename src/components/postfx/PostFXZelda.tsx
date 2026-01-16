@@ -1,3 +1,4 @@
+// src/components/postfx/PostFXZelda.tsx
 import React, { memo } from "react";
 import {
   EffectComposer,
@@ -16,6 +17,10 @@ export type PostFXStrength = "subtle" | "strong" | "zelda";
 export interface PostFXZeldaProps {
   enabled?: boolean;
   strength?: PostFXStrength;
+
+  // keep for compatibility (but we do NOT use it here anymore)
+  outlineEnabled?: boolean;
+
   bloomEnabled?: boolean;
   vignetteEnabled?: boolean;
   noiseEnabled?: boolean;
@@ -24,6 +29,7 @@ export interface PostFXZeldaProps {
 export const PostFXZelda = memo(function PostFXZelda({
   enabled = true,
   strength = "zelda",
+  // outlineEnabled is intentionally ignored now
   bloomEnabled = true,
   vignetteEnabled = true,
   noiseEnabled = true,
@@ -37,7 +43,7 @@ export const PostFXZelda = memo(function PostFXZelda({
   const bright = isSubtle ? 0.02 : isStrong ? 0.05 : 0.08;
   const contrast = isSubtle ? 0.15 : isStrong ? 0.28 : 0.42;
 
-  // Make vignette obviously visible
+  // Make vignette clearly visible
   const vignetteOffset = isSubtle ? 0.35 : isStrong ? 0.4 : 0.45;
   const vignetteDark = isSubtle ? 0.45 : isStrong ? 0.6 : 0.75;
 
