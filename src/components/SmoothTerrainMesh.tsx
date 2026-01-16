@@ -55,6 +55,11 @@ export function SmoothTerrainMesh({
   worldY = 0,
   microDetailEnabled = true,
 }: SmoothTerrainMeshProps) {
+  // Early return if world data isn't ready
+  if (!world || !world.terrain || world.terrain.length === 0) {
+    return null;
+  }
+
   const heightScale = WORLD_HEIGHT_SCALE;
   const waterLevel = getWaterLevel(world.vars);
   const waterHeight = waterLevel * heightScale;
@@ -105,6 +110,11 @@ export function SmoothTerrainMesh({
   };
 
   const geometry = useMemo(() => {
+    // Guard against incomplete world data
+    if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
+      return new THREE.BufferGeometry();
+    }
+
     const size = world.gridSize;
     const vertCount = size * size;
     const cellCount = (size - 1) * (size - 1);
