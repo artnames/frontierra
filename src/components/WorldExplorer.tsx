@@ -345,9 +345,32 @@ export function WorldExplorer({
         }}
       >
         {/* Put all meshes (and InstancedMesh) on layer 1 for Outline selectionLayer */}
-        <group>
-          {/* Temporarily disabled for debugging */}
-          {null}
+        <group
+          onUpdate={(g) => {
+            g.traverse((o: any) => {
+              if (o?.isMesh || o?.isInstancedMesh) o.layers.enable(1);
+            });
+          }}
+        >
+          <FirstPersonScene
+            world={world}
+            actions={actions}
+            onPositionChange={handlePositionChange}
+            onDiscovery={handleDiscovery}
+            replayFrame={replayFrame}
+            isReplaying={isReplaying}
+            interactionMode={interactionMode}
+            worldX={worldX}
+            worldY={worldY}
+            useTextures={materialRichness}
+            showVegetation={showVegetation}
+            fogEnabled={fogEnabled}
+            microDetailEnabled={microDetailEnabled}
+            shadowsEnabled={shadowsEnabled}
+            smoothShading={smoothShading}
+            waterAnimation={waterAnimation}
+            outlineEnabled={postfxOutlineEnabled}
+          />
         </group>
 
         <PostFXZelda
