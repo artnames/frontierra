@@ -14,6 +14,11 @@ export interface VisualSettings {
   shadowsEnabled: boolean;
   smoothShading: boolean;
   waterAnimation: boolean;
+  // PostFX settings
+  postfxBloomEnabled: boolean;
+  postfxVignetteEnabled: boolean;
+  postfxOutlineEnabled: boolean;
+  postfxNoiseEnabled: boolean;
 }
 
 export const defaultVisualSettings: VisualSettings = {
@@ -28,6 +33,11 @@ export const defaultVisualSettings: VisualSettings = {
   shadowsEnabled: true,
   smoothShading: true,
   waterAnimation: true,
+  // PostFX defaults - all enabled
+  postfxBloomEnabled: true,
+  postfxVignetteEnabled: true,
+  postfxOutlineEnabled: true,
+  postfxNoiseEnabled: true,
 };
 
 const STORAGE_KEY = 'nexart-visual-settings';

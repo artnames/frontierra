@@ -57,6 +57,15 @@ export function ControlPanel({
     toggleSmoothShading,
     waterAnimation,
     toggleWaterAnimation,
+    // PostFX
+    postfxBloomEnabled,
+    togglePostfxBloom,
+    postfxVignetteEnabled,
+    togglePostfxVignette,
+    postfxOutlineEnabled,
+    togglePostfxOutline,
+    postfxNoiseEnabled,
+    togglePostfxNoise,
     // Audio
     musicEnabled,
     toggleMusic,
@@ -345,6 +354,46 @@ export function ControlPanel({
               </p>
             </div>
             <Switch checked={materialRichness} onCheckedChange={toggleMaterialRichness} />
+          </div>
+        </div>
+
+        {/* PostFX Settings */}
+        <div className="space-y-3 pt-2 border-t border-border">
+          <div className="data-label flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5" />
+            Post-Processing
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Bloom</Label>
+              <p className="text-xs text-muted-foreground">Soft glow on bright areas.</p>
+            </div>
+            <Switch checked={postfxBloomEnabled} onCheckedChange={togglePostfxBloom} />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Vignette</Label>
+              <p className="text-xs text-muted-foreground">Darkened edges for focus.</p>
+            </div>
+            <Switch checked={postfxVignetteEnabled} onCheckedChange={togglePostfxVignette} />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Outlines</Label>
+              <p className="text-xs text-muted-foreground">Edge highlighting (Zelda-ish).</p>
+            </div>
+            <Switch checked={postfxOutlineEnabled} onCheckedChange={togglePostfxOutline} />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Film Grain</Label>
+              <p className="text-xs text-muted-foreground">Subtle noise overlay.</p>
+            </div>
+            <Switch checked={postfxNoiseEnabled} onCheckedChange={togglePostfxNoise} />
           </div>
         </div>
 
