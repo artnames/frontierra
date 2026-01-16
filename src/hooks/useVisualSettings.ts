@@ -93,6 +93,23 @@ export function useVisualSettings() {
     updateSetting('waterAnimation', !settings.waterAnimation);
   }, [settings.waterAnimation, updateSetting]);
 
+  // PostFX toggles
+  const togglePostfxBloom = useCallback(() => {
+    updateSetting('postfxBloomEnabled', !settings.postfxBloomEnabled);
+  }, [settings.postfxBloomEnabled, updateSetting]);
+
+  const togglePostfxVignette = useCallback(() => {
+    updateSetting('postfxVignetteEnabled', !settings.postfxVignetteEnabled);
+  }, [settings.postfxVignetteEnabled, updateSetting]);
+
+  const togglePostfxOutline = useCallback(() => {
+    updateSetting('postfxOutlineEnabled', !settings.postfxOutlineEnabled);
+  }, [settings.postfxOutlineEnabled, updateSetting]);
+
+  const togglePostfxNoise = useCallback(() => {
+    updateSetting('postfxNoiseEnabled', !settings.postfxNoiseEnabled);
+  }, [settings.postfxNoiseEnabled, updateSetting]);
+
   return {
     settings,
     isLoaded: true,
@@ -106,6 +123,10 @@ export function useVisualSettings() {
     shadowsEnabled: settings.shadowsEnabled,
     smoothShading: settings.smoothShading,
     waterAnimation: settings.waterAnimation,
+    postfxBloomEnabled: settings.postfxBloomEnabled,
+    postfxVignetteEnabled: settings.postfxVignetteEnabled,
+    postfxOutlineEnabled: settings.postfxOutlineEnabled,
+    postfxNoiseEnabled: settings.postfxNoiseEnabled,
     toggleMaterialRichness,
     toggleVegetation,
     toggleMusic,
@@ -116,6 +137,10 @@ export function useVisualSettings() {
     toggleShadows,
     toggleSmoothShading,
     toggleWaterAnimation,
+    togglePostfxBloom,
+    togglePostfxVignette,
+    togglePostfxOutline,
+    togglePostfxNoise,
     updateSetting,
   };
 }

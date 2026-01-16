@@ -218,6 +218,10 @@ export function WorldExplorer({
     shadowsEnabled,
     smoothShading,
     waterAnimation,
+    postfxBloomEnabled,
+    postfxVignetteEnabled,
+    postfxOutlineEnabled,
+    postfxNoiseEnabled,
   } = useVisualSettings();
 
   const { world, isLoading, isVerifying, error } = useNexArtWorld({
@@ -360,7 +364,14 @@ export function WorldExplorer({
             </group>
           </Select>
 
-          <PostFXZelda enabled strength="strong" outlineEnabled bloomEnabled vignetteEnabled />
+          <PostFXZelda
+            enabled
+            strength="strong"
+            outlineEnabled={postfxOutlineEnabled}
+            bloomEnabled={postfxBloomEnabled}
+            vignetteEnabled={postfxVignetteEnabled}
+            noiseEnabled={postfxNoiseEnabled}
+          />
         </Selection>
       </Canvas>
 
