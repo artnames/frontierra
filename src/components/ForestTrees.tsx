@@ -110,6 +110,12 @@ export function ForestTrees({
 
   const vegetation = useMemo(() => {
     const items: VegetationItem[] = [];
+
+    // Guard against incomplete world data
+    if (!world || !world.terrain || world.terrain.length === 0 || world.gridSize === 0) {
+      return items;
+    }
+
     const seed = world.seed || 0;
 
     // Define vegetation distribution based on terrain properties

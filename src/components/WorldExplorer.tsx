@@ -289,7 +289,7 @@ export function WorldExplorer({
     );
   }
 
-  if (error || !world) {
+  if (error || !world || !world.terrain || world.terrain.length === 0) {
     return (
       <div className="relative w-full h-full flex items-center justify-center bg-destructive/10">
         <div className="terminal-panel p-8 border-destructive bg-background/95 text-center max-w-md">
