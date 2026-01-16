@@ -22,6 +22,7 @@ export interface PostFXZeldaProps {
   bloomEnabled?: boolean;
   vignetteEnabled?: boolean;
   noiseEnabled?: boolean;
+  selectionKey?: string | number;
 }
 
 export const PostFXZelda = memo(function PostFXZelda({
@@ -31,6 +32,7 @@ export const PostFXZelda = memo(function PostFXZelda({
   bloomEnabled = true,
   vignetteEnabled = true,
   noiseEnabled = true,
+  selectionKey = 0,
 }: PostFXZeldaProps) {
   if (!enabled) return null;
 
