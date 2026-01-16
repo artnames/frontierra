@@ -1,60 +1,69 @@
-import { useCallback, useState, useMemo, useEffect } from 'react';
-import { Eye, Map, Copy, Check, Shuffle, Settings, ChevronLeft, Users, Globe, Compass, Pencil, LogIn, LogOut, Menu } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useIsMobile } from '@/hooks/use-mobile';
-import frontierraLogoHeader from '@/assets/frontierra-logo-header.png';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { useWorldParams } from '@/hooks/useWorldParams';
-import { useAuth } from '@/hooks/useAuth';
-import { useVisualSettings } from '@/hooks/useVisualSettings';
-import { VAR_LABELS } from '@/lib/worldGenerator';
-import { generateWorldData } from '@/lib/worldData';
-import { 
-  WorldAction, 
-  DeterminismTest, 
+import { useCallback, useState, useMemo, useEffect } from "react";
+import {
+  Eye,
+  Map,
+  Copy,
+  Check,
+  Shuffle,
+  Settings,
+  ChevronLeft,
+  Users,
+  Globe,
+  Compass,
+  Pencil,
+  LogIn,
+  LogOut,
+  Menu,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useIsMobile } from "@/hooks/use-mobile";
+import frontierraLogoHeader from "@/assets/frontierra-logo-header.png";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { useWorldParams } from "@/hooks/useWorldParams";
+import { useAuth } from "@/hooks/useAuth";
+import { useVisualSettings } from "@/hooks/useVisualSettings";
+import { VAR_LABELS } from "@/lib/worldGenerator";
+import { generateWorldDataAsync, WorldData } from "@/lib/worldData";
+import {
+  WorldAction,
+  DeterminismTest,
   runDeterminismTest,
   serializeActions,
   parseActions,
-  ReplayFrame
-} from '@/lib/worldContract';
-import { 
-  buildParamsV2, 
-  selectArchetype, 
-  ARCHETYPE_PROFILES,
-  ARCHETYPES,
-  type WorldArchetype 
-} from '@/world';
-import { WorldExplorer, InteractionMode } from '@/components/WorldExplorer';
-import { setCameraForLandTransition } from '@/hooks/useFirstPersonControls';
-import { WorldMap2D } from '@/components/WorldMap2D';
-import { WorldContractPanel } from '@/components/WorldContractPanel';
-import { ReplayControls } from '@/components/ReplayControls';
-import { ActionSystem } from '@/components/ActionSystem';
-import { MultiplayerHUD } from '@/components/MultiplayerHUD';
-import { WorldAMap } from '@/components/WorldAMap';
-import { SocialPanel } from '@/components/social/SocialPanel';
-import { UnclaimedLandModal } from '@/components/UnclaimedLandModal';
-import { ClaimLandModal } from '@/components/ClaimLandModal';
-import { useMultiplayerWorld } from '@/hooks/useMultiplayerWorld';
-import { useToast } from '@/hooks/use-toast';
-import { useSearchParams } from 'react-router-dom';
+  ReplayFrame,
+} from "@/lib/worldContract";
+import { buildParamsV2, selectArchetype, ARCHETYPE_PROFILES, ARCHETYPES, type WorldArchetype } from "@/world";
+import { WorldExplorer, InteractionMode } from "@/components/WorldExplorer";
+import { setCameraForLandTransition } from "@/hooks/useFirstPersonControls";
+import { WorldMap2D } from "@/components/WorldMap2D";
+import { WorldContractPanel } from "@/components/WorldContractPanel";
+import { ReplayControls } from "@/components/ReplayControls";
+import { ActionSystem } from "@/components/ActionSystem";
+import { MultiplayerHUD } from "@/components/MultiplayerHUD";
+import { WorldAMap } from "@/components/WorldAMap";
+import { SocialPanel } from "@/components/social/SocialPanel";
+import { UnclaimedLandModal } from "@/components/UnclaimedLandModal";
+import { ClaimLandModal } from "@/components/ClaimLandModal";
+import { useMultiplayerWorld } from "@/hooks/useMultiplayerWorld";
+import { useToast } from "@/hooks/use-toast";
+import { useSearchParams } from "react-router-dom";
 
-type ViewMode = 'map' | 'firstperson';
-type SidebarTab = 'parameters' | 'contract' | 'actions' | 'worldmap' | 'social';
-type WorldMode = 'solo' | 'multiplayer';
+type ViewMode = "map" | "firstperson";
+type SidebarTab = "parameters" | "contract" | "actions" | "worldmap" | "social";
+type WorldMode = "solo" | "multiplayer";
 
 const Index = () => {
-  const [viewMode, setViewMode] = useState<ViewMode>('firstperson');
-  const [worldMode, setWorldMode] = useState<WorldMode>('solo');
-  const [interactionMode, setInteractionMode] = useState<InteractionMode>('explore');
+  const [viewMode, setViewMode] = useState<ViewMode>("firstperson");
+  const [worldMode, setWorldMode] = useState<WorldMode>("solo");
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>("explore");
   const [copied, setCopied] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(false); // Default hidden in explore mode
+  const [showSidebar, setShowSidebar] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('worldmap');
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("worldmap");
   const [deterministicTest, setDeterministicTest] = useState<DeterminismTest | null>(null);
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayFrame, setReplayFrame] = useState<ReplayFrame | null>(null);
@@ -64,22 +73,15 @@ const Index = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  
+
   // Authentication
   const { user, isAuthenticated, isLoading: isAuthLoading, signOut } = useAuth();
-  
+
   // Visual settings (localStorage only)
-  const {
-    musicEnabled,
-    toggleMusic,
-    sfxEnabled,
-    toggleSfx,
-    masterVolume,
-    setMasterVolume,
-  } = useVisualSettings();
-  
+  const { musicEnabled, toggleMusic, sfxEnabled, toggleSfx, masterVolume, setMasterVolume } = useVisualSettings();
+
   const [searchParams, setSearchParams] = useSearchParams();
-  
+
   const {
     params,
     derivedMicroVars,
@@ -91,131 +93,144 @@ const Index = () => {
     setMappingVersion,
     getShareUrl,
     applyToUrl,
-    randomizeSeed
+    randomizeSeed,
   } = useWorldParams();
 
   // Handle land transition - reposition camera at entry point
   const handleLandTransition = useCallback((entryPosition: { x: number; z: number }) => {
     setCameraForLandTransition(entryPosition.x, entryPosition.z);
   }, []);
-  
+
   // Multiplayer world management - use authenticated user ID
   const multiplayer = useMultiplayerWorld({
-    autoCreate: worldMode === 'multiplayer' && isAuthenticated,
+    autoCreate: worldMode === "multiplayer" && isAuthenticated,
     initialPlayerId: user?.id,
-    onLandTransition: handleLandTransition
+    onLandTransition: handleLandTransition,
   });
-  
+
   // Check if we're on someone else's land (multiplayer)
-  // Derive this from the authenticated user + current land owner (more reliable than a cached boolean)
   const isOtherPlayerLand = useMemo(() => {
-    if (worldMode !== 'multiplayer' || !multiplayer.currentLand) return false;
+    if (worldMode !== "multiplayer" || !multiplayer.currentLand) return false;
     if (!user?.id) return false;
     return multiplayer.currentLand.player_id !== user.id;
   }, [worldMode, multiplayer.currentLand?.player_id, user?.id]);
 
   // Force explore mode when on someone else's land
-  const effectiveInteractionMode: InteractionMode = isOtherPlayerLand ? 'explore' : interactionMode;
+  const effectiveInteractionMode: InteractionMode = isOtherPlayerLand ? "explore" : interactionMode;
 
-  // Ensure the panel opens when switching into editor mode (but don't auto-close in explore)
+  // Ensure the panel opens when switching into editor mode
   useEffect(() => {
-    if (effectiveInteractionMode === 'editor') {
+    if (effectiveInteractionMode === "editor") {
       setShowSidebar(true);
     }
-    // Don't auto-close in explore mode - let user control sidebar visibility
   }, [effectiveInteractionMode]);
-  
+
   // Handle mode changes
-  const handleInteractionModeChange = useCallback((mode: InteractionMode) => {
-    if (isOtherPlayerLand && mode === 'editor') {
-      toast({
-        title: 'Cannot edit',
-        description: "You can only explore on someone else's land",
-        variant: 'destructive'
-      });
-      return;
-    }
-    
-    setInteractionMode(mode);
-    // Only auto-open sidebar when switching TO editor mode
-    if (mode === 'editor') {
-      setShowSidebar(true);
-    }
-  }, [isOtherPlayerLand, toast]);
-  
-  // Handle multiplayer switch - check if player has land or needs to claim
+  const handleInteractionModeChange = useCallback(
+    (mode: InteractionMode) => {
+      if (isOtherPlayerLand && mode === "editor") {
+        toast({
+          title: "Cannot edit",
+          description: "You can only explore on someone else's land",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setInteractionMode(mode);
+      if (mode === "editor") {
+        setShowSidebar(true);
+      }
+    },
+    [isOtherPlayerLand, toast],
+  );
+
+  // Handle multiplayer switch
   const handleMultiplayerClick = useCallback(async () => {
     if (!isAuthenticated) {
-      navigate('/auth');
+      navigate("/auth");
       return;
     }
-    
+
     if (!user?.id) return;
-    
-    // Check if player already has a land
+
     setPendingMultiplayerSwitch(true);
-    const existingLand = await import('@/lib/multiplayer/landRegistry').then(
-      m => m.getLandByPlayerId(user.id)
-    );
-    
+    const existingLand = await import("@/lib/multiplayer/landRegistry").then((m) => m.getLandByPlayerId(user.id));
+
     if (existingLand) {
-      // Player has land - switch to multiplayer and navigate to their land
-      setWorldMode('multiplayer');
+      setWorldMode("multiplayer");
       multiplayer.initializePlayerLand(user.id);
     } else {
-      // Player has no land - show claim modal
       setShowClaimModal(true);
     }
     setPendingMultiplayerSwitch(false);
   }, [isAuthenticated, user?.id, navigate, multiplayer]);
 
   // Handle land claimed from modal
-  const handleLandClaimed = useCallback((land: import('@/lib/multiplayer/types').PlayerLand) => {
-    setShowClaimModal(false);
-    setWorldMode('multiplayer');
-    // Re-initialize to load the newly claimed land
-    if (user?.id) {
-      multiplayer.initializePlayerLand(user.id);
-    }
-    toast({
-      title: 'Land Claimed!',
-      description: `You now own land at position (${land.pos_x}, ${land.pos_y})`,
-    });
-  }, [user?.id, multiplayer, toast]);
-  
-  
+  const handleLandClaimed = useCallback(
+    (land: import("@/lib/multiplayer/types").PlayerLand) => {
+      setShowClaimModal(false);
+      setWorldMode("multiplayer");
+      if (user?.id) {
+        multiplayer.initializePlayerLand(user.id);
+      }
+      toast({
+        title: "Land Claimed!",
+        description: `You now own land at position (${land.pos_x}, ${land.pos_y})`,
+      });
+    },
+    [user?.id, multiplayer, toast],
+  );
+
   // Handle sign out
   const handleSignOut = useCallback(async () => {
     await signOut();
-    setWorldMode('solo');
+    setWorldMode("solo");
     toast({
-      title: 'Signed out',
-      description: 'You have been logged out'
+      title: "Signed out",
+      description: "You have been logged out",
     });
   }, [signOut, toast]);
 
   // Parse actions from URL
   const [actions, setActions] = useState<WorldAction[]>(() => {
-    const actionsParam = searchParams.get('actions');
+    const actionsParam = searchParams.get("actions");
     return actionsParam ? parseActions(actionsParam) : [];
   });
-  
+
   // Use multiplayer world data when in multiplayer mode, else solo params
-  const activeParams = worldMode === 'multiplayer' && multiplayer.currentLand
-    ? { seed: multiplayer.currentLand.seed, vars: multiplayer.currentLand.vars }
-    : params;
-  
-  // Get active V2 settings - from land in multiplayer, from params in solo
-  const activeMappingVersion = worldMode === 'multiplayer' && multiplayer.currentLand
-    ? (multiplayer.worldParams.mappingVersion ?? 'v1')
-    : params.mappingVersion;
-  
-  const activeMicroOverrides = worldMode === 'multiplayer' && multiplayer.currentLand
-    ? multiplayer.worldParams.microOverrides
-    : params.microOverrides;
-    
-  // Generate world for contract panel
-  const world = useMemo(() => generateWorldData(activeParams.seed, activeParams.vars), [activeParams.seed, activeParams.vars]);
+  const activeParams =
+    worldMode === "multiplayer" && multiplayer.currentLand
+      ? { seed: multiplayer.currentLand.seed, vars: multiplayer.currentLand.vars }
+      : params;
+
+  // Get active V2 settings
+  const activeMappingVersion =
+    worldMode === "multiplayer" && multiplayer.currentLand
+      ? (multiplayer.worldParams.mappingVersion ?? "v1")
+      : params.mappingVersion;
+
+  const activeMicroOverrides =
+    worldMode === "multiplayer" && multiplayer.currentLand
+      ? multiplayer.worldParams.microOverrides
+      : params.microOverrides;
+
+  // Generate world for contract panel - ASYNC VERSION
+  const [world, setWorld] = useState<WorldData | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    generateWorldDataAsync(activeParams.seed, activeParams.vars).then((data) => {
+      if (!cancelled) {
+        setWorld(data);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeParams.seed, activeParams.vars]);
 
   const handleGenerate = useCallback(() => {
     applyToUrl();
@@ -226,20 +241,20 @@ const Index = () => {
     const baseUrl = getShareUrl();
     const actionsStr = serializeActions(actions);
     const url = actionsStr ? `${baseUrl}&actions=${actionsStr}` : baseUrl;
-    
+
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
       toast({
-        title: 'Link copied!',
-        description: 'Deterministic world URL with actions copied',
+        title: "Link copied!",
+        description: "Deterministic world URL with actions copied",
       });
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       toast({
-        title: 'Copy failed',
-        description: 'Could not copy to clipboard',
-        variant: 'destructive'
+        title: "Copy failed",
+        description: "Could not copy to clipboard",
+        variant: "destructive",
       });
     }
   };
@@ -250,104 +265,111 @@ const Index = () => {
       setSeed(Math.max(0, value));
     }
   };
-  
-  const handleActionExecute = useCallback((action: WorldAction) => {
-    const newActions = [...actions, action];
-    setActions(newActions);
-    
-    // Update URL with action
-    const varsStr = params.vars.join(',');
-    const actionsStr = serializeActions(newActions);
-    setSearchParams({ 
-      seed: params.seed.toString(), 
-      vars: varsStr,
-      actions: actionsStr
-    });
-  }, [actions, params, setSearchParams]);
-  
+
+  const handleActionExecute = useCallback(
+    (action: WorldAction) => {
+      const newActions = [...actions, action];
+      setActions(newActions);
+
+      const varsStr = params.vars.join(",");
+      const actionsStr = serializeActions(newActions);
+      setSearchParams({
+        seed: params.seed.toString(),
+        vars: varsStr,
+        actions: actionsStr,
+      });
+    },
+    [actions, params, setSearchParams],
+  );
+
   const handleActionReset = useCallback(() => {
     setActions([]);
-    // Update URL without actions
-    const varsStr = params.vars.join(',');
-    setSearchParams({ 
-      seed: params.seed.toString(), 
-      vars: varsStr
+    const varsStr = params.vars.join(",");
+    setSearchParams({
+      seed: params.seed.toString(),
+      vars: varsStr,
     });
     toast({
-      title: 'Beacon Reset',
-      description: 'You can now place a new beacon',
+      title: "Beacon Reset",
+      description: "You can now place a new beacon",
     });
   }, [params, setSearchParams, toast]);
-  
-  const handleDeterminismBreak = useCallback((breakType: 'math_random' | 'date' | 'none') => {
-    const test = runDeterminismTest(world, breakType);
-    setDeterministicTest(test);
-    
-    if (breakType !== 'none') {
-      toast({
-        title: 'Determinism Broken',
-        description: `Injected ${breakType === 'math_random' ? 'Math.random()' : 'Date.now()'} — hash mismatch`,
-        variant: 'destructive'
-      });
-    } else {
-      toast({
-        title: 'Determinism Restored',
-        description: 'World hash verified',
-      });
-    }
-  }, [world, toast]);
-  
+
+  const handleDeterminismBreak = useCallback(
+    (breakType: "math_random" | "date" | "none") => {
+      if (!world) return;
+      const test = runDeterminismTest(world, breakType);
+      setDeterministicTest(test);
+
+      if (breakType !== "none") {
+        toast({
+          title: "Determinism Broken",
+          description: `Injected ${breakType === "math_random" ? "Math.random()" : "Date.now()"} — hash mismatch`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Determinism Restored",
+          description: "World hash verified",
+        });
+      }
+    },
+    [world, toast],
+  );
+
   const handleReplayStart = useCallback(() => {
     setIsReplaying(true);
   }, []);
-  
+
   const handleReplayStop = useCallback(() => {
     setIsReplaying(false);
     setReplayFrame(null);
   }, []);
-  
+
   const handleReplayFrame = useCallback((frame: ReplayFrame) => {
     setReplayFrame(frame);
   }, []);
-  
+
   const handleReplayComplete = useCallback(() => {
     setIsReplaying(false);
     toast({
-      title: 'Replay Complete',
-      description: 'All stored instructions executed',
+      title: "Replay Complete",
+      description: "All stored instructions executed",
     });
   }, [toast]);
-  
-  const handlePositionUpdate = useCallback((pos: { x: number; y: number; z: number }) => {
-    setPlayerPosition(pos);
-    // Update multiplayer position tracking for edge transitions
-    // NOTE: WorldExplorer reports (x, y=groundZ, z=altitude)
-    if (worldMode === 'multiplayer') {
-      multiplayer.updatePlayerPosition(pos.x, pos.y);
-    }
-  }, [worldMode, multiplayer.updatePlayerPosition]);
+
+  const handlePositionUpdate = useCallback(
+    (pos: { x: number; y: number; z: number }) => {
+      setPlayerPosition(pos);
+      if (worldMode === "multiplayer") {
+        multiplayer.updatePlayerPosition(pos.x, pos.y);
+      }
+    },
+    [worldMode, multiplayer.updatePlayerPosition],
+  );
 
   const isInvalid = deterministicTest && !deterministicTest.isValid;
 
   return (
-    <div className={`h-screen bg-background flex flex-col overflow-hidden ${isInvalid ? 'border-4 border-destructive' : ''}`}>
+    <div
+      className={`h-screen bg-background flex flex-col overflow-hidden ${isInvalid ? "border-4 border-destructive" : ""}`}
+    >
       {/* Compact Header */}
-      <header className={`relative z-50 border-b ${isInvalid ? 'border-destructive bg-destructive/10' : 'border-border bg-card/80'} backdrop-blur-sm flex-shrink-0`}>
+      <header
+        className={`relative z-50 border-b ${isInvalid ? "border-destructive bg-destructive/10" : "border-border bg-card/80"} backdrop-blur-sm flex-shrink-0`}
+      >
         <div className="px-3 sm:px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Logo - always visible */}
             <div className="min-w-0 flex items-center gap-2">
-              <img 
-                src={frontierraLogoHeader} 
-                alt="Frontierra" 
-                className="h-8 sm:h-10 object-contain"
-              />
+              <img src={frontierraLogoHeader} alt="Frontierra" className="h-8 sm:h-10 object-contain" />
               <p className="text-[10px] sm:text-xs text-muted-foreground truncate max-w-[100px] sm:max-w-none hidden sm:block">
-                {worldMode === 'multiplayer' && multiplayer.currentLand ? (
+                {worldMode === "multiplayer" && multiplayer.currentLand ? (
                   <>
                     <span className="text-primary font-mono">{multiplayer.currentLand.seed}</span>
                     <span className="hidden md:inline ml-2">
-                      Grid: <span className="text-accent font-mono">
+                      Grid:{" "}
+                      <span className="text-accent font-mono">
                         ({multiplayer.currentLand.pos_x}, {multiplayer.currentLand.pos_y})
                       </span>
                     </span>
@@ -359,14 +381,14 @@ const Index = () => {
                 )}
               </p>
             </div>
-            
+
             {/* Desktop Controls - hidden on mobile */}
             {/* World Mode Toggle */}
             <div className="hidden md:flex items-center gap-1 bg-secondary/50 rounded p-1">
               <Button
-                variant={worldMode === 'solo' ? 'default' : 'ghost'}
+                variant={worldMode === "solo" ? "default" : "ghost"}
                 size="sm"
-                onClick={() => setWorldMode('solo')}
+                onClick={() => setWorldMode("solo")}
                 className="gap-1.5 h-7 text-xs"
                 disabled={isReplaying}
               >
@@ -374,23 +396,23 @@ const Index = () => {
                 Solo
               </Button>
               <Button
-                variant={worldMode === 'multiplayer' ? 'default' : 'ghost'}
+                variant={worldMode === "multiplayer" ? "default" : "ghost"}
                 size="sm"
                 onClick={handleMultiplayerClick}
                 className="gap-1.5 h-7 text-xs"
                 disabled={isReplaying || pendingMultiplayerSwitch}
               >
                 <Users className="w-3.5 h-3.5" />
-                {pendingMultiplayerSwitch ? 'Loading...' : isAuthenticated ? 'Multiplayer' : 'Login'}
+                {pendingMultiplayerSwitch ? "Loading..." : isAuthenticated ? "Multiplayer" : "Login"}
               </Button>
             </div>
-            
+
             {/* View Mode Toggle - hidden on small screens */}
             <div className="hidden lg:flex items-center gap-1 bg-secondary rounded p-1">
               <Button
-                variant={viewMode === 'firstperson' ? 'default' : 'ghost'}
+                variant={viewMode === "firstperson" ? "default" : "ghost"}
                 size="sm"
-                onClick={() => setViewMode('firstperson')}
+                onClick={() => setViewMode("firstperson")}
                 className="gap-1.5 h-7 text-xs"
                 disabled={isReplaying}
               >
@@ -398,9 +420,9 @@ const Index = () => {
                 First Person
               </Button>
               <Button
-                variant={viewMode === 'map' ? 'default' : 'ghost'}
+                variant={viewMode === "map" ? "default" : "ghost"}
                 size="sm"
-                onClick={() => setViewMode('map')}
+                onClick={() => setViewMode("map")}
                 className="gap-1.5 h-7 text-xs"
                 disabled={isReplaying}
               >
@@ -408,13 +430,13 @@ const Index = () => {
                 2D Map
               </Button>
             </div>
-            
+
             {/* Interaction Mode Toggle - hidden on small screens */}
             <div className="hidden lg:flex items-center gap-1 bg-secondary rounded p-1">
               <Button
-                variant={effectiveInteractionMode === 'explore' ? 'default' : 'ghost'}
+                variant={effectiveInteractionMode === "explore" ? "default" : "ghost"}
                 size="sm"
-                onClick={() => handleInteractionModeChange('explore')}
+                onClick={() => handleInteractionModeChange("explore")}
                 className="gap-1.5 h-7 text-xs"
                 disabled={isReplaying}
               >
@@ -422,9 +444,9 @@ const Index = () => {
                 Explore
               </Button>
               <Button
-                variant={effectiveInteractionMode === 'editor' ? 'default' : 'ghost'}
+                variant={effectiveInteractionMode === "editor" ? "default" : "ghost"}
                 size="sm"
-                onClick={() => handleInteractionModeChange('editor')}
+                onClick={() => handleInteractionModeChange("editor")}
                 className="gap-1.5 h-7 text-xs"
                 disabled={isReplaying || isOtherPlayerLand}
                 title={isOtherPlayerLand ? "Can't edit on someone else's land" : undefined}
@@ -434,7 +456,7 @@ const Index = () => {
               </Button>
             </div>
           </div>
-          
+
           {/* Right side controls */}
           <div className="flex items-center gap-1 sm:gap-2">
             {/* Desktop-only buttons */}
@@ -446,18 +468,13 @@ const Index = () => {
               className="hidden sm:flex text-xs gap-1"
             >
               <Settings className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">{showSidebar ? 'Hide' : 'Show'} Panel</span>
+              <span className="hidden md:inline">{showSidebar ? "Hide" : "Show"} Panel</span>
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCopyLink}
-              className="gap-1.5 px-2 sm:px-3"
-            >
+            <Button variant="outline" size="sm" onClick={handleCopyLink} className="gap-1.5 px-2 sm:px-3">
               {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">{copied ? 'Copied!' : 'Share'}</span>
+              <span className="hidden sm:inline">{copied ? "Copied!" : "Share"}</span>
             </Button>
-            
+
             {/* Auth Button - simplified on mobile */}
             {isAuthenticated ? (
               <Button
@@ -471,17 +488,12 @@ const Index = () => {
                 <span className="hidden md:inline">Sign Out</span>
               </Button>
             ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/auth')}
-                className="hidden sm:flex gap-1.5"
-              >
+              <Button variant="outline" size="sm" onClick={() => navigate("/auth")} className="hidden sm:flex gap-1.5">
                 <LogIn className="w-3.5 h-3.5" />
                 <span className="hidden md:inline">Login</span>
               </Button>
             )}
-            
+
             {/* Mobile Menu Button */}
             <Button
               variant="ghost"
@@ -493,23 +505,26 @@ const Index = () => {
             </Button>
           </div>
         </div>
-        
+
         {/* Mobile Menu Dropdown */}
         {showMobileMenu && isMobile && (
           <div className="absolute top-full left-0 right-0 bg-card/95 backdrop-blur-sm border-b border-border z-50 p-3 space-y-3">
             {/* World Mode */}
             <div className="flex gap-2">
               <Button
-                variant={worldMode === 'solo' ? 'default' : 'outline'}
+                variant={worldMode === "solo" ? "default" : "outline"}
                 size="sm"
-                onClick={() => { setWorldMode('solo'); setShowMobileMenu(false); }}
+                onClick={() => {
+                  setWorldMode("solo");
+                  setShowMobileMenu(false);
+                }}
                 className="flex-1 gap-1.5"
               >
                 <Globe className="w-4 h-4" />
                 Solo
               </Button>
               <Button
-                variant={worldMode === 'multiplayer' ? 'default' : 'outline'}
+                variant={worldMode === "multiplayer" ? "default" : "outline"}
                 size="sm"
                 onClick={() => {
                   handleMultiplayerClick();
@@ -519,50 +534,54 @@ const Index = () => {
                 disabled={pendingMultiplayerSwitch}
               >
                 <Users className="w-4 h-4" />
-                {pendingMultiplayerSwitch ? 'Loading...' : isAuthenticated ? 'Multiplayer' : 'Login'}
+                {pendingMultiplayerSwitch ? "Loading..." : isAuthenticated ? "Multiplayer" : "Login"}
               </Button>
             </div>
-            
+
             {/* View Mode */}
             <div className="flex gap-2">
               <Button
-                variant={viewMode === 'firstperson' ? 'default' : 'outline'}
+                variant={viewMode === "firstperson" ? "default" : "outline"}
                 size="sm"
-                onClick={() => { setViewMode('firstperson'); setShowMobileMenu(false); }}
+                onClick={() => {
+                  setViewMode("firstperson");
+                  setShowMobileMenu(false);
+                }}
                 className="flex-1 gap-1.5"
               >
                 <Eye className="w-4 h-4" />
                 3D View
               </Button>
               <Button
-                variant={viewMode === 'map' ? 'default' : 'outline'}
+                variant={viewMode === "map" ? "default" : "outline"}
                 size="sm"
-                onClick={() => { setViewMode('map'); setShowMobileMenu(false); }}
+                onClick={() => {
+                  setViewMode("map");
+                  setShowMobileMenu(false);
+                }}
                 className="flex-1 gap-1.5"
               >
                 <Map className="w-4 h-4" />
                 2D Map
               </Button>
             </div>
-            
+
             {/* Auth */}
             {isAuthenticated ? (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => { handleSignOut(); setShowMobileMenu(false); }}
+                onClick={() => {
+                  handleSignOut();
+                  setShowMobileMenu(false);
+                }}
                 className="w-full gap-1.5"
               >
                 <LogOut className="w-4 h-4" />
-                Sign Out ({user?.email?.split('@')[0]})
+                Sign Out ({user?.email?.split("@")[0]})
               </Button>
             ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/auth')}
-                className="w-full gap-1.5"
-              >
+              <Button variant="outline" size="sm" onClick={() => navigate("/auth")} className="w-full gap-1.5">
                 <LogIn className="w-4 h-4" />
                 Login / Sign Up
               </Button>
@@ -575,9 +594,9 @@ const Index = () => {
       <main className="flex-1 flex overflow-hidden relative z-0">
         {/* World View */}
         <div className="flex-1 relative z-0">
-          {viewMode === 'firstperson' ? (
-            <WorldExplorer 
-              seed={activeParams.seed} 
+          {viewMode === "firstperson" ? (
+            <WorldExplorer
+              seed={activeParams.seed}
               vars={activeParams.vars}
               initialActions={actions}
               onActionsChange={setActions}
@@ -587,11 +606,15 @@ const Index = () => {
               replayFrame={replayFrame}
               interactionMode={effectiveInteractionMode}
               onModeChange={handleInteractionModeChange}
-              worldContext={worldMode === 'multiplayer' && multiplayer.currentLand ? {
-                worldX: multiplayer.currentLand.pos_x,
-                worldY: multiplayer.currentLand.pos_y
-              } : undefined}
-              isOwnLand={worldMode === 'solo' || !isOtherPlayerLand}
+              worldContext={
+                worldMode === "multiplayer" && multiplayer.currentLand
+                  ? {
+                      worldX: multiplayer.currentLand.pos_x,
+                      worldY: multiplayer.currentLand.pos_y,
+                    }
+                  : undefined
+              }
+              isOwnLand={worldMode === "solo" || !isOtherPlayerLand}
               mappingVersion={activeMappingVersion}
               microOverrides={activeMicroOverrides}
             />
@@ -602,9 +625,9 @@ const Index = () => {
               </div>
             </div>
           )}
-          
+
           {/* Land Transition Overlay */}
-          {worldMode === 'multiplayer' && multiplayer.isTransitioning && (
+          {worldMode === "multiplayer" && multiplayer.isTransitioning && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm transition-opacity duration-300">
               <div className="flex flex-col items-center gap-3">
                 <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -613,9 +636,9 @@ const Index = () => {
               </div>
             </div>
           )}
-          
+
           {/* Unclaimed Land Modal */}
-          {worldMode === 'multiplayer' && multiplayer.unclaimedAttempt && (
+          {worldMode === "multiplayer" && multiplayer.unclaimedAttempt && (
             <UnclaimedLandModal
               open={true}
               onClose={multiplayer.dismissUnclaimedAttempt}
@@ -623,8 +646,8 @@ const Index = () => {
               gridPosition={multiplayer.unclaimedAttempt.gridPosition}
             />
           )}
-          
-          {/* Claim Land Modal - shown when entering multiplayer without a land */}
+
+          {/* Claim Land Modal */}
           {user?.id && (
             <ClaimLandModal
               open={showClaimModal}
@@ -633,8 +656,9 @@ const Index = () => {
               playerId={user.id}
             />
           )}
+
           {/* Multiplayer HUD */}
-          {worldMode === 'multiplayer' && viewMode === 'firstperson' && (
+          {worldMode === "multiplayer" && viewMode === "firstperson" && (
             <MultiplayerHUD
               currentLand={multiplayer.currentLand}
               neighborLands={multiplayer.neighborLands}
@@ -643,7 +667,7 @@ const Index = () => {
               onVisitLand={multiplayer.visitLand}
             />
           )}
-          
+
           {/* Sidebar toggle button (when hidden) */}
           {!showSidebar && (
             <button
@@ -655,32 +679,33 @@ const Index = () => {
           )}
         </div>
 
-        {/* Control Sidebar - Absolute positioned to overlay canvas */}
+        {/* Control Sidebar */}
         {showSidebar && (
-        <aside className="fixed top-[52px] right-0 bottom-0 w-80 border-l border-border bg-card/95 backdrop-blur-sm flex flex-col overflow-hidden z-[100] shadow-xl">
+          <aside className="fixed top-[52px] right-0 bottom-0 w-80 border-l border-border bg-card/95 backdrop-blur-sm flex flex-col overflow-hidden z-[100] shadow-xl">
             {/* Tab Navigation */}
             <div className="flex border-b border-border bg-secondary/30">
-              {/* Show worldmap and social tabs only in multiplayer mode */}
-              {(worldMode === 'multiplayer' 
-                ? (['worldmap', 'social', 'contract', 'actions', 'parameters'] as SidebarTab[])
-                : (['contract', 'actions', 'parameters'] as SidebarTab[])
-              ).map(tab => (
+              {(worldMode === "multiplayer"
+                ? (["worldmap", "social", "contract", "actions", "parameters"] as SidebarTab[])
+                : (["contract", "actions", "parameters"] as SidebarTab[])
+              ).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setSidebarTab(tab)}
                   className={`flex-1 py-2 text-[10px] uppercase tracking-wider transition-colors
-                    ${sidebarTab === tab 
-                      ? 'text-primary border-b-2 border-primary bg-card' 
-                      : 'text-muted-foreground hover:text-foreground'}`}
+                    ${
+                      sidebarTab === tab
+                        ? "text-primary border-b-2 border-primary bg-card"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
                 >
-                  {tab === 'worldmap' ? 'Map' : tab}
+                  {tab === "worldmap" ? "Map" : tab}
                 </button>
               ))}
             </div>
-            
+
             {/* Tab Content */}
             <div className="flex-1 overflow-y-auto p-3">
-              {sidebarTab === 'worldmap' && worldMode === 'multiplayer' && (
+              {sidebarTab === "worldmap" && worldMode === "multiplayer" && (
                 <WorldAMap
                   currentLand={multiplayer.currentLand}
                   playerId={user?.id ?? null}
@@ -688,15 +713,12 @@ const Index = () => {
                   onLandClaimed={() => multiplayer.initializePlayerLand(user?.id)}
                 />
               )}
-              
-              {sidebarTab === 'social' && worldMode === 'multiplayer' && (
-                <SocialPanel
-                  playerId={user?.id ?? null}
-                  currentLand={multiplayer.currentLand}
-                />
+
+              {sidebarTab === "social" && worldMode === "multiplayer" && (
+                <SocialPanel playerId={user?.id ?? null} currentLand={multiplayer.currentLand} />
               )}
-              
-              {sidebarTab === 'contract' && (
+
+              {sidebarTab === "contract" && world && (
                 <WorldContractPanel
                   world={world}
                   actions={actions}
@@ -704,8 +726,8 @@ const Index = () => {
                   deterministicTest={deterministicTest}
                 />
               )}
-              
-              {sidebarTab === 'actions' && viewMode === 'firstperson' && (
+
+              {sidebarTab === "actions" && viewMode === "firstperson" && world && (
                 <ActionSystem
                   world={world}
                   playerPosition={playerPosition}
@@ -715,16 +737,14 @@ const Index = () => {
                   disabled={isReplaying}
                 />
               )}
-              
-              {sidebarTab === 'actions' && viewMode === 'map' && (
+
+              {sidebarTab === "actions" && viewMode === "map" && (
                 <div className="text-center text-muted-foreground text-sm py-8">
                   Switch to First Person view to execute actions
                 </div>
               )}
-              
-              
-              
-              {sidebarTab === 'parameters' && (
+
+              {sidebarTab === "parameters" && (
                 <div className="space-y-4">
                   {/* Seed Control */}
                   <div className="space-y-1.5">
@@ -736,7 +756,7 @@ const Index = () => {
                         onChange={(e) => {
                           const value = parseInt(e.target.value, 10);
                           if (!isNaN(value)) {
-                            if (worldMode === 'multiplayer' && multiplayer.currentLand && !isOtherPlayerLand) {
+                            if (worldMode === "multiplayer" && multiplayer.currentLand && !isOtherPlayerLand) {
                               multiplayer.updateLandParams({ seed: Math.max(0, value) });
                             } else {
                               setSeed(Math.max(0, value));
@@ -744,14 +764,14 @@ const Index = () => {
                           }
                         }}
                         className="bg-secondary border-border font-mono text-sm h-8"
-                        disabled={isReplaying || (worldMode === 'multiplayer' && isOtherPlayerLand)}
+                        disabled={isReplaying || (worldMode === "multiplayer" && isOtherPlayerLand)}
                       />
                       <Button
                         variant="outline"
                         size="icon"
                         onClick={() => {
                           const newSeed = Math.floor(Math.random() * 100000);
-                          if (worldMode === 'multiplayer' && multiplayer.currentLand && !isOtherPlayerLand) {
+                          if (worldMode === "multiplayer" && multiplayer.currentLand && !isOtherPlayerLand) {
                             multiplayer.updateLandParams({ seed: newSeed });
                           } else {
                             randomizeSeed();
@@ -759,17 +779,17 @@ const Index = () => {
                         }}
                         className="shrink-0 h-8 w-8"
                         title="Randomize seed"
-                        disabled={isReplaying || (worldMode === 'multiplayer' && isOtherPlayerLand)}
+                        disabled={isReplaying || (worldMode === "multiplayer" && isOtherPlayerLand)}
                       >
                         <Shuffle className="w-3.5 h-3.5" />
                       </Button>
                     </div>
                   </div>
-                  
+
                   {/* Variable Sliders */}
                   <div className="space-y-3">
                     <div className="data-label text-[10px]">Variables [0-9]</div>
-                    
+
                     {activeParams.vars.map((value, index) => (
                       <div key={index} className="space-y-1">
                         <div className="flex justify-between items-center text-[10px]">
@@ -781,7 +801,7 @@ const Index = () => {
                         <Slider
                           value={[value]}
                           onValueChange={([v]) => {
-                            if (worldMode === 'multiplayer' && multiplayer.currentLand && !isOtherPlayerLand) {
+                            if (worldMode === "multiplayer" && multiplayer.currentLand && !isOtherPlayerLand) {
                               const newVars = [...activeParams.vars];
                               newVars[index] = v;
                               multiplayer.updateLandParams({ vars: newVars });
@@ -793,14 +813,14 @@ const Index = () => {
                           max={100}
                           step={1}
                           className="w-full"
-                          disabled={isReplaying || (worldMode === 'multiplayer' && isOtherPlayerLand)}
+                          disabled={isReplaying || (worldMode === "multiplayer" && isOtherPlayerLand)}
                         />
                       </div>
                     ))}
                   </div>
-                  
+
                   {/* V2 Enhanced Generation Toggle */}
-                  {worldMode !== 'multiplayer' && (
+                  {worldMode !== "multiplayer" && (
                     <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-border">
                       <div className="space-y-0.5 flex-1">
                         <Label className="text-xs font-medium">Enhanced Generation (v2)</Label>
@@ -809,110 +829,120 @@ const Index = () => {
                         </p>
                       </div>
                       <Switch
-                        checked={params.mappingVersion === 'v2'}
-                        onCheckedChange={(checked) => setMappingVersion(checked ? 'v2' : 'v1')}
+                        checked={params.mappingVersion === "v2"}
+                        onCheckedChange={(checked) => setMappingVersion(checked ? "v2" : "v1")}
                         disabled={isReplaying}
                       />
                     </div>
                   )}
-                  
+
                   {/* V2 Archetype Info (when V2 enabled) */}
-                  {worldMode !== 'multiplayer' && params.mappingVersion === 'v2' && (() => {
-                    const archetype = selectArchetype(activeParams.seed, activeParams.vars);
-                    const profile = ARCHETYPE_PROFILES[archetype];
-                    const v2Params = buildParamsV2(activeParams.seed, activeParams.vars, params.microOverrides);
-                    const microVars = v2Params.vars.slice(10, 24);
-                    const hasOverrides = params.microOverrides && params.microOverrides.size > 0;
-                    
-                    const MICRO_VAR_LABELS = [
-                      'River threshold', 'River width', 'Lake tendency', 'Wetland spread',
-                      'Erosion strength', 'Coastline complexity', 'Cliff frequency', 'Plateau size',
-                      'Valley depth', 'Ridge sharpness', 'Biome patchiness', 'Tree variety',
-                      'Undergrowth density', 'Meadow frequency'
-                    ];
-                    
-                    return (
-                      <div className="space-y-3 pt-3 mt-1 border-t border-border/50">
-                        {/* Archetype Badge */}
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-muted-foreground">World Archetype</span>
-                          <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">
-                            {profile.name}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground/70 -mt-2">
-                          {profile.description}
-                        </p>
-                        
-                        {/* Micro Vars (editable) */}
-                        <details className="group" open>
-                          <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
-                            <ChevronLeft className="w-3 h-3 -rotate-90 group-open:rotate-0 transition-transform" />
-                            Advanced Parameters
-                            {hasOverrides && (
-                              <span className="text-[9px] text-accent ml-1">
-                                ({params.microOverrides!.size} modified)
-                              </span>
-                            )}
-                          </summary>
-                          <div className="mt-2 space-y-2">
-                            {hasOverrides && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={resetAllMicroVars}
-                                className="h-5 px-2 text-[9px] text-muted-foreground hover:text-foreground w-full justify-start"
-                              >
-                                Reset all to derived values
-                              </Button>
-                            )}
-                            {microVars.map((value, idx) => {
-                              const varIndex = 10 + idx;
-                              const isOverridden = params.microOverrides?.has(varIndex);
-                              const derivedValue = derivedMicroVars[idx] ?? value;
-                              
-                              return (
-                                <div key={idx} className="space-y-0.5">
-                                  <div className="flex justify-between items-center text-[9px]">
-                                    <span className={`${isOverridden ? 'text-accent' : 'text-muted-foreground/70'}`}>
-                                      [{varIndex}] {MICRO_VAR_LABELS[idx]}
-                                      {isOverridden && ' *'}
-                                    </span>
-                                    <div className="flex items-center gap-1">
-                                      <span className="font-mono text-muted-foreground w-6 text-right">
-                                        {Math.round(value)}
-                                      </span>
-                                      {isOverridden && (
-                                        <button
-                                          onClick={() => resetMicroVar(varIndex)}
-                                          className="text-[8px] text-muted-foreground hover:text-foreground px-1"
-                                          title={`Reset to derived (${Math.round(derivedValue)})`}
-                                        >
-                                          ↺
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <Slider
-                                    value={[Math.round(value)]}
-                                    onValueChange={([v]) => setMicroVar(varIndex, v)}
-                                    min={0}
-                                    max={100}
-                                    step={1}
-                                    className="w-full"
-                                    disabled={isReplaying}
-                                  />
-                                </div>
-                              );
-                            })}
+                  {worldMode !== "multiplayer" &&
+                    params.mappingVersion === "v2" &&
+                    (() => {
+                      const archetype = selectArchetype(activeParams.seed, activeParams.vars);
+                      const profile = ARCHETYPE_PROFILES[archetype];
+                      const v2Params = buildParamsV2(activeParams.seed, activeParams.vars, params.microOverrides);
+                      const microVars = v2Params.vars.slice(10, 24);
+                      const hasOverrides = params.microOverrides && params.microOverrides.size > 0;
+
+                      const MICRO_VAR_LABELS = [
+                        "River threshold",
+                        "River width",
+                        "Lake tendency",
+                        "Wetland spread",
+                        "Erosion strength",
+                        "Coastline complexity",
+                        "Cliff frequency",
+                        "Plateau size",
+                        "Valley depth",
+                        "Ridge sharpness",
+                        "Biome patchiness",
+                        "Tree variety",
+                        "Undergrowth density",
+                        "Meadow frequency",
+                      ];
+
+                      return (
+                        <div className="space-y-3 pt-3 mt-1 border-t border-border/50">
+                          {/* Archetype Badge */}
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-muted-foreground">World Archetype</span>
+                            <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">
+                              {profile.name}
+                            </span>
                           </div>
-                        </details>
-                      </div>
-                    );
-                  })()}
-                  
-                  {worldMode !== 'multiplayer' && (
-                    <Button 
+                          <p className="text-[10px] text-muted-foreground/70 -mt-2">{profile.description}</p>
+
+                          {/* Micro Vars (editable) */}
+                          <details className="group" open>
+                            <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                              <ChevronLeft className="w-3 h-3 -rotate-90 group-open:rotate-0 transition-transform" />
+                              Advanced Parameters
+                              {hasOverrides && (
+                                <span className="text-[9px] text-accent ml-1">
+                                  ({params.microOverrides!.size} modified)
+                                </span>
+                              )}
+                            </summary>
+                            <div className="mt-2 space-y-2">
+                              {hasOverrides && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={resetAllMicroVars}
+                                  className="h-5 px-2 text-[9px] text-muted-foreground hover:text-foreground w-full justify-start"
+                                >
+                                  Reset all to derived values
+                                </Button>
+                              )}
+                              {microVars.map((value, idx) => {
+                                const varIndex = 10 + idx;
+                                const isOverridden = params.microOverrides?.has(varIndex);
+                                const derivedValue = derivedMicroVars[idx] ?? value;
+
+                                return (
+                                  <div key={idx} className="space-y-0.5">
+                                    <div className="flex justify-between items-center text-[9px]">
+                                      <span className={`${isOverridden ? "text-accent" : "text-muted-foreground/70"}`}>
+                                        [{varIndex}] {MICRO_VAR_LABELS[idx]}
+                                        {isOverridden && " *"}
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <span className="font-mono text-muted-foreground w-6 text-right">
+                                          {Math.round(value)}
+                                        </span>
+                                        {isOverridden && (
+                                          <button
+                                            onClick={() => resetMicroVar(varIndex)}
+                                            className="text-[8px] text-muted-foreground hover:text-foreground px-1"
+                                            title={`Reset to derived (${Math.round(derivedValue)})`}
+                                          >
+                                            ↺
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <Slider
+                                      value={[Math.round(value)]}
+                                      onValueChange={([v]) => setMicroVar(varIndex, v)}
+                                      min={0}
+                                      max={100}
+                                      step={1}
+                                      className="w-full"
+                                      disabled={isReplaying}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </details>
+                        </div>
+                      );
+                    })()}
+
+                  {worldMode !== "multiplayer" && (
+                    <Button
                       onClick={handleGenerate}
                       className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-display text-sm"
                       disabled={isReplaying}
@@ -920,65 +950,52 @@ const Index = () => {
                       Generate World
                     </Button>
                   )}
-                  
-                  {worldMode === 'multiplayer' && isOtherPlayerLand && (
-                    <p className="text-xs text-muted-foreground text-center py-2">
-                      You can only edit your own land
-                    </p>
+
+                  {worldMode === "multiplayer" && isOtherPlayerLand && (
+                    <p className="text-xs text-muted-foreground text-center py-2">You can only edit your own land</p>
                   )}
-                  
+
                   {/* Audio Settings */}
                   <div className="pt-3 mt-3 border-t border-border space-y-3">
-                      <div className="data-label text-[10px]">Audio</div>
+                    <div className="data-label text-[10px]">Audio</div>
 
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="space-y-0.5 flex-1">
-                          <Label htmlFor="music-enabled" className="text-xs font-medium cursor-pointer">
-                            Cinematic music
-                          </Label>
-                          <p className="text-[10px] text-muted-foreground leading-tight">
-                            Background travel soundtrack.
-                          </p>
-                        </div>
-                        <Switch
-                          id="music-enabled"
-                          checked={musicEnabled}
-                          onCheckedChange={toggleMusic}
-                        />
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-0.5 flex-1">
+                        <Label htmlFor="music-enabled" className="text-xs font-medium cursor-pointer">
+                          Cinematic music
+                        </Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">Background travel soundtrack.</p>
                       </div>
-
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="space-y-0.5 flex-1">
-                          <Label htmlFor="sfx-enabled" className="text-xs font-medium cursor-pointer">
-                            Environment SFX
-                          </Label>
-                          <p className="text-[10px] text-muted-foreground leading-tight">
-                            Wind, water, and nature sounds.
-                          </p>
-                        </div>
-                        <Switch
-                          id="sfx-enabled"
-                          checked={sfxEnabled}
-                          onCheckedChange={toggleSfx}
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex justify-between items-center text-[10px]">
-                          <span className="text-muted-foreground">Volume</span>
-                          <span className="data-value">{Math.round(masterVolume * 100)}%</span>
-                        </div>
-                        <Slider
-                          value={[masterVolume * 100]}
-                          onValueChange={([v]) => setMasterVolume(v / 100)}
-                          min={0}
-                          max={100}
-                          step={5}
-                          className="w-full"
-                        />
-                      </div>
+                      <Switch id="music-enabled" checked={musicEnabled} onCheckedChange={toggleMusic} />
                     </div>
 
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-0.5 flex-1">
+                        <Label htmlFor="sfx-enabled" className="text-xs font-medium cursor-pointer">
+                          Environment SFX
+                        </Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">
+                          Wind, water, and nature sounds.
+                        </p>
+                      </div>
+                      <Switch id="sfx-enabled" checked={sfxEnabled} onCheckedChange={toggleSfx} />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[10px]">
+                        <span className="text-muted-foreground">Volume</span>
+                        <span className="data-value">{Math.round(masterVolume * 100)}%</span>
+                      </div>
+                      <Slider
+                        value={[masterVolume * 100]}
+                        onValueChange={([v]) => setMasterVolume(v / 100)}
+                        min={0}
+                        max={100}
+                        step={5}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -987,13 +1004,17 @@ const Index = () => {
       </main>
 
       {/* Status Bar */}
-      <footer className={`border-t ${isInvalid ? 'border-destructive bg-destructive/10' : 'border-border bg-card/50'} flex-shrink-0`}>
+      <footer
+        className={`border-t ${isInvalid ? "border-destructive bg-destructive/10" : "border-border bg-card/50"} flex-shrink-0`}
+      >
         <div className="px-4 py-1.5 flex items-center justify-between text-[10px]">
           <div className="flex items-center gap-4">
-            <div className={`flex items-center gap-1.5 ${isInvalid ? 'text-destructive' : ''}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${isInvalid ? 'bg-destructive' : 'bg-accent'} animate-pulse`} />
-              <span className={isInvalid ? 'text-destructive font-bold' : 'text-muted-foreground'}>
-                {isInvalid ? 'INVALID' : 'DETERMINISTIC'}
+            <div className={`flex items-center gap-1.5 ${isInvalid ? "text-destructive" : ""}`}>
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${isInvalid ? "bg-destructive" : "bg-accent"} animate-pulse`}
+              />
+              <span className={isInvalid ? "text-destructive font-bold" : "text-muted-foreground"}>
+                {isInvalid ? "INVALID" : "DETERMINISTIC"}
               </span>
             </div>
             <div className="hidden sm:flex items-center gap-1.5">
@@ -1011,10 +1032,10 @@ const Index = () => {
               </div>
             )}
           </div>
-          
+
           <div className="flex items-center gap-1.5">
             <span className="text-muted-foreground">NexArt v1.5</span>
-            <span className={isInvalid ? 'text-destructive' : 'text-primary'}>●</span>
+            <span className={isInvalid ? "text-destructive" : "text-primary"}>●</span>
           </div>
         </div>
       </footer>
