@@ -366,11 +366,11 @@ export function WorldExplorer({
 
           <PostFXZelda
             enabled
-            strength="strong"
-            outlineEnabled={postfxOutlineEnabled}
-            bloomEnabled={postfxBloomEnabled}
-            vignetteEnabled={postfxVignetteEnabled}
-            noiseEnabled={postfxNoiseEnabled}
+            strength="zelda"
+            bloomEnabled
+            vignetteEnabled
+            outlineEnabled
+            selectionKey={`${seed}:${worldX}:${worldY}:${mappingVersion}`}
           />
         </Selection>
       </Canvas>
