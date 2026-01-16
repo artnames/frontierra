@@ -1,3 +1,4 @@
+// src/components/postfx/PostFXZelda.tsx
 import { memo } from "react";
 import {
   EffectComposer,
@@ -22,7 +23,6 @@ export interface PostFXZeldaProps {
   bloomEnabled?: boolean;
   vignetteEnabled?: boolean;
   noiseEnabled?: boolean;
-  selectionKey?: string | number;
 }
 
 export const PostFXZelda = memo(function PostFXZelda({
@@ -32,7 +32,6 @@ export const PostFXZelda = memo(function PostFXZelda({
   bloomEnabled = true,
   vignetteEnabled = true,
   noiseEnabled = true,
-  selectionKey = 0,
 }: PostFXZeldaProps) {
   if (!enabled) return null;
 
@@ -40,7 +39,6 @@ export const PostFXZelda = memo(function PostFXZelda({
   const isStrong = strength === "strong";
   const isZelda = strength === "zelda";
 
-  // Push values hard enough that you *see* it instantly.
   const sat = isSubtle ? 0.18 : isStrong ? 0.38 : 0.62;
   const bright = isSubtle ? 0.02 : isStrong ? 0.04 : 0.06;
   const contrast = isSubtle ? 0.12 : isStrong ? 0.22 : 0.34;
@@ -55,9 +53,7 @@ export const PostFXZelda = memo(function PostFXZelda({
   const edgeWidth = isZelda ? 3.0 : isStrong ? 2.2 : 1.6;
 
   return (
-    <EffectComposer multisampling={0} enableNormalPass>
-      {/* IMPORTANT: keep renderer on NoToneMapping (in Canvas onCreated),
-          then do tone mapping here so grading "sticks". */}
+    <EffectComposer multisampling={0}>
       <ToneMapping
         mode={ToneMappingMode.ACES_FILMIC}
         resolution={256}
@@ -75,9 +71,10 @@ export const PostFXZelda = memo(function PostFXZelda({
         <Bloom intensity={bloomIntensity} luminanceThreshold={bloomThreshold} luminanceSmoothing={0.12} mipmapBlur />
       )}
 
-      {/* OUTLINES: works well for normal Meshes. Instanced meshes (trees) may not outline. */}
+      {/* ✅ Stable: outline objects in THREE layer 1 (no Selection/Select) */}
       {outlineEnabled && (
         <Outline
+          selectionLayer={1}
           blendFunction={BlendFunction.NORMAL}
           edgeStrength={edgeStrength}
           width={edgeWidth}
