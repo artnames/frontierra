@@ -369,7 +369,6 @@ export function WorldExplorer({
                 shadowsEnabled={shadowsEnabled}
                 smoothShading={smoothShading}
                 waterAnimation={waterAnimation}
-                useTextures={materialRichness}
                 outlineEnabled={postfxOutlineEnabled}
               />
             </group>
