@@ -53,7 +53,7 @@ export const PostFXZelda = memo(function PostFXZelda({
   const edgeWidth = isZelda ? 3.0 : isStrong ? 2.2 : 1.6;
 
   return (
-    <EffectComposer multisampling={0} enableNormalPass enableDepthPass>
+    <EffectComposer multisampling={0} enableNormalPass>
       {/* IMPORTANT: keep renderer on NoToneMapping (in Canvas onCreated),
           then do tone mapping here so grading "sticks". */}
       <ToneMapping
