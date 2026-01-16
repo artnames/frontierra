@@ -142,6 +142,11 @@ export function TexturedTerrainMesh({
   worldY = 0,
   microDetailEnabled = true,
 }: TexturedTerrainMeshProps) {
+  // Early return if world data isn't ready
+  if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
+    return null;
+  }
+
   const heightScale = WORLD_HEIGHT_SCALE;
   const pathMaxHeight = getWaterLevel(world.vars) * heightScale + PATH_HEIGHT_OFFSET;
 
