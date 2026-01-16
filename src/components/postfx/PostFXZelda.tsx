@@ -28,7 +28,7 @@ export interface PostFXZeldaProps {
 }
 
 export const PostFXZelda = memo(function PostFXZelda({
-  enabled = false,
+  enabled = true,
   strength = "zelda",
   outlineEnabled = true,
   bloomEnabled = true,
