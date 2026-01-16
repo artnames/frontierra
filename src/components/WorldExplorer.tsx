@@ -29,7 +29,6 @@ import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { useVisualSettings } from "@/hooks/useVisualSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
 import * as THREE from "three";
-import { Selection, Select } from "@react-three/postprocessing";
 
 export type InteractionMode = "explore" | "editor";
 
