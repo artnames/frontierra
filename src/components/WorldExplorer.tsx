@@ -129,11 +129,10 @@ function FirstPersonScene({
       {showVegetation && (
         <ForestTrees
           world={world}
-          useRichMaterials={materialRichness}
+          useRichMaterials={useTextures}
           worldX={worldX}
           worldY={worldY}
           shadowsEnabled={shadowsEnabled}
-          outlineEnabled={postfxOutlineEnabled}
         />
       )}
 
