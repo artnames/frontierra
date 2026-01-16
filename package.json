@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@emotion/is-prop-valid": "^1.4.0",
     "@hookform/resolvers": "^3.10.0",
     "@nexart/codemode-sdk": "^1.5.1",
     "@nexart/ui-renderer": "^0.8.8",
