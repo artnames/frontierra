@@ -99,7 +99,12 @@ export function ForestTrees({
   shadowsEnabled = true,
   outlineEnabled = false,
 }: ForestTreesProps) {
-  // When material richness is enabled, reuse the same deterministic procedural textures as terrain.
+  // Guard against incomplete world data
+  if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
+    return null;
+  }
+
+  // When material richness is enabled...
   const { textures, isReady } = useWorldTextures({
     worldX,
     worldY,
