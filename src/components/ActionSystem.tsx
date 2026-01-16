@@ -38,7 +38,7 @@ export function ActionSystem({
   const canPlace = cell && cell.type !== "water" && actions.length === 0;
 
   const handlePlaceBeacon = useCallback(() => {
-    if (!canPlace) return;
+    if (!canPlace || !isWorldReady) return;
 
     const action: WorldAction = {
       type: "plant_beacon",
@@ -63,7 +63,7 @@ export function ActionSystem({
         variant: "destructive",
       });
     }
-  }, [canPlace, gridX, gridY, world, actions, onActionExecute, toast]);
+  }, [canPlace, isWorldReady, gridX, gridY, world, actions, onActionExecute, toast]);
 
   const hasPlacedAction = actions.length > 0;
 
@@ -160,6 +160,11 @@ interface PlacedBeaconProps {
 }
 
 export function PlacedBeaconMesh({ action, world }: PlacedBeaconProps) {
+  // Guard against incomplete world data
+  if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
+    return null;
+  }
+
   // Flip Z for Three.js positioning (P5.js Y -> Three.js -Z)
   const flippedZ = world.gridSize - 1 - action.gridY;
 
