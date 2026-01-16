@@ -336,42 +336,39 @@ export function WorldExplorer({
         style={{ position: "absolute", inset: 0 }}
         onCreated={({ gl }) => {
           gl.outputColorSpace = THREE.SRGBColorSpace;
-          gl.toneMapping = THREE.NoToneMapping; // let postfx ToneMapping handle it
+          gl.toneMapping = THREE.NoToneMapping; // important when using ToneMapping effect
         }}
       >
-        <Selection>
-          <Select enabled>
-            <group>
-              <FirstPersonScene
-                world={world}
-                actions={actions}
-                onPositionChange={handlePositionChange}
-                onDiscovery={handleDiscovery}
-                replayFrame={replayFrame}
-                isReplaying={isReplaying}
-                interactionMode={interactionMode}
-                worldX={worldX}
-                worldY={worldY}
-                useTextures={materialRichness}
-                showVegetation={showVegetation}
-                fogEnabled={fogEnabled}
-                microDetailEnabled={microDetailEnabled}
-                shadowsEnabled={shadowsEnabled}
-                smoothShading={smoothShading}
-                waterAnimation={waterAnimation}
-              />
-            </group>
-          </Select>
-
-          <PostFXZelda
-            enabled
-            strength="zelda"
-            bloomEnabled
-            vignetteEnabled
-            outlineEnabled
-            selectionKey={`${seed}:${worldX}:${worldY}:${mappingVersion}`}
+        {/* Wrap the whole rendered world so every mesh/instanced mesh is put on layer 1 */}
+        <group
+          onUpdate={(g) => {
+            g.traverse((o: any) => {
+              if (o?.isMesh || o?.isInstancedMesh) o.layers.enable(1);
+            });
+          }}
+        >
+          <FirstPersonScene
+            world={world}
+            actions={actions}
+            onPositionChange={handlePositionChange}
+            onDiscovery={handleDiscovery}
+            replayFrame={replayFrame}
+            isReplaying={isReplaying}
+            interactionMode={interactionMode}
+            worldX={worldX}
+            worldY={worldY}
+            useTextures={materialRichness}
+            showVegetation={showVegetation}
+            fogEnabled={fogEnabled}
+            microDetailEnabled={microDetailEnabled}
+            shadowsEnabled={shadowsEnabled}
+            smoothShading={smoothShading}
+            waterAnimation={waterAnimation}
           />
-        </Selection>
+        </group>
+
+        {/* PostFX goes AFTER the scene */}
+        <PostFXZelda enabled strength="zelda" outlineEnabled bloomEnabled vignetteEnabled />
       </Canvas>
 
       {!isReplaying && <DiscoveryToast worldX={worldX} worldY={worldY} isOwnLand={isOwnLand} />}
