@@ -50,6 +50,7 @@ interface FirstPersonSceneProps {
   shadowsEnabled?: boolean;
   smoothShading?: boolean;
   waterAnimation?: boolean;
+  outlineEnabled?: boolean;
 }
 
 function FirstPersonScene({
@@ -69,6 +70,7 @@ function FirstPersonScene({
   shadowsEnabled = true,
   smoothShading = true,
   waterAnimation = true,
+  outlineEnabled = false,
 }: FirstPersonSceneProps) {
   const [isDiscovered, setIsDiscovered] = useState(false);
 
@@ -368,6 +370,8 @@ export function WorldExplorer({
                 shadowsEnabled={shadowsEnabled}
                 smoothShading={smoothShading}
                 waterAnimation={waterAnimation}
+                useTextures={materialRichness}
+                outlineEnabled={postfxOutlineEnabled}
               />
             </group>
           </PostSelect>
