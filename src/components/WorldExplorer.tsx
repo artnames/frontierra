@@ -278,6 +278,9 @@ export function WorldExplorer({
 
   const isInvalid = (deterministicTest && !deterministicTest.isValid) || error !== null;
 
+  // Check if world data is fully loaded and valid
+  const isWorldReady = world && world.terrain && world.terrain.length > 0 && world.gridSize > 0;
+
   if (isLoading) {
     return (
       <div className="relative w-full h-full flex items-center justify-center bg-background">
@@ -289,7 +292,7 @@ export function WorldExplorer({
     );
   }
 
-  if (error || !world || !world.terrain || world.terrain.length === 0) {
+  if (error || !isWorldReady) {
     return (
       <div className="relative w-full h-full flex items-center justify-center bg-destructive/10">
         <div className="terminal-panel p-8 border-destructive bg-background/95 text-center max-w-md">
@@ -298,7 +301,7 @@ export function WorldExplorer({
             NexArt execution failed. The world cannot be generated or validated.
           </div>
           <div className="text-xs text-destructive/70 font-mono p-3 bg-destructive/10 rounded mb-4">
-            {error || "Unknown error"}
+            {error || "World data incomplete"}
           </div>
           <div className="text-xs text-muted-foreground">
             NexArt is the canonical world generator. No fallback available.
