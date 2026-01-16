@@ -24,6 +24,10 @@ export default defineConfig(({ mode }) => ({
     },
   },
 
+  build: {
+    sourcemap: true,
+  },
+
   // Helps dev server prebundle these cleanly
   optimizeDeps: {
     include: ["@emotion/is-prop-valid"],
