@@ -28,6 +28,7 @@ import { MobileControls } from "@/components/MobileControls";
 import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { useVisualSettings } from "@/hooks/useVisualSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Selection, Select as PostSelect } from "@react-three/postprocessing";
 import * as THREE from "three";
 
 export type InteractionMode = "explore" | "editor";
@@ -340,35 +341,39 @@ export function WorldExplorer({
         }}
       >
         {/* Wrap the whole rendered world so every mesh/instanced mesh is put on layer 1 */}
-        <group
-          onUpdate={(g) => {
-            g.traverse((o: any) => {
-              if (o?.isMesh || o?.isInstancedMesh) o.layers.enable(1);
-            });
-          }}
-        >
-          <FirstPersonScene
-            world={world}
-            actions={actions}
-            onPositionChange={handlePositionChange}
-            onDiscovery={handleDiscovery}
-            replayFrame={replayFrame}
-            isReplaying={isReplaying}
-            interactionMode={interactionMode}
-            worldX={worldX}
-            worldY={worldY}
-            useTextures={materialRichness}
-            showVegetation={showVegetation}
-            fogEnabled={fogEnabled}
-            microDetailEnabled={microDetailEnabled}
-            shadowsEnabled={shadowsEnabled}
-            smoothShading={smoothShading}
-            waterAnimation={waterAnimation}
-          />
-        </group>
+        <Selection>
+          <PostSelect enabled>
+            <group
+              onUpdate={(g) => {
+                g.traverse((o: any) => {
+                  if (o?.isMesh || o?.isInstancedMesh) o.layers.enable(1);
+                });
+              }}
+            >
+              <FirstPersonScene
+                world={world}
+                actions={actions}
+                onPositionChange={handlePositionChange}
+                onDiscovery={handleDiscovery}
+                replayFrame={replayFrame}
+                isReplaying={isReplaying}
+                interactionMode={interactionMode}
+                worldX={worldX}
+                worldY={worldY}
+                useTextures={materialRichness}
+                showVegetation={showVegetation}
+                fogEnabled={fogEnabled}
+                microDetailEnabled={microDetailEnabled}
+                shadowsEnabled={shadowsEnabled}
+                smoothShading={smoothShading}
+                waterAnimation={waterAnimation}
+              />
+            </group>
+          </PostSelect>
 
-        {/* PostFX goes AFTER the scene */}
-        <PostFXZelda enabled strength="zelda" outlineEnabled bloomEnabled vignetteEnabled />
+          {/* PostFX goes AFTER the scene */}
+          <PostFXZelda enabled strength="zelda" outlineEnabled bloomEnabled vignetteEnabled />
+        </Selection>
       </Canvas>
 
       {!isReplaying && <DiscoveryToast worldX={worldX} worldY={worldY} isOwnLand={isOwnLand} />}
