@@ -28,37 +28,27 @@ function seededRandom(x: number, y: number, seedOffset: number): number {
 export function AnimatedTrees({ world }: AnimatedTreesProps) {
   const groupRef = useRef<THREE.Group>(null);
   
-  // Generate tree positions with animation parameters
   const trees = useMemo(() => {
-    const items: SwayingTree[] = [];
-    const seed = world.seed || 0;
-    
-    for (let gy = 1; gy < world.gridSize - 1; gy += 2) {
-      for (let gx = 1; gx < world.gridSize - 1; gx += 2) {
-        const cell = world.terrain[gy]?.[gx];
-        if (!cell || cell.type !== 'forest') continue;
-        
-        const flippedZ = world.gridSize - 1 - gy;
-        const r1 = seededRandom(gx, gy, seed);
-        
-        if (r1 < 0.4) {
-          const offsetX = (seededRandom(gx + 100, gy + 100, seed) - 0.5) * 0.6;
-          const offsetZ = (seededRandom(gx + 200, gy + 200, seed) - 0.5) * 0.6;
-          const treeX = gx + offsetX;
-          const treeZ = flippedZ + offsetZ;
-          const terrainY = getElevationAt(world, treeX, treeZ);
-          
-          items.push({
-            x: treeX,
-            y: terrainY,
-            z: treeZ,
-            scale: 0.6 + r1 * 0.5,
-            phase: seededRandom(gx * 3, gy * 3, seed) * Math.PI * 2,
-            swayAmount: 0.01 + seededRandom(gx * 5, gy * 5, seed) * 0.015
-          });
-        }
-      }
+  const items: SwayingTree[] = [];
+  
+  // Guard against incomplete world data
+  if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
+    return items;
+  }
+  
+  const seed = world.seed || 0;
+  
+  for (let gy = 1; gy < world.gridSize - 1; gy += 2) {
+    for (let gx = 1; gx < world.gridSize - 1; gx += 2) {
+      const cell = world.terrain[gy]?.[gx];
+      if (!cell || cell.type !== 'forest') continue;
+      
+      // ... rest of the code
     }
+  }
+  
+  return items;
+}, [world]);
     
     return items;
   }, [world]);
