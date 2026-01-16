@@ -23,6 +23,11 @@ function buildWaterGeometry(
   heightAtVertex: (cell: TerrainCell, x: number, y: number, fy: number) => number,
   edgeFloor = 0,
 ) {
+  // Guard against incomplete world data
+  if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
+    return new THREE.BufferGeometry();
+  }
+
   const size = world.gridSize;
 
   const positions: number[] = [];
@@ -99,6 +104,11 @@ function buildWaterGeometry(
 export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = true }: EnhancedWaterPlaneProps) {
   const matRef = useRef<THREE.ShaderMaterial>(null);
 
+  // Early return if world data isn't ready
+  if (!world || !world.terrain || world.terrain.length === 0 || !world.vars) {
+    return null;
+  }
+
   const heightScale = WORLD_HEIGHT_SCALE;
   const waterHeight = getWaterLevel(world.vars) * heightScale;
 
@@ -107,7 +117,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   // rb = gl - BED_DEPTH
   // rl = rb + WATER_ABOVE_BED = gl - BED_DEPTH + WATER_ABOVE_BED
   //
-  // Tune these two numbers to get “deeper carve + visible water column” feel.
+  // Tune these two numbers to get "deeper carve + visible water column" feel.
   const BED_DEPTH = 2.0; // how far the bed is carved down from ground
   const WATER_ABOVE_BED = 0.3; // how high water sits above bed
 
