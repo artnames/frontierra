@@ -371,7 +371,7 @@ export function WorldExplorer({
         </group>
 
         <PostFXZelda
-          false
+          enabled
           strength="zelda"
           outlineEnabled={postfxOutlineEnabled}
           bloomEnabled={postfxBloomEnabled}
