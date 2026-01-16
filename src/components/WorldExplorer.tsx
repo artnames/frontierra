@@ -1,17 +1,22 @@
+// src/components/WorldExplorer.tsx
 // World Explorer - 3D First-Person View of NexArt World
 // Uses debounced NexArt generation with atomic world swap
 
 import { useState, useCallback, useEffect } from "react";
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+
 import { WorldData, distanceToObject } from "@/lib/worldData";
 import { useNexArtWorld } from "@/hooks/useNexArtWorld";
 import { WorldAction, ReplayFrame, DeterminismTest } from "@/lib/worldContract";
+
 import {
   useFirstPersonControls,
   setCameraToEditorView,
   setCameraToExploreView,
   setMobileMovement,
 } from "@/hooks/useFirstPersonControls";
+
 import { PlantedObject, GridOverlay, Bridges } from "@/components/WorldRenderer";
 import { EnhancedAtmosphere } from "@/components/EnhancedAtmosphere";
 import { SceneSetup } from "@/components/SceneSetup";
@@ -25,10 +30,10 @@ import { TimeOfDayHUD } from "@/components/TimeOfDayHUD";
 import { PostFXZelda } from "@/components/postfx/PostFXZelda";
 import { DiscoveryToast } from "@/components/DiscoveryToast";
 import { MobileControls } from "@/components/MobileControls";
+
 import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { useVisualSettings } from "@/hooks/useVisualSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
-import * as THREE from "three";
 
 export type InteractionMode = "explore" | "editor";
 
@@ -40,8 +45,10 @@ interface FirstPersonSceneProps {
   replayFrame?: ReplayFrame | null;
   isReplaying: boolean;
   interactionMode: InteractionMode;
+
   worldX?: number;
   worldY?: number;
+
   useTextures?: boolean;
   showVegetation?: boolean;
   fogEnabled?: boolean;
@@ -49,6 +56,8 @@ interface FirstPersonSceneProps {
   shadowsEnabled?: boolean;
   smoothShading?: boolean;
   waterAnimation?: boolean;
+
+  // currently unused (kept for compatibility with previous experiments)
   outlineEnabled?: boolean;
 }
 
@@ -69,7 +78,6 @@ function FirstPersonScene({
   shadowsEnabled = true,
   smoothShading = true,
   waterAnimation = true,
-  outlineEnabled = false,
 }: FirstPersonSceneProps) {
   const [isDiscovered, setIsDiscovered] = useState(false);
 
@@ -177,23 +185,33 @@ interface WorldExplorerProps {
   microOverrides?: Map<number, number>;
 }
 
-export function WorldExplorer({
-  seed,
-  vars,
-  initialActions = [],
-  onActionsChange,
-  onPositionUpdate,
-  deterministicTest,
-  isReplaying = false,
-  replayFrame,
-  interactionMode = "explore",
-  onModeChange,
-  worldContext,
-  showDebugHUD = false,
-  isOwnLand = true,
-  mappingVersion = "v1",
-  microOverrides,
-}: WorldExplorerProps) {
+export function WorldExplorer(props?: WorldExplorerProps) {
+  // ✅ Hard guard: prevents “Cannot destructure property 'seed' of 'undefined'”
+  if (!props) {
+    console.error("[WorldExplorer] props is undefined. Check where <WorldExplorer /> is mounted.");
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-black text-white text-sm">
+        WorldExplorer: missing props
+      </div>
+    );
+  }
+
+  const {
+    seed,
+    vars,
+    initialActions = [],
+    onPositionUpdate,
+    deterministicTest,
+    isReplaying = false,
+    replayFrame,
+    interactionMode = "explore",
+    worldContext,
+    showDebugHUD = false,
+    isOwnLand = true,
+    mappingVersion = "v1",
+    microOverrides,
+  } = props;
+
   const worldX = worldContext?.worldX ?? 0;
   const worldY = worldContext?.worldY ?? 0;
 
@@ -221,7 +239,7 @@ export function WorldExplorer({
     waterAnimation,
     postfxBloomEnabled,
     postfxVignetteEnabled,
-    postfxOutlineEnabled,
+    postfxOutlineEnabled, // kept for UI toggles (PostFXZelda currently ignores it)
     postfxNoiseEnabled,
   } = useVisualSettings();
 
@@ -338,37 +356,28 @@ export function WorldExplorer({
         style={{ position: "absolute", inset: 0 }}
         onCreated={({ gl }) => {
           gl.outputColorSpace = THREE.SRGBColorSpace;
-          gl.toneMapping = THREE.NoToneMapping;
+          gl.toneMapping = THREE.NoToneMapping; // important when using ToneMapping effect
         }}
       >
-        {/* Put all meshes (and InstancedMesh) on layer 1 for Outline selectionLayer */}
-        <group
-          onUpdate={(g) => {
-            g.traverse((o: any) => {
-              if (o?.isMesh || o?.isInstancedMesh) o.layers.enable(1);
-            });
-          }}
-        >
-          <FirstPersonScene
-            world={world}
-            actions={actions}
-            onPositionChange={handlePositionChange}
-            onDiscovery={handleDiscovery}
-            replayFrame={replayFrame}
-            isReplaying={isReplaying}
-            interactionMode={interactionMode}
-            worldX={worldX}
-            worldY={worldY}
-            useTextures={materialRichness}
-            showVegetation={showVegetation}
-            fogEnabled={fogEnabled}
-            microDetailEnabled={microDetailEnabled}
-            shadowsEnabled={shadowsEnabled}
-            smoothShading={smoothShading}
-            waterAnimation={waterAnimation}
-            outlineEnabled={postfxOutlineEnabled}
-          />
-        </group>
+        <FirstPersonScene
+          world={world}
+          actions={actions}
+          onPositionChange={handlePositionChange}
+          onDiscovery={handleDiscovery}
+          replayFrame={replayFrame}
+          isReplaying={isReplaying}
+          interactionMode={interactionMode}
+          worldX={worldX}
+          worldY={worldY}
+          useTextures={materialRichness}
+          showVegetation={showVegetation}
+          fogEnabled={fogEnabled}
+          microDetailEnabled={microDetailEnabled}
+          shadowsEnabled={shadowsEnabled}
+          smoothShading={smoothShading}
+          waterAnimation={waterAnimation}
+          outlineEnabled={postfxOutlineEnabled}
+        />
 
         <PostFXZelda
           enabled
@@ -410,6 +419,9 @@ export function WorldExplorer({
           <MobileControls onMove={handleMobileMove} />
         </div>
       )}
+
+      {/* optional: if you still want the “discovered” banner logic later */}
+      {showDiscoveryBanner && null}
     </div>
   );
 }
