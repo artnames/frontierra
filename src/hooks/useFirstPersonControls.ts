@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { WorldData, getElevationAt, isWalkable } from '@/lib/worldData';
+import { WorldData, getElevationAt, isWalkable, getSurfaceZ } from '@/lib/worldData';
 
 interface FirstPersonControlsProps {
   world: WorldData;
