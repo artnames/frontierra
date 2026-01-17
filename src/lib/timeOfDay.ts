@@ -161,35 +161,35 @@ function colorToHex(c: { r: number; g: number; b: number }): string {
   return `#${toHex(c.r)}${toHex(c.g)}${toHex(c.b)}`;
 }
 
-// Sky color presets - brighter nights for playability (Zelda-style)
+// Sky color presets - night values slightly brighter for visibility
 const SKY_COLORS = {
   midnight: {
-    zenith: { r: 0.10, g: 0.10, b: 0.22 },    // Brighter deep blue
-    horizon: { r: 0.14, g: 0.14, b: 0.26 }
+    zenith: { r: 0.06, g: 0.06, b: 0.14 },
+    horizon: { r: 0.1, g: 0.1, b: 0.18 }
   },
   dawn: {
-    zenith: { r: 0.18, g: 0.14, b: 0.28 },
-    horizon: { r: 0.95, g: 0.58, b: 0.38 }
+    zenith: { r: 0.15, g: 0.12, b: 0.25 },
+    horizon: { r: 0.95, g: 0.55, b: 0.35 }
   },
   morning: {
-    zenith: { r: 0.42, g: 0.58, b: 0.88 },
-    horizon: { r: 0.78, g: 0.88, b: 0.96 }
+    zenith: { r: 0.4, g: 0.55, b: 0.85 },
+    horizon: { r: 0.75, g: 0.85, b: 0.95 }
   },
   noon: {
-    zenith: { r: 0.38, g: 0.58, b: 0.92 },
-    horizon: { r: 0.68, g: 0.82, b: 0.96 }
+    zenith: { r: 0.35, g: 0.55, b: 0.9 },
+    horizon: { r: 0.65, g: 0.8, b: 0.95 }
   },
   afternoon: {
-    zenith: { r: 0.42, g: 0.58, b: 0.88 },
-    horizon: { r: 0.78, g: 0.88, b: 0.96 }
+    zenith: { r: 0.4, g: 0.55, b: 0.85 },
+    horizon: { r: 0.75, g: 0.85, b: 0.95 }
   },
   dusk: {
-    zenith: { r: 0.28, g: 0.18, b: 0.38 },
-    horizon: { r: 0.95, g: 0.48, b: 0.28 }
+    zenith: { r: 0.25, g: 0.15, b: 0.35 },
+    horizon: { r: 0.95, g: 0.45, b: 0.25 }
   },
   night: {
-    zenith: { r: 0.12, g: 0.12, b: 0.24 },    // Brighter purple-blue
-    horizon: { r: 0.16, g: 0.16, b: 0.30 }
+    zenith: { r: 0.08, g: 0.08, b: 0.16 },
+    horizon: { r: 0.12, g: 0.12, b: 0.22 }
   }
 };
 
@@ -295,14 +295,14 @@ export function getLightingParams(timeOfDay: number): LightingParams {
     sunColor = { r: 1.0, g: 0.98, b: 0.92 };
   }
   
-  // Ambient color - significantly brighter at night for playability
+  // Ambient color - brighter at night for visibility
   let ambientColor: { r: number; g: number; b: number };
   if (night) {
-    ambientColor = { r: 0.38, g: 0.40, b: 0.55 }; // Brighter blue-tinted ambient
+    ambientColor = { r: 0.3, g: 0.32, b: 0.45 };
   } else if (twilight) {
-    ambientColor = { r: 0.52, g: 0.48, b: 0.52 };
+    ambientColor = { r: 0.5, g: 0.45, b: 0.5 };
   } else {
-    ambientColor = { r: 0.56, g: 0.56, b: 0.62 };
+    ambientColor = { r: 0.55, g: 0.55, b: 0.6 };
   }
   
   // Fog color and density based on time - less dense at night
@@ -325,8 +325,8 @@ export function getLightingParams(timeOfDay: number): LightingParams {
   }
   
   return {
-    sunIntensity: night ? 0.6 : (twilight ? 0.75 : 1.0 + sun * 0.5),
-    ambientIntensity: night ? 0.38 : (twilight ? 0.35 : 0.42), // Brighter night ambient
+    sunIntensity: night ? 0.5 : (twilight ? 0.7 : 1.0 + sun * 0.5),
+    ambientIntensity: night ? 0.28 : (twilight ? 0.3 : 0.4),
     sunAngle: angle,
     sunColor,
     ambientColor,
