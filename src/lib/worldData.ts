@@ -363,8 +363,19 @@ export function isWalkable(world: WorldData, worldX: number, worldY: number): bo
   const flippedY = world.gridSize - 1 - gridY;
 
   const cell = world.terrain[flippedY]?.[gridX];
-  // Water is not walkable, but bridges are
-  return cell?.type !== "water";
+  if (!cell) return false;
+
+  // Bridges are walkable over water
+  if (cell.isBridge || cell.type === "bridge") {
+    return true;
+  }
+
+  // Water and rivers are not walkable
+  if (cell.type === "water" || cell.hasRiver) {
+    return false;
+  }
+
+  return true;
 }
 
 export function distanceToObject(world: WorldData, worldX: number, worldY: number): number {
@@ -389,4 +400,100 @@ export function distanceToObject(world: WorldData, worldX: number, worldY: numbe
 
 export function isWorldValid(world: WorldData): boolean {
   return !!(world && world.terrain && world.terrain.length > 0 && world.gridSize > 0 && world.isNexArtVerified);
+}
+
+// ============================================
+// WATER QUERY FUNCTIONS - Canonical water detection
+// ============================================
+
+/**
+ * Determines if a position is in water (ocean, river, or any water body).
+ * This is the CANONICAL helper for water detection.
+ * Returns true if the cell is water or a river (but NOT a bridge).
+ */
+export function isWaterAt(world: WorldData, worldX: number, worldY: number): boolean {
+  // Guard against incomplete world data - safely return false
+  if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
+    return false;
+  }
+
+  const gridX = Math.floor(worldX);
+  const gridY = Math.floor(worldY);
+
+  if (gridX < 0 || gridX >= world.gridSize || gridY < 0 || gridY >= world.gridSize) {
+    return false;
+  }
+
+  // COORDINATE FIX: Flip Y-axis to match P5.js [y][x] grid with Three.js
+  const flippedY = world.gridSize - 1 - gridY;
+
+  const cell = world.terrain[flippedY]?.[gridX];
+  if (!cell) return false;
+
+  // Bridges are walkable over water
+  if (cell.isBridge || cell.type === "bridge") {
+    return false;
+  }
+
+  // Water type or river = water
+  return cell.type === "water" || cell.hasRiver;
+}
+
+/**
+ * Returns the surface height at a position - either terrain or water surface.
+ * For water cells, returns the water surface height.
+ * For land cells, returns terrain height.
+ */
+export function getSurfaceZ(world: WorldData, worldX: number, worldY: number): number {
+  // Guard against incomplete world data
+  if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
+    return 0;
+  }
+
+  const isWater = isWaterAt(world, worldX, worldY);
+  
+  if (isWater) {
+    // Return water surface height
+    const waterLevel = getWaterLevel(world.vars);
+    return waterLevel * WORLD_HEIGHT_SCALE;
+  }
+
+  // Return terrain height
+  return getElevationAt(world, worldX, worldY);
+}
+
+/**
+ * Check if a position is near water (within buffer distance).
+ * Useful for vegetation placement to avoid shorelines.
+ */
+export function isNearWater(world: WorldData, worldX: number, worldY: number, bufferDistance: number = 1.0): boolean {
+  // Guard against incomplete world data
+  if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
+    return false;
+  }
+
+  // Check center
+  if (isWaterAt(world, worldX, worldY)) {
+    return true;
+  }
+
+  // Check surrounding cells at buffer distance
+  const offsets = [
+    [bufferDistance, 0],
+    [-bufferDistance, 0],
+    [0, bufferDistance],
+    [0, -bufferDistance],
+    [bufferDistance * 0.7, bufferDistance * 0.7],
+    [-bufferDistance * 0.7, bufferDistance * 0.7],
+    [bufferDistance * 0.7, -bufferDistance * 0.7],
+    [-bufferDistance * 0.7, -bufferDistance * 0.7],
+  ];
+
+  for (const [dx, dy] of offsets) {
+    if (isWaterAt(world, worldX + dx, worldY + dy)) {
+      return true;
+    }
+  }
+
+  return false;
 }

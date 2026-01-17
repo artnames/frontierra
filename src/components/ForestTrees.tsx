@@ -2,7 +2,7 @@
 
 import { useMemo, createContext, useContext } from "react";
 import * as THREE from "three";
-import { WorldData, getElevationAt } from "@/lib/worldData";
+import { WorldData, getElevationAt, isNearWater } from "@/lib/worldData";
 import { useWorldTextures } from "@/hooks/useWorldTextures";
 import { MaterialKind } from "@/lib/materialRegistry";
 
@@ -142,6 +142,10 @@ export function ForestTrees({
             const offsetZ = (r3 - 0.5) * 0.8;
             const treeX = gx + offsetX;
             const treeZ = flippedZ + offsetZ;
+            
+            // Skip if position is in or near water (bank buffer = 0.8)
+            if (isNearWater(world, treeX, treeZ, 0.8)) continue;
+            
             const terrainY = getElevationAt(world, treeX, treeZ);
 
             // Select tree type based on elevation and moisture
@@ -190,6 +194,10 @@ export function ForestTrees({
             const offsetZ2 = (seededRandom(gx + 400, gy + 400, seed) - 0.5) * 0.9;
             const understoryX = gx + offsetX2;
             const understoryZ = flippedZ + offsetZ2;
+            
+            // Skip if position is in or near water (bank buffer = 0.5)
+            if (isNearWater(world, understoryX, understoryZ, 0.5)) continue;
+            
             const understoryY = getElevationAt(world, understoryX, understoryZ);
 
             const understoryRoll = seededRandom(gx * 5, gy * 5, seed + 150);
@@ -213,6 +221,10 @@ export function ForestTrees({
             const offsetZ3 = (seededRandom(gx + 800, gy + 800, seed) - 0.5) * 0.7;
             const tree2X = gx + offsetX3;
             const tree2Z = flippedZ + offsetZ3;
+            
+            // Skip if position is in or near water (bank buffer = 0.8)
+            if (isNearWater(world, tree2X, tree2Z, 0.8)) continue;
+            
             const terrain2Y = getElevationAt(world, tree2X, tree2Z);
 
             items.push({
@@ -233,6 +245,10 @@ export function ForestTrees({
           const offsetZ = (r3 - 0.5) * 0.9;
           const vegX = gx + offsetX;
           const vegZ = flippedZ + offsetZ;
+          
+          // Skip if position is in or near water (bank buffer = 0.5)
+          if (isNearWater(world, vegX, vegZ, 0.5)) continue;
+          
           const vegY = getElevationAt(world, vegX, vegZ);
 
           const groundRoll = seededRandom(gx * 4, gy * 4, seed + 350);
@@ -260,6 +276,10 @@ export function ForestTrees({
           const offsetZ = (r3 - 0.5) * 0.8;
           const rockX = gx + offsetX;
           const rockZ = flippedZ + offsetZ;
+          
+          // Skip if position is in or near water (bank buffer = 0.5)
+          if (isNearWater(world, rockX, rockZ, 0.5)) continue;
+          
           const rockY = getElevationAt(world, rockX, rockZ);
 
           const mountainRoll = seededRandom(gx * 6, gy * 6, seed + 450);
