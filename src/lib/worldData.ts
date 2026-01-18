@@ -7,7 +7,6 @@ import { WorldParams } from "./worldGenerator";
 import {
   WORLD_HEIGHT_SCALE,
   getWaterLevel,
-  RIVER_DEPTH_OFFSET,
   PATH_HEIGHT_OFFSET,
   BRIDGE_FIXED_HEIGHT,
 } from "./worldConstants";
@@ -272,6 +271,52 @@ export function cacheWorldData(world: WorldData): void {
 // WORLD QUERY FUNCTIONS - Derived from NexArt
 // ============================================
 
+// Deterministic micro-variation for river carving (matches SmoothTerrainMesh)
+function getMicroVariation(x: number, y: number, seed: number): number {
+  const n = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.1) * 43758.5453;
+  return (n - Math.floor(n)) * 0.15 - 0.075;
+}
+
+// Compute river influence mask (matches SmoothTerrainMesh logic)
+function computeRiverMask(world: WorldData, x: number, flippedY: number): number {
+  let best = 0;
+  
+  for (let dy = -2; dy <= 2; dy++) {
+    const row = world.terrain[flippedY + dy];
+    if (!row) continue;
+    
+    for (let dx = -2; dx <= 2; dx++) {
+      const c = row[x + dx];
+      if (!c?.hasRiver) continue;
+      
+      const d = Math.max(Math.abs(dx), Math.abs(dy)); // Chebyshev distance
+      const w = d === 0 ? 1 : d === 1 ? 0.6 : 0.25;
+      if (w > best) best = w;
+    }
+  }
+  
+  return best;
+}
+
+// Compute river carve amount (matches SmoothTerrainMesh logic exactly)
+function computeRiverCarve(world: WorldData, x: number, y: number, flippedY: number, cell: TerrainCell): number {
+  const isRiver = !!cell?.hasRiver;
+  const mask = computeRiverMask(world, x, flippedY);
+  if (mask <= 0) return 0;
+  
+  const centerFactor = isRiver ? 1 : mask;
+  const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed) * 0.6;
+  
+  const BANK_CARVE = 1;
+  const BED_MIN = 2.4;
+  const BED_MAX = 20;
+  
+  const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
+  const carve = (isRiver ? bedCarve + bedNoise : BANK_CARVE) * mask;
+  
+  return Math.max(0, carve);
+}
+
 export function getElevationAt(world: WorldData, worldX: number, worldY: number): number {
   // Guard against incomplete world data
   if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
@@ -288,7 +333,6 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
   // Match renderer modifiers so movement/collision lines up with what you see.
   const waterLevel = getWaterLevel(world.vars);
   const waterHeight = waterLevel * heightScale;
-  const riverDepth = waterHeight - RIVER_DEPTH_OFFSET;
   const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
   // Bridge uses fixed height - just above water surface
   const bridgeHeight = BRIDGE_FIXED_HEIGHT;
@@ -331,8 +375,12 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
   // Interpolate in Y direction - fy=0 uses flippedY (e0), fy=1 uses flippedY-1 (e1)
   let height = (e0 * (1 - fy) + e1 * fy) * heightScale;
 
-  if (cell?.hasRiver) {
-    height = Math.min(height, riverDepth);
+  // Apply river carving to match visual terrain (SmoothTerrainMesh)
+  if (cell) {
+    const riverCarve = computeRiverCarve(world, gridX, gridY, flippedY, cell);
+    if (riverCarve > 0) {
+      height -= riverCarve;
+    }
   }
 
   if (cell?.isPath && !cell?.isBridge) {
