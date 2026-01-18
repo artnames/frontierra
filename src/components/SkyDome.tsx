@@ -188,7 +188,54 @@ function SunMesh({ angle, color, isNightTime }: { angle: number; color: string; 
   );
 }
 
-// Star field on the sky dome
+// Smooth star shader material - renders anti-aliased circles instead of pixelated squares
+function createStarShaderMaterial(visibility: number): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uVisibility: { value: visibility }
+    },
+    vertexShader: `
+      attribute float size;
+      attribute vec3 starColor;
+      varying vec3 vColor;
+      
+      void main() {
+        vColor = starColor;
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = size * 3.0;
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform float uVisibility;
+      varying vec3 vColor;
+      
+      void main() {
+        // Create smooth circular star with soft glow
+        vec2 center = gl_PointCoord - 0.5;
+        float dist = length(center) * 2.0;
+        
+        // Smooth circular falloff (anti-aliased)
+        float alpha = 1.0 - smoothstep(0.0, 1.0, dist);
+        
+        // Add subtle glow
+        float glow = exp(-dist * 2.0) * 0.5;
+        alpha = alpha + glow;
+        
+        alpha *= uVisibility * 0.9;
+        
+        if (alpha < 0.01) discard;
+        
+        gl_FragColor = vec4(vColor, alpha);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+}
+
+// Star field on the sky dome - uses smooth shader for anti-aliased rendering
 function StarField({ 
   stars, 
   visibility 
@@ -198,6 +245,7 @@ function StarField({
 }) {
   const pointsRef = useRef<THREE.Points>(null);
   const { camera } = useThree();
+  const materialRef = useRef<THREE.ShaderMaterial | null>(null);
   
   const [positions, sizes, colors] = useMemo(() => {
     const pos = new Float32Array(stars.length * 3);
@@ -228,10 +276,20 @@ function StarField({
     return [pos, siz, col];
   }, [stars]);
   
-  // Follow camera position
+  // Create or update material
+  const material = useMemo(() => {
+    const mat = createStarShaderMaterial(visibility);
+    materialRef.current = mat;
+    return mat;
+  }, []);
+  
+  // Update visibility uniform
   useFrame(() => {
     if (pointsRef.current) {
       pointsRef.current.position.copy(camera.position);
+    }
+    if (materialRef.current) {
+      materialRef.current.uniforms.uVisibility.value = visibility;
     }
   });
   
@@ -254,15 +312,14 @@ function StarField({
           array={sizes}
           itemSize={1}
         />
+        <bufferAttribute
+          attach="attributes-starColor"
+          count={stars.length}
+          array={colors}
+          itemSize={3}
+        />
       </bufferGeometry>
-      <pointsMaterial
-        size={3}
-        sizeAttenuation={false}
-        color="#ffffff"
-        transparent
-        opacity={visibility * 0.8}
-        depthWrite={false}
-      />
+      <primitive object={material} attach="material" />
     </points>
   );
 }
