@@ -48,7 +48,9 @@ import { WorldAMap } from "@/components/WorldAMap";
 import { SocialPanel } from "@/components/social/SocialPanel";
 import { UnclaimedLandModal } from "@/components/UnclaimedLandModal";
 import { ClaimLandModal } from "@/components/ClaimLandModal";
+import { DiscoveryPointsHUD } from "@/components/DiscoveryPointsHUD";
 import { useMultiplayerWorld } from "@/hooks/useMultiplayerWorld";
+import { useDiscoveryGame } from "@/hooks/useDiscoveryGame";
 import { useToast } from "@/hooks/use-toast";
 import { useSearchParams } from "react-router-dom";
 
@@ -106,6 +108,13 @@ const Index = () => {
     autoCreate: worldMode === "multiplayer" && isAuthenticated,
     initialPlayerId: user?.id,
     onLandTransition: handleLandTransition,
+  });
+
+  // Discovery game - only active in multiplayer mode
+  const discoveryGame = useDiscoveryGame({
+    playerId: user?.id ?? null,
+    currentLand: worldMode === "multiplayer" ? multiplayer.currentLand : null,
+    enabled: worldMode === "multiplayer" && isAuthenticated,
   });
 
   // Check if we're on someone else's land (multiplayer)
@@ -601,6 +610,7 @@ const Index = () => {
               initialActions={actions}
               onActionsChange={setActions}
               onPositionUpdate={handlePositionUpdate}
+              onDiscoveryTrigger={discoveryGame.handleDiscovery}
               deterministicTest={deterministicTest}
               isReplaying={isReplaying}
               replayFrame={replayFrame}
@@ -666,6 +676,20 @@ const Index = () => {
               isTransitioning={multiplayer.isTransitioning}
               onVisitLand={multiplayer.visitLand}
             />
+          )}
+
+          {/* Discovery Points HUD - show in multiplayer mode */}
+          {worldMode === "multiplayer" && viewMode === "firstperson" && isAuthenticated && (
+            <div className="absolute top-16 right-4 z-20">
+              <DiscoveryPointsHUD
+                points={discoveryGame.discoveryPoints}
+                canDiscover={discoveryGame.canDiscoverCurrent}
+                cooldownTimeRemaining={discoveryGame.cooldownTimeRemaining}
+                lastResult={discoveryGame.lastDiscoveryResult}
+                onResultDismiss={discoveryGame.clearLastResult}
+                isOwnLand={!isOtherPlayerLand}
+              />
+            </div>
           )}
 
           {/* Sidebar toggle button (when hidden) */}

@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      discovery_log: {
+        Row: {
+          discovered_at: string | null
+          discoverer_id: string
+          id: string
+          land_x: number
+          land_y: number
+        }
+        Insert: {
+          discovered_at?: string | null
+          discoverer_id: string
+          id?: string
+          land_x: number
+          land_y: number
+        }
+        Update: {
+          discovered_at?: string | null
+          discoverer_id?: string
+          id?: string
+          land_x?: number
+          land_y?: number
+        }
+        Relationships: []
+      }
       land_notes: {
         Row: {
           author_id: string | null
@@ -74,6 +98,7 @@ export type Database = {
       player_lands: {
         Row: {
           created_at: string
+          discovery_points: number
           display_name: string | null
           mapping_version: string
           micro_overrides: Json | null
@@ -87,6 +112,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          discovery_points?: number
           display_name?: string | null
           mapping_version?: string
           micro_overrides?: Json | null
@@ -100,6 +126,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          discovery_points?: number
           display_name?: string | null
           mapping_version?: string
           micro_overrides?: Json | null
