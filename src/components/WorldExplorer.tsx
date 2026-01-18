@@ -165,6 +165,7 @@ interface WorldExplorerProps {
   initialActions?: WorldAction[];
   onActionsChange?: (actions: WorldAction[]) => void;
   onPositionUpdate?: (pos: { x: number; y: number; z: number }) => void;
+  onDiscoveryTrigger?: () => void;
   deterministicTest?: DeterminismTest | null;
   isReplaying?: boolean;
   replayFrame?: ReplayFrame | null;
@@ -183,6 +184,7 @@ export function WorldExplorer({
   initialActions = [],
   onActionsChange,
   onPositionUpdate,
+  onDiscoveryTrigger,
   deterministicTest,
   isReplaying = false,
   replayFrame,
@@ -263,7 +265,11 @@ export function WorldExplorer({
 
   const handleDiscovery = useCallback((discovered: boolean) => {
     setIsDiscovered(discovered);
-  }, []);
+    // Trigger discovery game callback when object is newly discovered
+    if (discovered && onDiscoveryTrigger) {
+      onDiscoveryTrigger();
+    }
+  }, [onDiscoveryTrigger]);
 
   useAmbientAudio({
     world,
