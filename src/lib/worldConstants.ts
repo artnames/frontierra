@@ -5,10 +5,52 @@
 // Increased to 35 for dramatic mountains
 export const WORLD_HEIGHT_SCALE = 35;
 
-// Water level calculation from VAR[4]
+// ============================================
+// PERCEPTUAL ELEVATION CURVE
+// Must match the curve in worldData.ts exactly
+// Transforms linear Alpha (0-1) into perceptually-shaped elevation
+// ============================================
+function applyElevationCurve(rawElevation: number): number {
+  const e = rawElevation;
+
+  if (e < 0.3) {
+    // Low elevation: flatten for walkable plains
+    // Maps 0-0.30 → 0-0.10
+    return e * 0.33;
+  } else if (e < 0.5) {
+    // Mid elevation: gentle rolling hills
+    // Maps 0.30-0.50 → 0.10-0.25
+    const t = (e - 0.3) / 0.2;
+    return 0.1 + t * 0.15;
+  } else if (e < 0.7) {
+    // Upper-mid: steeper hills transitioning to mountains
+    // Maps 0.50-0.70 → 0.25-0.50
+    const t = (e - 0.5) / 0.2;
+    return 0.25 + Math.pow(t, 1.2) * 0.25;
+  } else {
+    // High elevation: exponential amplification for dramatic peaks
+    // Maps 0.70-1.0 → 0.50-1.0
+    const t = (e - 0.7) / 0.3;
+    return 0.5 + Math.pow(t, 1.5) * 0.5;
+  }
+}
+
+// Raw water level from VAR[4] (uncurved, 0-1 range)
 // VAR[4] 0=0.10, 50=0.325, 100=0.55 (matches worldGenerator.ts)
-export function getWaterLevel(vars: number[]): number {
+export function getWaterLevelRaw(vars: number[]): number {
   return ((vars[4] ?? 50) / 100) * 0.45 + 0.1;
+}
+
+// Water level in CURVED terrain space (0-1 range, curved)
+// This is where the flat water plane should sit to match curved terrain
+export function getWaterLevel(vars: number[]): number {
+  const raw = getWaterLevelRaw(vars);
+  return applyElevationCurve(raw);
+}
+
+// Water height in world units (curved and scaled)
+export function getWaterHeight(vars: number[]): number {
+  return getWaterLevel(vars) * WORLD_HEIGHT_SCALE;
 }
 
 // River depth below water level (in world units, not scaled)

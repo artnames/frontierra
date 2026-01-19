@@ -7,6 +7,8 @@ import { WorldParams } from "./worldGenerator";
 import {
   WORLD_HEIGHT_SCALE,
   getWaterLevel,
+  getWaterLevelRaw,
+  getWaterHeight,
   PATH_HEIGHT_OFFSET,
   BRIDGE_FIXED_HEIGHT,
 } from "./worldConstants";
@@ -116,7 +118,8 @@ function applyElevationCurve(rawElevation: number): number {
 
 function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
   // Use shared constants for synchronized scales
-  const waterLevel = getWaterLevel(grid.vars);
+  // Use RAW water level for tile classification (matches NexArt generator logic)
+  const rawWaterLevel = getWaterLevelRaw(grid.vars);
   const heightScale = WORLD_HEIGHT_SCALE;
 
   // Convert cells to terrain - ALL data comes from NexArt pixels
@@ -137,8 +140,8 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
         type = "bridge";
       } else if (cell.isPath) {
         type = "path";
-      } else if (cell.tileType === 0 || rawElevation < waterLevel) {
-        // WATER
+      } else if (cell.tileType === 0 || rawElevation < rawWaterLevel) {
+        // WATER - compare raw elevations (before curve)
         type = "water";
       } else {
         // Use tile type from RGB classification
