@@ -111,13 +111,14 @@ export function buildTopology(lands: PlayerLand[]): WorldTopology {
 }
 
 // Create a new land for a player
+// Default to v2 for new lands to enable enhanced generation
 export async function createLand(
   playerId: string,
   seed: number,
   vars: number[],
   posX: number = 0,
   posY: number = 0,
-  mappingVersion: 'v1' | 'v2' = 'v1',
+  mappingVersion: 'v1' | 'v2' = 'v2',
   microOverrides?: Record<string, number>
 ): Promise<PlayerLand | null> {
   // Ensure vars is exactly 10 elements, clamped 0-100

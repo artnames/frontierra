@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { WorldData, TerrainCell } from "@/lib/worldData";
-import { WORLD_HEIGHT_SCALE, getWaterLevel } from "@/lib/worldConstants";
+import { WORLD_HEIGHT_SCALE, getWaterHeight } from "@/lib/worldConstants";
 
 interface EnhancedWaterPlaneProps {
   world: WorldData;
@@ -112,26 +112,11 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   const heightScale = WORLD_HEIGHT_SCALE;
 
   // Water surface height:
-  // At extreme Sea Level (VAR[4]) values, the raw sea level can exceed the highest terrain point,
-  // which looks like a "water sheet in the sky". We cap the surface to the max terrain height.
+  // getWaterHeight returns the curved water level in world units,
+  // matching how terrain elevations are curved. Water stays flat but at the correct height.
   const waterHeight = useMemo(() => {
-    const raw = getWaterLevel(world.vars) * heightScale;
-
-    let maxTerrain = 0;
-    for (const row of world.terrain) {
-      for (const cell of row) {
-        if (!cell) continue;
-        const h = cell.elevation * heightScale;
-        if (h > maxTerrain) maxTerrain = h;
-      }
-    }
-
-    // Keep the surface slightly below the highest point.
-    const SAFETY_MARGIN = 0.15;
-    const maxSafe = maxTerrain > SAFETY_MARGIN ? maxTerrain - SAFETY_MARGIN : maxTerrain;
-
-    return Math.max(0, Math.min(raw, maxSafe));
-  }, [world.terrain, world.vars, heightScale]);
+    return getWaterHeight(world.vars);
+  }, [world.vars]);
 
   // === River vertical rule ===
   // gl = ground level at the river cell

@@ -843,8 +843,8 @@ const Index = () => {
                     ))}
                   </div>
 
-                  {/* V2 Enhanced Generation Toggle */}
-                  {worldMode !== "multiplayer" && (
+                  {/* V2 Enhanced Generation Toggle - available in both solo and multiplayer (if owner) */}
+                  {(worldMode !== "multiplayer" || (multiplayer.currentLand && !isOtherPlayerLand)) && (
                     <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-border">
                       <div className="space-y-0.5 flex-1">
                         <Label className="text-xs font-medium">Enhanced Generation (v2)</Label>
@@ -853,22 +853,28 @@ const Index = () => {
                         </p>
                       </div>
                       <Switch
-                        checked={params.mappingVersion === "v2"}
-                        onCheckedChange={(checked) => setMappingVersion(checked ? "v2" : "v1")}
-                        disabled={isReplaying}
+                        checked={activeMappingVersion === "v2"}
+                        onCheckedChange={(checked) => {
+                          const newVersion = checked ? "v2" : "v1";
+                          if (worldMode === "multiplayer" && multiplayer.currentLand && !isOtherPlayerLand) {
+                            multiplayer.updateLandParams({ mapping_version: newVersion });
+                          } else {
+                            setMappingVersion(newVersion);
+                          }
+                        }}
+                        disabled={isReplaying || (worldMode === "multiplayer" && isOtherPlayerLand)}
                       />
                     </div>
                   )}
 
-                  {/* V2 Archetype Info (when V2 enabled) */}
-                  {worldMode !== "multiplayer" &&
-                    params.mappingVersion === "v2" &&
+                  {/* V2 Archetype Info (when V2 enabled) - available in both solo and multiplayer */}
+                  {activeMappingVersion === "v2" &&
                     (() => {
                       const archetype = selectArchetype(activeParams.seed, activeParams.vars);
                       const profile = ARCHETYPE_PROFILES[archetype];
-                      const v2Params = buildParamsV2(activeParams.seed, activeParams.vars, params.microOverrides);
+                      const v2Params = buildParamsV2(activeParams.seed, activeParams.vars, activeMicroOverrides);
                       const microVars = v2Params.vars.slice(10, 24);
-                      const hasOverrides = params.microOverrides && params.microOverrides.size > 0;
+                      const hasOverrides = activeMicroOverrides && activeMicroOverrides.size > 0;
 
                       const MICRO_VAR_LABELS = [
                         "River threshold",
