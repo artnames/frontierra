@@ -1,20 +1,9 @@
-// Material Registry - Enhanced Deterministic Texture Generation Pipeline
+// Material Registry - BRIGHT & VIBRANT Version
 // Optimized for Zelda: Breath of the Wild / Genshin Impact visual style
+// Colors are deliberately LIGHTER and more SATURATED for a sunny, cheerful feel
 // CRITICAL: No Math.random(), no Date, no network calls. All textures reproducible.
 
-export type MaterialKind =
-  | "ground"
-  | "forest"
-  | "mountain"
-  | "snow"
-  | "water"
-  | "path"
-  | "rock"
-  | "riverbed"
-  | "sand"
-  | "grass" // New: Lush meadow grass
-  | "cliff" // New: Steep rocky surfaces
-  | "wetland"; // New: Marshy/swamp areas
+export type MaterialKind = "ground" | "forest" | "mountain" | "snow" | "water" | "path" | "rock" | "riverbed" | "sand";
 
 export interface MaterialContext {
   worldId: string;
@@ -33,10 +22,8 @@ export interface TextureSet {
   context: MaterialContext;
 }
 
-// Default texture size - small enough for performance, large enough for detail
 export const TEXTURE_SIZE = 256;
 
-// Compute deterministic hash for caching
 export function computeTextureHash(kind: MaterialKind, ctx: MaterialContext): string {
   const varsHash = ctx.vars
     .slice(0, 10)
@@ -46,34 +33,20 @@ export function computeTextureHash(kind: MaterialKind, ctx: MaterialContext): st
 }
 
 // Get appropriate material kind from tile type and properties
-// Enhanced with more nuanced terrain classification
 export function getMaterialKind(tileType: string, elevation: number, moisture: number): MaterialKind {
-  // Snow at high elevations (pristine white peaks)
-  if (elevation > 0.75) {
+  // Snow at high elevations
+  if (elevation > 0.7) {
     return "snow";
   }
-
-  // Rocky cliff faces at steep high elevations
-  if (elevation > 0.6 && tileType === "mountain") {
-    return "cliff";
-  }
-
   // Rock at mid-high elevations on mountains
-  if (tileType === "mountain" && elevation > 0.45) {
+  if (tileType === "mountain" && elevation > 0.5) {
     return "rock";
   }
-
-  // Wetland in low moisture-rich areas
-  if (elevation < 0.2 && moisture > 0.7 && tileType !== "water") {
-    return "wetland";
-  }
-
   switch (tileType) {
     case "water":
       return "water";
     case "forest":
-      // Dense forest vs lighter grass based on moisture
-      return moisture > 0.5 ? "forest" : "grass";
+      return "forest";
     case "mountain":
       return "mountain";
     case "path":
@@ -81,250 +54,199 @@ export function getMaterialKind(tileType: string, elevation: number, moisture: n
       return "path";
     case "ground":
     default:
-      // Sandy ground at low elevations with low moisture (beaches/deserts)
-      if (elevation < 0.2 && moisture < 0.25) {
+      // Sandy ground at low elevations with low moisture
+      if (elevation < 0.25 && moisture < 0.3) {
         return "sand";
-      }
-      // Lush grass in moderate conditions
-      if (moisture > 0.4 && elevation < 0.5) {
-        return "grass";
       }
       return "ground";
   }
 }
 
 // ============================================
-// ENHANCED COLOR PALETTES - Zelda/Genshin Style
+// BRIGHT & VIBRANT COLOR PALETTES
 // ============================================
-// These palettes are designed for:
-// - Vibrant but natural colors
-// - Strong ambient occlusion contrast
-// - Warm highlights, cool shadows
-// - Painterly, stylized feel
+// Designed for sunny, cheerful Zelda/Genshin look
+// All colors are LIGHTER than typical realistic palettes
 
-export interface MaterialPalette {
-  base: string; // Primary color
-  accent: string; // Secondary highlight
-  dark: string; // Deep shadows/crevices
-  light: string; // Bright highlights
-  ao: string; // Ambient occlusion tint
-  rim: string; // Rim light color (Zelda-style glow)
-}
-
-export const MATERIAL_PALETTES: Record<MaterialKind, MaterialPalette> = {
-  // GROUND - Rich warm earth tones (like Hyrule Field)
+export const MATERIAL_PALETTES: Record<MaterialKind, { base: string; accent: string; dark: string; light: string }> = {
+  // GROUND - Warm, sunlit earth (like Hyrule Field in daylight)
   ground: {
-    base: "#7a6b4e", // Warm earth brown
-    accent: "#9a8a68", // Sunlit soil
-    dark: "#4a3d2a", // Deep shadow
-    light: "#c4b090", // Bright highlights
-    ao: "#3d3020", // Warm shadow tint
-    rim: "#e8d8b0", // Golden rim light
+    base: "#a89070", // Light warm brown
+    accent: "#c4a888", // Sunlit highlights
+    dark: "#7a6850", // Gentle shadow (not too dark!)
+    light: "#e0d0b8", // Bright sun-bleached areas
   },
 
-  // GRASS - Vibrant Genshin-style meadow green
-  grass: {
-    base: "#5a9a45", // Vibrant grass green
-    accent: "#7dbd60", // Bright blade tips
-    dark: "#2d5a28", // Shaded grass
-    light: "#a8e088", // Sunlit highlights
-    ao: "#1a3815", // Deep green shadow
-    rim: "#d4f0a0", // Yellow-green rim
-  },
-
-  // FOREST - Deep rich woodland (Korok Forest vibes)
+  // FOREST - Vibrant, lush green (Genshin's Mondstadt fields)
   forest: {
-    base: "#3d6a35", // Deep forest green
-    accent: "#5a8a4a", // Canopy midtone
-    dark: "#1a3518", // Understory shadow
-    light: "#7ab868", // Dappled sunlight
-    ao: "#0f2010", // Very dark undergrowth
-    rim: "#a8d888", // Leaf rim light
+    base: "#5a9848", // Vibrant green (not dark!)
+    accent: "#78b860", // Bright leaf highlights
+    dark: "#3d7030", // Shaded areas (still visible)
+    light: "#98d878", // Sun-dappled bright green
   },
 
-  // MOUNTAIN - Cool grey-blue stone (Dueling Peaks style)
+  // MOUNTAIN - Light grey-blue (airy mountain feel)
   mountain: {
-    base: "#6a7078", // Cool blue-grey
-    accent: "#8a9098", // Lighter stone
-    dark: "#3a3d42", // Deep crevice
-    light: "#a8b0b8", // Sunlit rock face
-    ao: "#282a2e", // Cold shadow
-    rim: "#c0c8d0", // Cool rim highlight
+    base: "#8890a0", // Light blue-grey
+    accent: "#a0a8b8", // Lighter highlights
+    dark: "#606878", // Soft shadow
+    light: "#c8d0e0", // Bright exposed rock
   },
 
-  // CLIFF - Dramatic steep rock faces
-  cliff: {
-    base: "#5a5860", // Dark blue-grey
-    accent: "#7a7880", // Mid cliff
-    dark: "#2a2830", // Deep crack
-    light: "#9a98a0", // Exposed face
-    ao: "#1a1820", // Very deep shadow
-    rim: "#b0aeb8", // Sharp rim light
-  },
-
-  // ROCK - Neutral versatile stone
-  rock: {
-    base: "#787878", // Neutral grey
-    accent: "#989898", // Light grey
-    dark: "#484848", // Shadow grey
-    light: "#b8b8b8", // Highlight
-    ao: "#303030", // Deep shadow
-    rim: "#d0d0d0", // Bright rim
-  },
-
-  // SNOW - Pristine blue-white (Hebra Mountains)
-  snow: {
-    base: "#e0e8f0", // Blue-tinted white
-    accent: "#f0f4ff", // Pure snow
-    dark: "#a8b8d0", // Shadow blue
-    light: "#ffffff", // Bright white
-    ao: "#90a0c0", // Cool shadow
-    rim: "#fffff8", // Warm sun rim
-  },
-
-  // WATER - Deep vibrant blue (Zelda lakes)
-  water: {
-    base: "#3080a8", // Vibrant blue
-    accent: "#48a0c8", // Lighter surface
-    dark: "#184060", // Deep water
-    light: "#70c8e8", // Surface shimmer
-    ao: "#102840", // Depths
-    rim: "#90e0ff", // Bright caustics
-  },
-
-  // RIVERBED - Wet stones and sediment
+  // RIVERBED - Visible underwater stones
   riverbed: {
-    base: "#4a4238", // Wet brown
-    accent: "#5a5248", // Damp stone
-    dark: "#2a2420", // Submerged dark
-    light: "#7a7060", // Wet highlight
-    ao: "#1a1815", // Deep wet shadow
-    rim: "#8a8070", // Moist rim
+    base: "#6a6050", // Warm brown-grey
+    accent: "#807060", // Lighter stones
+    dark: "#4a4038", // Shadow (still visible underwater)
+    light: "#a09080", // Bright wet stones
   },
 
-  // PATH - Well-worn dirt trails
+  // SNOW - Bright, clean white (Dragonspine/Hebra)
+  snow: {
+    base: "#f0f4ff", // Bright blue-white
+    accent: "#ffffff", // Pure white highlights
+    dark: "#d0d8f0", // Very light shadow (blue tint)
+    light: "#ffffff", // Maximum brightness
+  },
+
+  // WATER - Clear, inviting blue (tropical feel)
+  water: {
+    base: "#50a0c8", // Bright cyan-blue
+    accent: "#70c0e8", // Surface highlights
+    dark: "#3080a8", // Deeper areas (still bright)
+    light: "#90e0ff", // Sparkling surface
+  },
+
+  // PATH - Light dusty trail
   path: {
-    base: "#a08a68", // Dusty tan
-    accent: "#c0a880", // Lighter dust
-    dark: "#6a5a40", // Compacted shadow
-    light: "#e0d0a8", // Bright dust
-    ao: "#4a4030", // Worn shadow
-    rim: "#f0e0c0", // Sunlit dust
+    base: "#c0a880", // Light tan
+    accent: "#d8c8a0", // Dusty highlights
+    dark: "#988860", // Worn areas
+    light: "#f0e8d0", // Sun-bleached path
   },
 
-  // SAND - Golden beaches and dunes (Gerudo style)
+  // ROCK - Light neutral stone
+  rock: {
+    base: "#989898", // Light grey
+    accent: "#b8b8b8", // Highlights
+    dark: "#707070", // Crevices (not black!)
+    light: "#d8d8d8", // Bright surfaces
+  },
+
+  // SAND - Golden, bright beaches
   sand: {
-    base: "#d8c080", // Golden sand
-    accent: "#e8d8a0", // Bright crest
-    dark: "#a89050", // Shadow dune
-    light: "#f8f0c0", // Sun-bleached
-    ao: "#887040", // Deep ripple shadow
-    rim: "#fff8d8", // Hot highlight
+    base: "#e8d090", // Bright golden sand
+    accent: "#f8e8b0", // Highlights
+    dark: "#c8a860", // Ripple shadows
+    light: "#fff8d8", // Sun-bleached crests
   },
+};
 
-  // WETLAND - Marshy swamp areas
-  wetland: {
-    base: "#4a5a40", // Murky green
-    accent: "#5a6a50", // Moss
-    dark: "#2a3428", // Deep mud
-    light: "#7a8a68", // Wet highlight
-    ao: "#1a2018", // Swamp shadow
-    rim: "#90a078", // Damp rim
-  },
+// ============================================
+// BASE COLORS FOR TERRAIN SHADING
+// ============================================
+// These are used by TexturedTerrain.tsx for vertex colors
+// Made BRIGHTER to prevent dark terrain
+
+export const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
+  ground: { r: 0.66, g: 0.56, b: 0.44 }, // Warm light brown
+  forest: { r: 0.35, g: 0.6, b: 0.28 }, // Vibrant green
+  mountain: { r: 0.53, g: 0.56, b: 0.63 }, // Light blue-grey
+  snow: { r: 0.94, g: 0.96, b: 1.0 }, // Bright white
+  water: { r: 0.31, g: 0.63, b: 0.78 }, // Bright blue
+  path: { r: 0.75, g: 0.66, b: 0.5 }, // Light tan
+  rock: { r: 0.6, g: 0.6, b: 0.6 }, // Light grey
+  sand: { r: 0.91, g: 0.82, b: 0.56 }, // Bright sand
+  riverbed: { r: 0.42, g: 0.38, b: 0.31 }, // Visible brown
 };
 
 // ============================================
 // PBR MATERIAL PROPERTIES
 // ============================================
-// Physical properties for each material type
+// Adjusted for brighter appearance
 
-export interface PBRProperties {
-  roughness: number; // 0 = mirror, 1 = matte
-  metalness: number; // 0 = dielectric, 1 = metal
-  normalScale: number; // Bump intensity
-  aoIntensity: number; // Ambient occlusion strength
-  emissive: number; // Self-illumination (for snow, water highlights)
-}
-
-export const PBR_PROPERTIES: Record<MaterialKind, PBRProperties> = {
-  ground: { roughness: 0.9, metalness: 0.02, normalScale: 0.8, aoIntensity: 0.6, emissive: 0.0 },
-  grass: { roughness: 0.85, metalness: 0.01, normalScale: 0.6, aoIntensity: 0.5, emissive: 0.0 },
-  forest: { roughness: 0.92, metalness: 0.02, normalScale: 0.9, aoIntensity: 0.7, emissive: 0.0 },
-  mountain: { roughness: 0.78, metalness: 0.04, normalScale: 1.2, aoIntensity: 0.8, emissive: 0.0 },
-  cliff: { roughness: 0.75, metalness: 0.05, normalScale: 1.4, aoIntensity: 0.9, emissive: 0.0 },
-  rock: { roughness: 0.8, metalness: 0.03, normalScale: 1.0, aoIntensity: 0.7, emissive: 0.0 },
-  snow: { roughness: 0.6, metalness: 0.01, normalScale: 0.3, aoIntensity: 0.3, emissive: 0.05 },
-  water: { roughness: 0.15, metalness: 0.1, normalScale: 0.5, aoIntensity: 0.2, emissive: 0.02 },
-  riverbed: { roughness: 0.7, metalness: 0.08, normalScale: 0.7, aoIntensity: 0.6, emissive: 0.0 },
-  path: { roughness: 0.88, metalness: 0.02, normalScale: 0.5, aoIntensity: 0.5, emissive: 0.0 },
-  sand: { roughness: 0.92, metalness: 0.01, normalScale: 0.4, aoIntensity: 0.4, emissive: 0.0 },
-  wetland: { roughness: 0.82, metalness: 0.06, normalScale: 0.6, aoIntensity: 0.7, emissive: 0.0 },
-};
-
-// ============================================
-// MICRO-DETAIL VARIATION SETTINGS
-// ============================================
-// Controls procedural detail variation per material
-
-export interface MicroDetailSettings {
-  scale: number; // Pattern scale (higher = finer detail)
-  albedoVariation: number; // Color variation amount
-  roughnessVariation: number; // Surface variation
-  heightVariation: number; // Micro-height displacement
-}
-
-export const MICRO_DETAIL: Record<MaterialKind, MicroDetailSettings> = {
-  ground: { scale: 0.08, albedoVariation: 0.12, roughnessVariation: 0.15, heightVariation: 0.08 },
-  grass: { scale: 0.12, albedoVariation: 0.15, roughnessVariation: 0.1, heightVariation: 0.05 },
-  forest: { scale: 0.1, albedoVariation: 0.1, roughnessVariation: 0.12, heightVariation: 0.1 },
-  mountain: { scale: 0.06, albedoVariation: 0.08, roughnessVariation: 0.2, heightVariation: 0.15 },
-  cliff: { scale: 0.05, albedoVariation: 0.1, roughnessVariation: 0.25, heightVariation: 0.2 },
-  rock: { scale: 0.07, albedoVariation: 0.08, roughnessVariation: 0.18, heightVariation: 0.12 },
-  snow: { scale: 0.15, albedoVariation: 0.05, roughnessVariation: 0.08, heightVariation: 0.03 },
-  water: { scale: 0.04, albedoVariation: 0.03, roughnessVariation: 0.05, heightVariation: 0.02 },
-  riverbed: { scale: 0.09, albedoVariation: 0.08, roughnessVariation: 0.12, heightVariation: 0.1 },
-  path: { scale: 0.1, albedoVariation: 0.1, roughnessVariation: 0.15, heightVariation: 0.06 },
-  sand: { scale: 0.14, albedoVariation: 0.08, roughnessVariation: 0.1, heightVariation: 0.04 },
-  wetland: { scale: 0.08, albedoVariation: 0.1, roughnessVariation: 0.14, heightVariation: 0.08 },
-};
-
-// ============================================
-// ELEVATION-BASED COLOR BLENDING
-// ============================================
-// Smoothly blend materials based on elevation for natural transitions
-
-export function getElevationBlendFactor(elevation: number, materialKind: MaterialKind): number {
-  switch (materialKind) {
-    case "snow":
-      // Snow fades in at high elevations
-      return Math.max(0, Math.min(1, (elevation - 0.65) / 0.15));
-    case "rock":
-    case "cliff":
-      // Rock shows at mid-high elevations
-      if (elevation > 0.7) return 1 - (elevation - 0.7) / 0.1; // Fade under snow
-      if (elevation < 0.4) return (elevation - 0.3) / 0.1; // Fade into lower terrain
-      return 1;
-    case "grass":
-      // Grass fades at higher elevations
-      return Math.max(0, Math.min(1, 1 - (elevation - 0.4) / 0.2));
-    default:
-      return 1;
+export const PBR_PROPS: Record<
+  MaterialKind,
+  {
+    roughness: number;
+    metalness: number;
+    transparent?: boolean;
+    opacity?: number;
+    detailScale: number;
+    albedoVar: number;
+    roughVar: number;
+    slopeAO: number; // Reduced for less darkening
   }
-}
+> = {
+  ground: { roughness: 0.88, metalness: 0.02, detailScale: 0.9, albedoVar: 0.1, roughVar: 0.15, slopeAO: 0.06 },
+  forest: { roughness: 0.9, metalness: 0.02, detailScale: 0.95, albedoVar: 0.12, roughVar: 0.14, slopeAO: 0.05 },
+  mountain: { roughness: 0.78, metalness: 0.04, detailScale: 1.1, albedoVar: 0.08, roughVar: 0.18, slopeAO: 0.08 },
+  snow: { roughness: 0.55, metalness: 0.01, detailScale: 0.7, albedoVar: 0.04, roughVar: 0.08, slopeAO: 0.02 },
+  water: {
+    roughness: 0.15,
+    metalness: 0.1,
+    transparent: true,
+    opacity: 0.8,
+    detailScale: 0.6,
+    albedoVar: 0.03,
+    roughVar: 0.06,
+    slopeAO: 0.0,
+  },
+  path: { roughness: 0.85, metalness: 0.02, detailScale: 1.2, albedoVar: 0.1, roughVar: 0.16, slopeAO: 0.05 },
+  rock: { roughness: 0.75, metalness: 0.04, detailScale: 1.3, albedoVar: 0.08, roughVar: 0.2, slopeAO: 0.08 },
+  sand: { roughness: 0.9, metalness: 0.01, detailScale: 0.85, albedoVar: 0.06, roughVar: 0.1, slopeAO: 0.03 },
+  riverbed: { roughness: 0.65, metalness: 0.08, detailScale: 1.0, albedoVar: 0.06, roughVar: 0.12, slopeAO: 0.1 },
+};
 
 // ============================================
-// MOISTURE-BASED COLOR ADJUSTMENTS
+// UV SCALES PER MATERIAL
 // ============================================
-// Adjust colors based on moisture for more natural appearance
 
-export function getMoistureColorAdjustment(moisture: number): { saturation: number; brightness: number } {
-  // Wetter areas are more saturated and slightly darker
-  // Drier areas are less saturated and brighter
-  return {
-    saturation: 0.9 + moisture * 0.2, // 0.9 to 1.1
-    brightness: 1.05 - moisture * 0.1, // 0.95 to 1.05
-  };
-}
+export const UV_SCALES: Record<MaterialKind, number> = {
+  ground: 0.08,
+  forest: 0.1,
+  mountain: 0.12,
+  snow: 0.06,
+  water: 0.04,
+  path: 0.15,
+  rock: 0.14,
+  sand: 0.07,
+  riverbed: 0.12,
+};
+
+// ============================================
+// BRIGHTNESS MULTIPLIERS
+// ============================================
+// Apply these to make terrain brighter based on type
+
+export const BRIGHTNESS_MULTIPLIERS: Record<MaterialKind, number> = {
+  ground: 1.15,
+  forest: 1.1,
+  mountain: 1.12,
+  snow: 1.05, // Already bright
+  water: 1.08,
+  path: 1.18,
+  rock: 1.1,
+  sand: 1.12,
+  riverbed: 1.2, // Boost underwater visibility
+};
+
+// ============================================
+// AMBIENT OCCLUSION SETTINGS (REDUCED)
+// ============================================
+// Lower values = less darkening in crevices
+
+export const AO_INTENSITY: Record<MaterialKind, number> = {
+  ground: 0.3,
+  forest: 0.35,
+  mountain: 0.4,
+  snow: 0.15,
+  water: 0.1,
+  path: 0.25,
+  rock: 0.4,
+  sand: 0.2,
+  riverbed: 0.35,
+};
 
 // ============================================
 // TEXTURE CACHE
@@ -337,11 +259,9 @@ export function getCachedTexture(hash: string): TextureSet | undefined {
 }
 
 export function setCachedTexture(hash: string, texture: TextureSet): void {
-  // Limit cache size to prevent memory issues
-  if (textureCache.size > 100) {
-    // Remove oldest entries
-    const keysToDelete = Array.from(textureCache.keys()).slice(0, 20);
-    keysToDelete.forEach((key) => textureCache.delete(key));
+  if (textureCache.size > 50) {
+    const firstKey = textureCache.keys().next().value;
+    if (firstKey) textureCache.delete(firstKey);
   }
   textureCache.set(hash, texture);
 }
@@ -351,48 +271,84 @@ export function clearTextureCache(): void {
 }
 
 // ============================================
-// HELPER: Convert hex to RGB
+// HELPER: Get brightened color for terrain
 // ============================================
 
-export function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? {
-        r: parseInt(result[1], 16) / 255,
-        g: parseInt(result[2], 16) / 255,
-        b: parseInt(result[3], 16) / 255,
-      }
-    : { r: 0.5, g: 0.5, b: 0.5 };
-}
+export function getBrightenedColor(
+  kind: MaterialKind,
+  baseR: number,
+  baseG: number,
+  baseB: number,
+  elevation: number,
+): { r: number; g: number; b: number } {
+  const multiplier = BRIGHTNESS_MULTIPLIERS[kind] || 1.0;
 
-// ============================================
-// HELPER: Blend two colors
-// ============================================
+  // Elevation boost - higher areas catch more light
+  const elevationBoost = 0.85 + elevation * 0.25;
 
-export function blendColors(color1: string, color2: string, factor: number): string {
-  const c1 = hexToRgb(color1);
-  const c2 = hexToRgb(color2);
+  // Combine multipliers
+  const totalBoost = multiplier * elevationBoost;
 
-  const r = Math.round((c1.r * (1 - factor) + c2.r * factor) * 255);
-  const g = Math.round((c1.g * (1 - factor) + c2.g * factor) * 255);
-  const b = Math.round((c1.b * (1 - factor) + c2.b * factor) * 255);
-
-  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
-}
-
-// ============================================
-// Get material palette with elevation/moisture adjustments
-// ============================================
-
-export function getAdjustedPalette(kind: MaterialKind, elevation: number, moisture: number): MaterialPalette {
-  const basePalette = MATERIAL_PALETTES[kind];
-  const moistureAdj = getMoistureColorAdjustment(moisture);
-  const elevationFactor = getElevationBlendFactor(elevation, kind);
-
-  // For now, return base palette
-  // In a full implementation, you'd adjust the colors based on elevation/moisture
   return {
-    ...basePalette,
-    // Could add: adjusted colors based on moistureAdj and elevationFactor
+    r: Math.min(1.0, baseR * totalBoost),
+    g: Math.min(1.0, baseG * totalBoost),
+    b: Math.min(1.0, baseB * totalBoost),
+  };
+}
+
+// ============================================
+// HELPER: Get tile color (brighter version)
+// ============================================
+
+export function getTileColorBright(
+  type: string,
+  elevation: number,
+  moisture: number,
+  hasRiver: boolean,
+  isPath: boolean,
+  x: number,
+  y: number,
+  seed: number,
+): { r: number; g: number; b: number } {
+  // Deterministic micro-variation
+  const n = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.1) * 43758.5453;
+  const microVar = (n - Math.floor(n)) * 0.12 - 0.06; // Reduced variation
+
+  // Brighter base calculation
+  const baseBrightness = 0.75 + microVar; // Start brighter
+  const elevationLight = Math.pow(elevation, 0.6) * 0.35; // Gentler curve
+  const brightness = baseBrightness + elevationLight;
+
+  // Reduced ambient occlusion
+  const ao = 0.95 + elevation * 0.05; // Much less darkening
+
+  if (hasRiver) {
+    const rc = BASE_COLORS.riverbed;
+    const boost = BRIGHTNESS_MULTIPLIERS.riverbed;
+    return {
+      r: Math.min(1, rc.r * brightness * boost),
+      g: Math.min(1, rc.g * brightness * boost),
+      b: Math.min(1, rc.b * brightness * boost),
+    };
+  }
+
+  if (isPath && type !== "bridge") {
+    const pc = BASE_COLORS.path;
+    const boost = BRIGHTNESS_MULTIPLIERS.path;
+    return {
+      r: Math.min(1, (pc.r + microVar) * brightness * ao * boost),
+      g: Math.min(1, (pc.g + microVar) * brightness * ao * boost),
+      b: Math.min(1, (pc.b + microVar * 0.5) * brightness * ao * boost),
+    };
+  }
+
+  const kind = getMaterialKind(type, elevation, moisture);
+  const baseColor = BASE_COLORS[kind] || BASE_COLORS.ground;
+  const boost = BRIGHTNESS_MULTIPLIERS[kind] || 1.0;
+
+  return {
+    r: Math.min(1, (baseColor.r + microVar) * brightness * ao * boost),
+    g: Math.min(1, (baseColor.g + microVar) * brightness * ao * boost),
+    b: Math.min(1, (baseColor.b + microVar * 0.5) * brightness * ao * boost),
   };
 }
