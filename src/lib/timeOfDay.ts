@@ -2,7 +2,7 @@
 // CRITICAL: No simulation, no ticking, no persistence
 // All values are derived from world position
 
-import { WORLD_A_ID } from './worldContext';
+import { WORLD_A_ID } from "./worldContext";
 
 // ============================================
 // TYPES
@@ -16,16 +16,16 @@ export interface TimeOfDayContext {
 }
 
 export interface SkyColors {
-  zenith: string;    // Color at top of sky
-  horizon: string;   // Color at horizon
-  sunMoon: string;   // Sun or moon color
-  ambient: string;   // Ambient light color
+  zenith: string; // Color at top of sky
+  horizon: string; // Color at horizon
+  sunMoon: string; // Sun or moon color
+  ambient: string; // Ambient light color
 }
 
 export interface LightingParams {
-  sunIntensity: number;      // 0-1.5
-  ambientIntensity: number;  // 0.1-0.5
-  sunAngle: number;          // Radians (position on arc)
+  sunIntensity: number; // 0-1.5
+  ambientIntensity: number; // 0.1-0.5
+  sunAngle: number; // Radians (position on arc)
   sunColor: { r: number; g: number; b: number };
   ambientColor: { r: number; g: number; b: number };
   fogColor: { r: number; g: number; b: number };
@@ -64,7 +64,7 @@ const CYCLE_DURATION_MS = 20 * 60 * 1000;
  * - 0.25 = dawn
  * - 0.5 = noon
  * - 0.75 = dusk
- * 
+ *
  * All players worldwide see the same time.
  * One full cycle = 20 minutes.
  * sessionOffset can be used for local visual adjustments.
@@ -72,13 +72,13 @@ const CYCLE_DURATION_MS = 20 * 60 * 1000;
 export function getTimeOfDay(ctx: TimeOfDayContext): number {
   // Use real-world UTC time for global synchronization
   const now = Date.now();
-  
+
   // Calculate position in the 20-minute cycle
   const cyclePosition = (now % CYCLE_DURATION_MS) / CYCLE_DURATION_MS;
-  
+
   // Apply optional session offset (visual only, non-canonical)
   const timeValue = fract(cyclePosition + (ctx.sessionOffset ?? 0));
-  
+
   return timeValue;
 }
 
@@ -93,8 +93,7 @@ export function isNight(timeOfDay: number): boolean {
  * Check if it's twilight (dawn or dusk)
  */
 export function isTwilight(timeOfDay: number): boolean {
-  return (timeOfDay >= 0.2 && timeOfDay <= 0.35) || 
-         (timeOfDay >= 0.65 && timeOfDay <= 0.8);
+  return (timeOfDay >= 0.2 && timeOfDay <= 0.35) || (timeOfDay >= 0.65 && timeOfDay <= 0.8);
 }
 
 /**
@@ -115,10 +114,10 @@ export function isDay(timeOfDay: number): boolean {
 export function sunIntensity(timeOfDay: number): number {
   // Convert to sun angle where 0.5 = highest
   const sunPhase = Math.abs(timeOfDay - 0.5) * 2; // 0 at noon, 1 at midnight
-  
+
   // Smooth falloff using cosine
   const intensity = Math.max(0, Math.cos(sunPhase * Math.PI * 0.6));
-  
+
   return intensity;
 }
 
@@ -152,45 +151,49 @@ function lerpColor(a: { r: number; g: number; b: number }, b: { r: number; g: nu
   return {
     r: a.r + (b.r - a.r) * t,
     g: a.g + (b.g - a.g) * t,
-    b: a.b + (b.b - a.b) * t
+    b: a.b + (b.b - a.b) * t,
   };
 }
 
 function colorToHex(c: { r: number; g: number; b: number }): string {
-  const toHex = (v: number) => Math.round(Math.max(0, Math.min(255, v * 255))).toString(16).padStart(2, '0');
+  const toHex = (v: number) =>
+    Math.round(Math.max(0, Math.min(255, v * 255)))
+      .toString(16)
+      .padStart(2, "0");
   return `#${toHex(c.r)}${toHex(c.g)}${toHex(c.b)}`;
 }
 
-// Sky color presets - night values slightly brighter for visibility
+// Sky color presets - MOONLIT NIGHT (Zelda BOTW-style)
+// Night should feel dark but still allow comfortable exploration
 const SKY_COLORS = {
   midnight: {
-    zenith: { r: 0.06, g: 0.06, b: 0.14 },
-    horizon: { r: 0.1, g: 0.1, b: 0.18 }
+    zenith: { r: 0.08, g: 0.1, b: 0.22 }, // Deep blue, not black
+    horizon: { r: 0.12, g: 0.15, b: 0.28 }, // Lighter blue at horizon
   },
   dawn: {
     zenith: { r: 0.15, g: 0.12, b: 0.25 },
-    horizon: { r: 0.95, g: 0.55, b: 0.35 }
+    horizon: { r: 0.95, g: 0.55, b: 0.35 },
   },
   morning: {
     zenith: { r: 0.4, g: 0.55, b: 0.85 },
-    horizon: { r: 0.75, g: 0.85, b: 0.95 }
+    horizon: { r: 0.75, g: 0.85, b: 0.95 },
   },
   noon: {
     zenith: { r: 0.35, g: 0.55, b: 0.9 },
-    horizon: { r: 0.65, g: 0.8, b: 0.95 }
+    horizon: { r: 0.65, g: 0.8, b: 0.95 },
   },
   afternoon: {
     zenith: { r: 0.4, g: 0.55, b: 0.85 },
-    horizon: { r: 0.75, g: 0.85, b: 0.95 }
+    horizon: { r: 0.75, g: 0.85, b: 0.95 },
   },
   dusk: {
     zenith: { r: 0.25, g: 0.15, b: 0.35 },
-    horizon: { r: 0.95, g: 0.45, b: 0.25 }
+    horizon: { r: 0.95, g: 0.45, b: 0.25 },
   },
   night: {
-    zenith: { r: 0.08, g: 0.08, b: 0.16 },
-    horizon: { r: 0.12, g: 0.12, b: 0.22 }
-  }
+    zenith: { r: 0.1, g: 0.12, b: 0.25 }, // Rich midnight blue
+    horizon: { r: 0.15, g: 0.18, b: 0.32 }, // Moonlit horizon glow
+  },
 };
 
 /**
@@ -201,21 +204,21 @@ export function skyGradient(timeOfDay: number): SkyColors {
   let horizon: { r: number; g: number; b: number };
   let sunMoonColor: { r: number; g: number; b: number };
   let ambientColor: { r: number; g: number; b: number };
-  
+
   if (timeOfDay < 0.1) {
-    // Deep night
+    // Deep night - bright moonlight
     const t = timeOfDay / 0.1;
     zenith = lerpColor(SKY_COLORS.midnight.zenith, SKY_COLORS.night.zenith, t);
     horizon = lerpColor(SKY_COLORS.midnight.horizon, SKY_COLORS.night.horizon, t);
-    sunMoonColor = { r: 0.9, g: 0.9, b: 0.95 }; // Moon
-    ambientColor = { r: 0.15, g: 0.15, b: 0.25 };
+    sunMoonColor = { r: 0.95, g: 0.95, b: 1.0 }; // Bright moon
+    ambientColor = { r: 0.35, g: 0.38, b: 0.55 }; // Brighter moonlit ambient
   } else if (timeOfDay < 0.2) {
     // Pre-dawn
     const t = (timeOfDay - 0.1) / 0.1;
     zenith = lerpColor(SKY_COLORS.night.zenith, SKY_COLORS.dawn.zenith, t);
     horizon = lerpColor(SKY_COLORS.night.horizon, SKY_COLORS.dawn.horizon, t);
     sunMoonColor = { r: 1.0, g: 0.7, b: 0.4 };
-    ambientColor = lerpColor({ r: 0.15, g: 0.15, b: 0.25 }, { r: 0.4, g: 0.35, b: 0.35 }, t);
+    ambientColor = lerpColor({ r: 0.35, g: 0.38, b: 0.55 }, { r: 0.4, g: 0.35, b: 0.35 }, t);
   } else if (timeOfDay < 0.35) {
     // Dawn to morning
     const t = (timeOfDay - 0.2) / 0.15;
@@ -249,22 +252,22 @@ export function skyGradient(timeOfDay: number): SkyColors {
     const t = (timeOfDay - 0.8) / 0.1;
     zenith = lerpColor(SKY_COLORS.dusk.zenith, SKY_COLORS.night.zenith, t);
     horizon = lerpColor(SKY_COLORS.dusk.horizon, SKY_COLORS.night.horizon, t);
-    sunMoonColor = { r: 0.9, g: 0.9, b: 0.95 }; // Moon rising
-    ambientColor = lerpColor({ r: 0.4, g: 0.3, b: 0.35 }, { r: 0.15, g: 0.15, b: 0.25 }, t);
+    sunMoonColor = { r: 0.95, g: 0.95, b: 1.0 }; // Moon rising
+    ambientColor = lerpColor({ r: 0.4, g: 0.3, b: 0.35 }, { r: 0.35, g: 0.38, b: 0.55 }, t);
   } else {
     // Night to midnight
     const t = (timeOfDay - 0.9) / 0.1;
     zenith = lerpColor(SKY_COLORS.night.zenith, SKY_COLORS.midnight.zenith, t);
     horizon = lerpColor(SKY_COLORS.night.horizon, SKY_COLORS.midnight.horizon, t);
-    sunMoonColor = { r: 0.9, g: 0.9, b: 0.95 }; // Moon
-    ambientColor = { r: 0.15, g: 0.15, b: 0.25 };
+    sunMoonColor = { r: 0.95, g: 0.95, b: 1.0 }; // Bright moon
+    ambientColor = { r: 0.35, g: 0.38, b: 0.55 }; // Bright moonlit ambient
   }
-  
+
   return {
     zenith: colorToHex(zenith),
     horizon: colorToHex(horizon),
     sunMoon: colorToHex(sunMoonColor),
-    ambient: colorToHex(ambientColor)
+    ambient: colorToHex(ambientColor),
   };
 }
 
@@ -275,18 +278,23 @@ export function skyGradient(timeOfDay: number): SkyColors {
 /**
  * Get complete lighting parameters for Three.js scene.
  * All values are purely visual and derived from time.
+ *
+ * MOONLIT NIGHT PHILOSOPHY:
+ * - Night should feel magical, not oppressive
+ * - Full moon provides enough light to explore comfortably
+ * - Blue-silver tint creates that iconic Zelda night atmosphere
  */
 export function getLightingParams(timeOfDay: number): LightingParams {
   const sun = sunIntensity(timeOfDay);
   const angle = getSunAngle(timeOfDay);
   const night = isNight(timeOfDay);
   const twilight = isTwilight(timeOfDay);
-  
-  // Sun color based on time
+
+  // Sun/Moon color based on time
   let sunColor: { r: number; g: number; b: number };
   if (night) {
-    // Moonlight - cool blue-white
-    sunColor = { r: 0.7, g: 0.75, b: 0.85 };
+    // Moonlight - bright silver-blue (full moon!)
+    sunColor = { r: 0.85, g: 0.9, b: 1.0 };
   } else if (twilight) {
     // Warm golden hour
     sunColor = { r: 1.0, g: 0.75, b: 0.5 };
@@ -294,26 +302,28 @@ export function getLightingParams(timeOfDay: number): LightingParams {
     // Daylight - warm white
     sunColor = { r: 1.0, g: 0.98, b: 0.92 };
   }
-  
-  // Ambient color - brighter at night for visibility
+
+  // Ambient color - MUCH brighter at night for Zelda-style moonlit exploration
   let ambientColor: { r: number; g: number; b: number };
   if (night) {
-    ambientColor = { r: 0.3, g: 0.32, b: 0.45 };
+    // Cool blue moonlight ambient - bright enough to see terrain details
+    ambientColor = { r: 0.45, g: 0.5, b: 0.7 };
   } else if (twilight) {
     ambientColor = { r: 0.5, g: 0.45, b: 0.5 };
   } else {
     ambientColor = { r: 0.55, g: 0.55, b: 0.6 };
   }
-  
-  // Fog color and density based on time - less dense at night
+
+  // Fog color and density based on time - lighter fog at night for visibility
   let fogColor: { r: number; g: number; b: number };
   let fogNear: number;
   let fogFar: number;
-  
+
   if (night) {
-    fogColor = { r: 0.08, g: 0.08, b: 0.14 };
-    fogNear = 40;
-    fogFar = 130;
+    // Moonlit fog - blue tinted, less dense for better visibility
+    fogColor = { r: 0.12, g: 0.14, b: 0.25 };
+    fogNear = 60; // Fog starts further away
+    fogFar = 180; // Can see much further at night
   } else if (twilight) {
     fogColor = { r: 0.35, g: 0.25, b: 0.3 };
     fogNear = 35;
@@ -323,16 +333,18 @@ export function getLightingParams(timeOfDay: number): LightingParams {
     fogNear = 50;
     fogFar = 150;
   }
-  
+
   return {
-    sunIntensity: night ? 0.5 : (twilight ? 0.7 : 1.0 + sun * 0.5),
-    ambientIntensity: night ? 0.28 : (twilight ? 0.3 : 0.4),
+    // MOONLIGHT INTENSITY: Strong enough to cast visible light on terrain
+    sunIntensity: night ? 0.8 : twilight ? 0.7 : 1.0 + sun * 0.5,
+    // AMBIENT INTENSITY: High at night for that full moon glow
+    ambientIntensity: night ? 0.55 : twilight ? 0.35 : 0.4,
     sunAngle: angle,
     sunColor,
     ambientColor,
     fogColor,
     fogNear,
-    fogFar
+    fogFar,
   };
 }
 
@@ -341,8 +353,8 @@ export function getLightingParams(timeOfDay: number): LightingParams {
 // ============================================
 
 export interface Star {
-  x: number;  // Normalized 0-1
-  y: number;  // Normalized 0-1
+  x: number; // Normalized 0-1
+  y: number; // Normalized 0-1
   size: number;
   brightness: number;
 }
@@ -354,23 +366,23 @@ export interface Star {
 export function generateStars(ctx: TimeOfDayContext, count: number = 150): Star[] {
   const stars: Star[] = [];
   const baseSeed = djb2Hash(`${ctx.worldId}:STARS`);
-  
+
   // Simple seeded random
   let seed = baseSeed;
   const random = () => {
     seed = (seed * 1103515245 + 12345) >>> 0;
     return (seed % 10000) / 10000;
   };
-  
+
   for (let i = 0; i < count; i++) {
     stars.push({
       x: random(),
       y: random() * 0.7, // Concentrate in upper sky
       size: 1 + random() * 2,
-      brightness: 0.3 + random() * 0.7
+      brightness: 0.3 + random() * 0.7,
     });
   }
-  
+
   return stars;
 }
 
