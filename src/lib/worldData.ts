@@ -11,6 +11,13 @@ import {
   getWaterHeight,
   PATH_HEIGHT_OFFSET,
   BRIDGE_FIXED_HEIGHT,
+  RIVER_BANK_CARVE,
+  RIVER_BED_MIN,
+  RIVER_BED_MAX,
+  RIVER_CARVE_CLAMP_MIN,
+  RIVER_CARVE_CLAMP_MAX,
+  RIVER_BANK_CLAMP_MIN,
+  RIVER_BANK_CLAMP_MAX,
 } from "./worldConstants";
 
 // ============================================
@@ -302,6 +309,7 @@ function computeRiverMask(world: WorldData, x: number, flippedY: number): number
 }
 
 // Compute river carve amount (matches SmoothTerrainMesh logic exactly)
+// Uses shared constants from worldConstants.ts for consistency
 function computeRiverCarve(world: WorldData, x: number, y: number, flippedY: number, cell: TerrainCell): number {
   const isRiver = !!cell?.hasRiver;
   const mask = computeRiverMask(world, x, flippedY);
@@ -310,14 +318,15 @@ function computeRiverCarve(world: WorldData, x: number, y: number, flippedY: num
   const centerFactor = isRiver ? 1 : mask;
   const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed) * 0.6;
   
-  const BANK_CARVE = 1;
-  const BED_MIN = 2.4;
-  const BED_MAX = 20;
+  // Use shared constants for determinism
+  const bedCarve = RIVER_BED_MIN + (RIVER_BED_MAX - RIVER_BED_MIN) * centerFactor;
+  const rawCarve = (isRiver ? bedCarve + bedNoise : RIVER_BANK_CARVE) * mask;
   
-  const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
-  const carve = (isRiver ? bedCarve + bedNoise : BANK_CARVE) * mask;
+  // Apply same clamping as SmoothTerrainMesh for visual/collision alignment
+  const MIN_CLAMP = isRiver ? RIVER_CARVE_CLAMP_MIN : RIVER_BANK_CLAMP_MIN;
+  const MAX_CLAMP = isRiver ? RIVER_CARVE_CLAMP_MAX : RIVER_BANK_CLAMP_MAX;
   
-  return Math.max(0, carve);
+  return Math.min(MAX_CLAMP, Math.max(MIN_CLAMP, rawCarve));
 }
 
 export function getElevationAt(world: WorldData, worldX: number, worldY: number): number {

@@ -62,3 +62,20 @@ export const PATH_HEIGHT_OFFSET = 0.8;
 // Fixed bridge height - bridges sit just above the water surface
 // This is an absolute height, not relative to scaled water level
 export const BRIDGE_FIXED_HEIGHT = 2.5;
+
+// ============================================
+// RIVER CARVING CONSTANTS
+// Must be identical in worldData.ts and SmoothTerrainMesh.tsx
+// ============================================
+
+// Carve amounts for river geometry (world units)
+export const RIVER_BANK_CARVE = 1.0;      // Shallow carve for banks
+export const RIVER_BED_MIN = 2.4;          // Minimum bed carve at center
+export const RIVER_BED_MAX = 20;           // Maximum bed carve at center
+export const RIVER_CARVE_CLAMP_MIN = 0.5;  // Min visible carve for river cells
+export const RIVER_CARVE_CLAMP_MAX = 1.8;  // Max carve for visual mesh
+export const RIVER_BANK_CLAMP_MIN = 0.18;  // Min visible carve for bank cells
+export const RIVER_BANK_CLAMP_MAX = 0.9;   // Max carve for bank cells
+
+// Water above carved riverbed (for EnhancedWaterPlane)
+export const RIVER_WATER_ABOVE_BED = 0.3;

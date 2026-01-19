@@ -5,7 +5,19 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import { WorldData, TerrainCell } from "@/lib/worldData";
-import { WORLD_HEIGHT_SCALE, getWaterLevel, RIVER_DEPTH_OFFSET, PATH_HEIGHT_OFFSET } from "@/lib/worldConstants";
+import { 
+  WORLD_HEIGHT_SCALE, 
+  getWaterLevel, 
+  RIVER_DEPTH_OFFSET, 
+  PATH_HEIGHT_OFFSET,
+  RIVER_BANK_CARVE,
+  RIVER_BED_MIN,
+  RIVER_BED_MAX,
+  RIVER_CARVE_CLAMP_MIN,
+  RIVER_CARVE_CLAMP_MAX,
+  RIVER_BANK_CLAMP_MIN,
+  RIVER_BANK_CLAMP_MAX,
+} from "@/lib/worldConstants";
 import { MaterialKind, getMaterialKind } from "@/lib/materialRegistry";
 import { createTerrainPbrDetailMaterial } from "@/lib/terrainPbrMaterial";
 
@@ -89,6 +101,7 @@ export function SmoothTerrainMesh({
     return best; // 0..1
   };
 
+  // Compute river carve using shared constants (matches worldData.ts exactly)
   const computeRiverCarve = (x: number, y: number, flippedY: number, cell: TerrainCell) => {
     const isRiver = !!cell.hasRiver;
     const mask = computeRiverMask(x, flippedY);
@@ -99,14 +112,11 @@ export function SmoothTerrainMesh({
 
     const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed) * 0.6;
 
-    const BANK_CARVE = 1;
-    const BED_MIN = 2.4;
-    const BED_MAX = 20;
+    // Use shared constants from worldConstants.ts
+    const bedCarve = RIVER_BED_MIN + (RIVER_BED_MAX - RIVER_BED_MIN) * centerFactor;
+    const rawCarve = (isRiver ? bedCarve + bedNoise : RIVER_BANK_CARVE) * mask;
 
-    const bedCarve = BED_MIN + (BED_MAX - BED_MIN) * centerFactor;
-    const carve = (isRiver ? bedCarve + bedNoise : BANK_CARVE) * mask;
-
-    return Math.max(0, carve);
+    return Math.max(0, rawCarve);
   };
 
   const geometry = useMemo(() => {
@@ -138,16 +148,16 @@ export function SmoothTerrainMesh({
           h = baseH;
 
           // Carve riverbed relative to baseH only (cannot ever go above baseH)
-          const carve = computeRiverCarve(x, y, flippedY, cell);
+          const rawCarve = computeRiverCarve(x, y, flippedY, cell);
 
-          if (carve > 0) {
+          if (rawCarve > 0) {
             const isRiver = !!cell.hasRiver;
 
-            // Ensure visible but bounded carve (still relative to baseH)
-            const MIN_CARVE = isRiver ? 0.5 : 0.18;
-            const MAX_CARVE = isRiver ? 1.8 : 0.9;
+            // Apply same clamping as worldData.ts for collision alignment
+            const MIN_CLAMP = isRiver ? RIVER_CARVE_CLAMP_MIN : RIVER_BANK_CLAMP_MIN;
+            const MAX_CLAMP = isRiver ? RIVER_CARVE_CLAMP_MAX : RIVER_BANK_CLAMP_MAX;
 
-            const clampedCarve = Math.min(MAX_CARVE, Math.max(MIN_CARVE, carve));
+            const clampedCarve = Math.min(MAX_CLAMP, Math.max(MIN_CLAMP, rawCarve));
             h = baseH - clampedCarve;
           }
 
