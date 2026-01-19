@@ -110,7 +110,14 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   }
 
   const heightScale = WORLD_HEIGHT_SCALE;
-  const waterHeight = getWaterLevel(world.vars) * heightScale;
+  
+  // Calculate water level but clamp it to prevent it from rising into the sky
+  // When VAR[4] is very high (60+), the water level can exceed terrain height
+  // Max sensible water height is ~30% of heightScale to keep it as "sea level"
+  const rawWaterLevel = getWaterLevel(world.vars);
+  const maxWaterLevel = 0.35; // Cap at 35% of height scale (~12 units at scale 35)
+  const clampedWaterLevel = Math.min(rawWaterLevel, maxWaterLevel);
+  const waterHeight = clampedWaterLevel * heightScale;
 
   // === River vertical rule ===
   // gl = ground level at the river cell

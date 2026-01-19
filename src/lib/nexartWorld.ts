@@ -179,7 +179,8 @@ export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<
     let finalSource = source;
     
     // Inject V2-specific parameters (archetype and micro vars)
-    if (isV2Mode && !isWorldA) {
+    // V2 is now supported for both solo lands and World A multiplayer lands
+    if (isV2Mode) {
       const v2Params = buildParamsV2(input.seed, input.vars, params.microOverrides);
       const archetypeIndex = ARCHETYPES.indexOf(v2Params.archetype);
       
@@ -188,13 +189,15 @@ export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<
       
       // Inject ARCHETYPE_ID and MV array at the start of setup()
       const v2Injection = `var ARCHETYPE_ID = ${archetypeIndex}; var MV = [${microVars.join(',')}];`;
-      finalSource = source.replace(
+      finalSource = finalSource.replace(
         'function setup() {',
         `function setup() { ${v2Injection}`
       );
       execOptions.source = finalSource;
       
-      console.log(`[NexArt V2] Archetype: ${v2Params.archetype} (${archetypeIndex})`, params.microOverrides?.size ? `with ${params.microOverrides.size} overrides` : '');
+      console.log(`[NexArt V2] Archetype: ${v2Params.archetype} (${archetypeIndex})`, 
+        params.microOverrides?.size ? `with ${params.microOverrides.size} overrides` : '',
+        isWorldA ? `[World A ${input.worldContext?.worldX},${input.worldContext?.worldY}]` : '');
     }
     
     // Inject World A coordinates
