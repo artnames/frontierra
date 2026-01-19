@@ -1,5 +1,5 @@
 // PostFXZelda - Zelda: Breath of the Wild / Genshin Impact style post-processing
-// Uses custom shaders for stability (no postprocessing library dependency)
+// BRIGHT & VIBRANT version - emphasizes color and light, minimal darkening
 // Properly handles sky dome, stars, and all scene elements
 
 import { memo, useMemo, useEffect } from "react";
@@ -17,38 +17,41 @@ export interface PostFXZeldaProps {
   noiseEnabled?: boolean;
 }
 
-// Strength presets - tuned for Zelda/Genshin look
+// Strength presets - tuned for BRIGHT Zelda/Genshin look
 const STRENGTH_PRESETS = {
   subtle: {
-    bloom: 0.08,
-    vignette: 0.18,
-    vignetteOffset: 0.93,
-    saturation: 1.04,
-    contrast: 1.02,
-    warmth: 0.012,
-    noise: 0.008,
+    bloom: 0.12,
+    vignette: 0.08, // Very light vignette
+    vignetteOffset: 0.95, // Pushed to edges
+    saturation: 1.08,
+    contrast: 1.0, // No contrast boost (prevents dark crushing)
+    brightness: 1.05, // Slight brightness boost
+    warmth: 0.015,
+    noise: 0.006,
   },
   strong: {
-    bloom: 0.22,
-    vignette: 0.32,
-    vignetteOffset: 0.85,
-    saturation: 1.14,
-    contrast: 1.07,
-    warmth: 0.032,
-    noise: 0.018,
+    bloom: 0.25,
+    vignette: 0.15,
+    vignetteOffset: 0.92,
+    saturation: 1.15,
+    contrast: 1.02,
+    brightness: 1.08,
+    warmth: 0.025,
+    noise: 0.012,
   },
   zelda: {
-    bloom: 0.14,
-    vignette: 0.22,
-    vignetteOffset: 0.9,
-    saturation: 1.08,
-    contrast: 1.04,
-    warmth: 0.02,
-    noise: 0.01,
+    bloom: 0.18,
+    vignette: 0.1, // Light vignette
+    vignetteOffset: 0.94, // Very edge-focused
+    saturation: 1.12, // Vibrant colors
+    contrast: 1.0, // Neutral contrast
+    brightness: 1.06, // Slightly brighter
+    warmth: 0.02, // Warm sunny feel
+    noise: 0.008,
   },
 };
 
-// Screen-space post-processing shader
+// Screen-space post-processing shader - BRIGHT version
 class ScreenPostFXMaterial extends THREE.ShaderMaterial {
   constructor() {
     super({
@@ -56,15 +59,16 @@ class ScreenPostFXMaterial extends THREE.ShaderMaterial {
         tDiffuse: { value: null },
         uTime: { value: 0 },
         uResolution: { value: new THREE.Vector2(1, 1) },
-        uVignetteStrength: { value: 0.22 },
-        uVignetteOffset: { value: 0.9 },
+        uVignetteStrength: { value: 0.1 },
+        uVignetteOffset: { value: 0.94 },
         uVignetteEnabled: { value: 1.0 },
-        uSaturation: { value: 1.08 },
-        uContrast: { value: 1.04 },
+        uSaturation: { value: 1.12 },
+        uContrast: { value: 1.0 },
+        uBrightness: { value: 1.06 },
         uWarmth: { value: 0.02 },
-        uNoiseStrength: { value: 0.01 },
+        uNoiseStrength: { value: 0.008 },
         uNoiseEnabled: { value: 1.0 },
-        uBloomStrength: { value: 0.14 },
+        uBloomStrength: { value: 0.18 },
         uBloomEnabled: { value: 1.0 },
       },
       vertexShader: `
@@ -84,6 +88,7 @@ class ScreenPostFXMaterial extends THREE.ShaderMaterial {
         uniform float uVignetteEnabled;
         uniform float uSaturation;
         uniform float uContrast;
+        uniform float uBrightness;
         uniform float uWarmth;
         uniform float uNoiseStrength;
         uniform float uNoiseEnabled;
@@ -97,11 +102,13 @@ class ScreenPostFXMaterial extends THREE.ShaderMaterial {
           return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
         }
         
-        // Smooth vignette
+        // Very soft vignette - barely darkens, mostly for focus
         float vignette(vec2 uv, float strength, float offset) {
           vec2 coord = (uv - 0.5) * 2.0;
           float dist = length(coord);
-          return smoothstep(offset + strength, offset - strength * 0.4, dist);
+          // Softer falloff curve
+          float vig = 1.0 - smoothstep(offset, offset + strength * 2.0, dist) * 0.5;
+          return vig;
         }
         
         // Color adjustments
@@ -110,47 +117,56 @@ class ScreenPostFXMaterial extends THREE.ShaderMaterial {
           return mix(vec3(grey), color, sat);
         }
         
+        // Soft contrast that doesn't crush blacks
         vec3 adjustContrast(vec3 color, float contrast) {
-          return (color - 0.5) * contrast + 0.5;
+          // Use a midpoint slightly above 0.5 to preserve shadows
+          return (color - 0.45) * contrast + 0.45;
         }
         
+        // Warm color shift - adds golden sunlight feel
         vec3 applyWarmth(vec3 color, float warmth) {
           color.r += warmth;
-          color.g += warmth * 0.3;
-          color.b -= warmth * 0.4;
+          color.g += warmth * 0.5;
+          color.b -= warmth * 0.3;
           return color;
         }
         
-        // Soft glow bloom approximation
+        // Soft glow bloom - emphasizes highlights
         vec3 getBloom(vec2 uv, vec2 texelSize) {
           vec3 bloom = vec3(0.0);
           
-          // Sample in a cross pattern for soft glow
           const float samples = 8.0;
-          const float radius = 4.0;
+          const float radius = 3.0;
           
           for (float i = 1.0; i <= samples; i += 1.0) {
             float offset = i * radius;
-            float weight = 1.0 - (i / samples) * 0.7;
+            float weight = 1.0 - (i / samples) * 0.6;
             
             vec3 s1 = texture2D(tDiffuse, uv + vec2(offset, 0.0) * texelSize).rgb;
             vec3 s2 = texture2D(tDiffuse, uv - vec2(offset, 0.0) * texelSize).rgb;
             vec3 s3 = texture2D(tDiffuse, uv + vec2(0.0, offset) * texelSize).rgb;
             vec3 s4 = texture2D(tDiffuse, uv - vec2(0.0, offset) * texelSize).rgb;
+            vec3 s5 = texture2D(tDiffuse, uv + vec2(offset, offset) * 0.7 * texelSize).rgb;
+            vec3 s6 = texture2D(tDiffuse, uv - vec2(offset, offset) * 0.7 * texelSize).rgb;
             
-            // Only bloom bright pixels
-            float b1 = max(0.0, dot(s1, vec3(0.33)) - 0.7);
-            float b2 = max(0.0, dot(s2, vec3(0.33)) - 0.7);
-            float b3 = max(0.0, dot(s3, vec3(0.33)) - 0.7);
-            float b4 = max(0.0, dot(s4, vec3(0.33)) - 0.7);
+            // Bloom threshold - only very bright areas
+            float threshold = 0.65;
+            float b1 = max(0.0, dot(s1, vec3(0.33)) - threshold);
+            float b2 = max(0.0, dot(s2, vec3(0.33)) - threshold);
+            float b3 = max(0.0, dot(s3, vec3(0.33)) - threshold);
+            float b4 = max(0.0, dot(s4, vec3(0.33)) - threshold);
+            float b5 = max(0.0, dot(s5, vec3(0.33)) - threshold);
+            float b6 = max(0.0, dot(s6, vec3(0.33)) - threshold);
             
             bloom += s1 * b1 * weight;
             bloom += s2 * b2 * weight;
             bloom += s3 * b3 * weight;
             bloom += s4 * b4 * weight;
+            bloom += s5 * b5 * weight * 0.7;
+            bloom += s6 * b6 * weight * 0.7;
           }
           
-          return bloom / (samples * 2.0);
+          return bloom / (samples * 1.5);
         }
         
         void main() {
@@ -158,7 +174,10 @@ class ScreenPostFXMaterial extends THREE.ShaderMaterial {
           vec3 color = base.rgb;
           vec2 texelSize = 1.0 / uResolution;
           
-          // Add bloom
+          // Brightness boost FIRST (lifts the whole image)
+          color *= uBrightness;
+          
+          // Add soft bloom
           if (uBloomEnabled > 0.5) {
             vec3 bloom = getBloom(vUv, texelSize);
             color += bloom * uBloomStrength;
@@ -169,17 +188,20 @@ class ScreenPostFXMaterial extends THREE.ShaderMaterial {
           color = adjustContrast(color, uContrast);
           color = applyWarmth(color, uWarmth);
           
-          // Vignette
+          // Very soft vignette (barely visible)
           if (uVignetteEnabled > 0.5) {
             float vig = vignette(vUv, uVignetteStrength, uVignetteOffset);
-            color *= mix(0.7, 1.0, vig);
+            color *= vig;
           }
           
-          // Film grain
+          // Subtle film grain
           if (uNoiseEnabled > 0.5) {
             float n = hash(vUv * uResolution + fract(uTime * 43.0) * 100.0);
             color += (n - 0.5) * uNoiseStrength;
           }
+          
+          // Soft highlight rolloff (prevents harsh clipping)
+          color = color / (color + vec3(0.5)) * 1.5;
           
           gl_FragColor = vec4(clamp(color, 0.0, 1.0), base.a);
         }
@@ -231,6 +253,7 @@ function PostFXEffect({
     postMaterial.uniforms.uVignetteEnabled.value = vignetteEnabled ? 1.0 : 0.0;
     postMaterial.uniforms.uSaturation.value = preset.saturation;
     postMaterial.uniforms.uContrast.value = preset.contrast;
+    postMaterial.uniforms.uBrightness.value = preset.brightness;
     postMaterial.uniforms.uWarmth.value = preset.warmth;
     postMaterial.uniforms.uNoiseStrength.value = preset.noise;
     postMaterial.uniforms.uNoiseEnabled.value = noiseEnabled ? 1.0 : 0.0;
@@ -258,13 +281,13 @@ function PostFXEffect({
     const currentRenderTarget = gl.getRenderTarget();
     const currentAutoClear = gl.autoClear;
 
-    // Step 1: Render the entire scene to our render target
+    // Step 1: Render entire scene to render target
     gl.setRenderTarget(renderTarget);
     gl.autoClear = true;
     gl.clear();
     gl.render(scene, camera);
 
-    // Step 2: Render post-processed result to screen
+    // Step 2: Apply post-processing and render to screen
     gl.setRenderTarget(currentRenderTarget);
     gl.autoClear = false;
 
@@ -276,19 +299,20 @@ function PostFXEffect({
 
     // Restore state
     gl.autoClear = currentAutoClear;
-  }, 1000); // High priority number = runs last
+  }, 1000);
 
   return null;
 }
 
 /**
- * PostFXZelda - Zelda/Genshin style post-processing
+ * PostFXZelda - BRIGHT & VIBRANT Zelda/Genshin style
  *
- * Features:
- * - Soft bloom glow on bright areas
- * - Vignette for cinematic framing
- * - Color grading with warm saturated tones
- * - Subtle film grain for texture
+ * Key differences from standard PostFX:
+ * - Brightness boost instead of darkening
+ * - Very soft vignette (barely visible)
+ * - Warm color grading
+ * - Soft bloom on highlights
+ * - No contrast crushing
  */
 export const PostFXZelda = memo(function PostFXZelda({
   enabled = true,
