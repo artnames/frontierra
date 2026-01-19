@@ -110,14 +110,28 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   }
 
   const heightScale = WORLD_HEIGHT_SCALE;
-  
-  // Calculate water level but clamp it to prevent it from rising into the sky
-  // When VAR[4] is very high (60+), the water level can exceed terrain height
-  // Max sensible water height is ~30% of heightScale to keep it as "sea level"
-  const rawWaterLevel = getWaterLevel(world.vars);
-  const maxWaterLevel = 0.35; // Cap at 35% of height scale (~12 units at scale 35)
-  const clampedWaterLevel = Math.min(rawWaterLevel, maxWaterLevel);
-  const waterHeight = clampedWaterLevel * heightScale;
+
+  // Water surface height:
+  // At extreme Sea Level (VAR[4]) values, the raw sea level can exceed the highest terrain point,
+  // which looks like a "water sheet in the sky". We cap the surface to the max terrain height.
+  const waterHeight = useMemo(() => {
+    const raw = getWaterLevel(world.vars) * heightScale;
+
+    let maxTerrain = 0;
+    for (const row of world.terrain) {
+      for (const cell of row) {
+        if (!cell) continue;
+        const h = cell.elevation * heightScale;
+        if (h > maxTerrain) maxTerrain = h;
+      }
+    }
+
+    // Keep the surface slightly below the highest point.
+    const SAFETY_MARGIN = 0.15;
+    const maxSafe = maxTerrain > SAFETY_MARGIN ? maxTerrain - SAFETY_MARGIN : maxTerrain;
+
+    return Math.max(0, Math.min(raw, maxSafe));
+  }, [world.terrain, world.vars, heightScale]);
 
   // === River vertical rule ===
   // gl = ground level at the river cell
@@ -136,7 +150,9 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       world,
       worldX,
       worldY,
-      (c) => !!c.hasRiver,
+      // Avoid rendering a second water surface on tiles that have become ocean/lake water.
+      // (Prevents "water on top of water" at river mouths / flooded rivers.)
+      (c) => !!c.hasRiver && c.type !== "water",
       (cell) => {
         const gl = cell.elevation * heightScale;
 
