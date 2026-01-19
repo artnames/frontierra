@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { WorldData, TerrainCell } from "@/lib/worldData";
-import { WORLD_HEIGHT_SCALE, getWaterHeight } from "@/lib/worldConstants";
+import { WORLD_HEIGHT_SCALE, getWaterHeight, RIVER_WATER_ABOVE_BED } from "@/lib/worldConstants";
 
 interface EnhancedWaterPlaneProps {
   world: WorldData;
@@ -119,13 +119,10 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   }, [world.vars]);
 
   // === River vertical rule ===
-  // gl = ground level at the river cell
-  // rb = gl - BED_DEPTH
-  // rl = rb + WATER_ABOVE_BED = gl - BED_DEPTH + WATER_ABOVE_BED
-  //
-  // Tune these two numbers to get "deeper carve + visible water column" feel.
-  const BED_DEPTH = 2.0; // how far the bed is carved down from ground
-  const WATER_ABOVE_BED = 0.3; // how high water sits above bed
+  // The river surface sits just above the carved riverbed.
+  // We use the same carve logic as SmoothTerrainMesh to ensure alignment.
+  // BED_DEPTH matches the visual carve, WATER_ABOVE_BED from shared constants.
+  const BED_DEPTH = 1.5; // Matches visual carve (between RIVER_CARVE_CLAMP_MIN and MAX)
 
   const riverGeo = useMemo(() => {
     const SURFACE_LIFT = 0.02; // z-fight safety
@@ -139,12 +136,14 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       // (Prevents "water on top of water" at river mouths / flooded rivers.)
       (c) => !!c.hasRiver && c.type !== "water",
       (cell) => {
+        // Use the already-curved elevation from the cell (matches terrain mesh)
         const gl = cell.elevation * heightScale;
 
-        // flat river surface derived from local ground (your exact rule)
-        const rl = gl - BED_DEPTH + WATER_ABOVE_BED;
+        // River surface sits just above the carved bed
+        // BED_DEPTH matches visual carve, RIVER_WATER_ABOVE_BED from shared constants
+        const rl = gl - BED_DEPTH + RIVER_WATER_ABOVE_BED;
 
-        // never let water go above the local ground (prevents floating sheets on slopes)
+        // Never let water go above the local ground (prevents floating sheets on slopes)
         const surface = Math.min(rl, gl - bankClearance);
 
         return surface + SURFACE_LIFT;
