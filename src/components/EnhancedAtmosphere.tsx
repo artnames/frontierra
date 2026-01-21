@@ -1,12 +1,14 @@
 // EnhancedAtmosphere - Improved lighting and fog for visual richness
 // Uses FogExp2 for more natural atmospheric perspective
 // Includes shadow-enabled directional light and hemisphere fill
+// CRITICAL: Uses canonical palette from src/theme/palette.ts
 
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { getTimeOfDay, getLightingParams, isNight, isTwilight, TimeOfDayContext } from '@/lib/timeOfDay';
 import { WORLD_A_ID } from '@/lib/worldContext';
+import { PALETTE, ROLES } from '@/theme/palette';
 
 interface EnhancedAtmosphereProps {
   worldX?: number;
@@ -73,17 +75,17 @@ export function EnhancedAtmosphere({
     [lighting.ambientColor]
   );
   
-  // Hemisphere light colors - provides soft fill from sky and ground reflection
+  // Hemisphere light colors using palette
   const skyColor = useMemo(() => {
-    if (night) return '#1a2040';
-    if (twilight) return '#665588';
-    return '#88aacc';
+    if (night) return PALETTE.abyss;
+    if (twilight) return PALETTE.rust;
+    return PALETTE.mist;
   }, [night, twilight]);
   
   const groundColor = useMemo(() => {
-    if (night) return '#101520';
-    if (twilight) return '#443344';
-    return '#445544'; // Slight green tint from ground reflection
+    if (night) return PALETTE.deep;
+    if (twilight) return PALETTE.rust;
+    return PALETTE.meadow; // Green tint from ground reflection
   }, [night, twilight]);
   
   // Get fog density based on time
@@ -138,7 +140,7 @@ export function EnhancedAtmosphere({
       {/* Secondary fill light from opposite direction - reduces harsh shadows */}
       <directionalLight
         position={[-sunPosition[0], sunPosition[1] * 0.3, -sunPosition[2]]}
-        color={night ? '#2a3050' : '#aabbcc'}
+        color={night ? PALETTE.abyss : PALETTE.mist}
         intensity={night ? 0.1 : 0.15}
       />
     </>

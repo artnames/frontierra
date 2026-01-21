@@ -1,10 +1,12 @@
 // Forest Trees & Vegetation - 3D objects placed on terrain from NexArt
+// CRITICAL: Uses canonical palette from src/theme/palette.ts
 
 import { useMemo, createContext, useContext } from "react";
 import * as THREE from "three";
 import { WorldData, getElevationAt, isNearWater } from "@/lib/worldData";
 import { useWorldTextures } from "@/hooks/useWorldTextures";
 import { MaterialKind } from "@/lib/materialRegistry";
+import { PALETTE, ROLES, hexToRgb255, VEGETATION_COLORS } from "@/theme/palette";
 
 interface ForestTreesProps {
   world: WorldData;
@@ -57,13 +59,29 @@ function seededRandom(x: number, y: number, seedOffset: number): number {
   return n - Math.floor(n);
 }
 
+// Helper to create color strings from palette with variation
+function getVegColor(baseColor: { r: number; g: number; b: number }, variation: number, shift: number = 20): string {
+  const vShift = Math.floor(variation * shift) - shift / 2;
+  return `rgb(${Math.max(0, Math.min(255, Math.round(baseColor.r * 255) + vShift))}, ${Math.max(0, Math.min(255, Math.round(baseColor.g * 255) + vShift))}, ${Math.max(0, Math.min(255, Math.round(baseColor.b * 255) + vShift * 0.5))})`;
+}
+
+// Palette-based flower colors using accent hues
+const FLOWER_COLORS = [
+  PALETTE.amber,    // Orange
+  PALETTE.lime,     // Bright green-yellow
+  PALETTE.flame,    // Warm orange-red
+  PALETTE.crimson,  // Red
+  PALETTE.coral,    // Coral pink
+  PALETTE.mist,     // White
+];
+
 /**
  * Stable toon outline: inverted hull (BackSide) slightly scaled up.
  * This is MUCH more reliable than postprocessing Outline and won’t crash.
  */
-const OUTLINE_SCALE = 1.07; // higher => thicker outline
+const OUTLINE_SCALE = 1.07;
 const outlineMaterial = new THREE.MeshBasicMaterial({
-  color: new THREE.Color("#050505"),
+  color: new THREE.Color(PALETTE.deep), // Use palette deep for outlines
   side: THREE.BackSide,
   depthWrite: false,
   transparent: false,
@@ -453,14 +471,17 @@ function BarkMaterial({ color, isRich }: { color: string; isRich: boolean }) {
   return <meshLambertMaterial color={color} />;
 }
 
-// Pine tree - tall conifer
+// Pine tree - tall conifer using palette colors
 function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
   const outlines = useContext(VegetationOutlineContext);
 
-  const greenShift = Math.floor(colorVariant * 30) - 15;
-  const baseGreen = 74 + greenShift;
+  // Use palette-based colors with variation
+  const baseLeaf = VEGETATION_COLORS.pineBase;
+  const leafColor1 = getVegColor(baseLeaf, colorVariant, 15);
+  const leafColor2 = getVegColor(baseLeaf, colorVariant + 0.2, 15);
+  const leafColor3 = getVegColor(baseLeaf, colorVariant + 0.4, 15);
 
   return (
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
@@ -470,7 +491,7 @@ function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       </OutlineShell>
       <mesh position={[0, 0.4, 0]} castShadow={shadows} receiveShadow={shadows}>
         <cylinderGeometry args={[0.06, 0.1, 0.8, 6]} />
-        <BarkMaterial color="#4a3020" isRich={isRich} />
+        <BarkMaterial color={PALETTE.rust} isRich={isRich} />
       </mesh>
 
       {/* cones */}
@@ -479,7 +500,7 @@ function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       </OutlineShell>
       <mesh position={[0, 1.0, 0]} castShadow={shadows} receiveShadow={shadows}>
         <coneGeometry args={[0.4, 0.8, 6]} />
-        <VegMaterial color={`rgb(26, ${baseGreen}, 26)`} isRich={isRich} />
+        <VegMaterial color={leafColor1} isRich={isRich} />
       </mesh>
 
       <OutlineShell enabled={outlines} position={[0, 1.5, 0]}>
@@ -487,7 +508,7 @@ function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       </OutlineShell>
       <mesh position={[0, 1.5, 0]} castShadow={shadows} receiveShadow={shadows}>
         <coneGeometry args={[0.3, 0.6, 6]} />
-        <VegMaterial color={`rgb(31, ${baseGreen + 11}, 32)`} isRich={isRich} />
+        <VegMaterial color={leafColor2} isRich={isRich} />
       </mesh>
 
       <OutlineShell enabled={outlines} position={[0, 1.9, 0]}>
@@ -495,20 +516,23 @@ function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       </OutlineShell>
       <mesh position={[0, 1.9, 0]} castShadow={shadows} receiveShadow={shadows}>
         <coneGeometry args={[0.2, 0.5, 6]} />
-        <VegMaterial color={`rgb(37, ${baseGreen + 22}, 40)`} isRich={isRich} />
+        <VegMaterial color={leafColor3} isRich={isRich} />
       </mesh>
     </group>
   );
 }
 
-// Deciduous tree - round leafy tree
+// Deciduous tree - round leafy tree using palette colors
 function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
   const outlines = useContext(VegetationOutlineContext);
 
-  const greenShift = Math.floor(colorVariant * 40) - 20;
-  const baseGreen = 90 + greenShift;
+  // Use palette-based colors with variation
+  const baseLeaf = VEGETATION_COLORS.deciduousBase;
+  const leafColor1 = getVegColor(baseLeaf, colorVariant, 25);
+  const leafColor2 = getVegColor(baseLeaf, colorVariant + 0.15, 25);
+  const leafColor3 = getVegColor(baseLeaf, colorVariant - 0.1, 25);
 
   return (
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
@@ -518,7 +542,7 @@ function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       </OutlineShell>
       <mesh position={[0, 0.5, 0]} castShadow={shadows} receiveShadow={shadows}>
         <cylinderGeometry args={[0.08, 0.12, 1.0, 6]} />
-        <BarkMaterial color="#3d2517" isRich={isRich} />
+        <BarkMaterial color={PALETTE.rust} isRich={isRich} />
       </mesh>
 
       {/* foliage blobs */}
@@ -527,7 +551,7 @@ function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       </OutlineShell>
       <mesh position={[0, 1.4, 0]} castShadow={shadows} receiveShadow={shadows}>
         <sphereGeometry args={[0.55, 8, 6]} />
-        <VegMaterial color={`rgb(42, ${baseGreen}, 37)`} isRich={isRich} />
+        <VegMaterial color={leafColor1} isRich={isRich} />
       </mesh>
 
       <OutlineShell enabled={outlines} position={[0.25, 1.2, 0.15]}>
@@ -535,7 +559,7 @@ function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       </OutlineShell>
       <mesh position={[0.25, 1.2, 0.15]} castShadow={shadows} receiveShadow={shadows}>
         <sphereGeometry args={[0.35, 6, 5]} />
-        <VegMaterial color={`rgb(50, ${baseGreen + 11}, 48)`} isRich={isRich} />
+        <VegMaterial color={leafColor2} isRich={isRich} />
       </mesh>
 
       <OutlineShell enabled={outlines} position={[-0.2, 1.3, -0.1]}>
@@ -543,7 +567,7 @@ function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       </OutlineShell>
       <mesh position={[-0.2, 1.3, -0.1]} castShadow={shadows} receiveShadow={shadows}>
         <sphereGeometry args={[0.3, 6, 5]} />
-        <VegMaterial color={`rgb(40, ${baseGreen - 5}, 34)`} isRich={isRich} />
+        <VegMaterial color={leafColor3} isRich={isRich} />
       </mesh>
     </group>
   );
@@ -749,17 +773,16 @@ function Flower({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
 
-  // Different flower colors based on variant
-  const flowerColors = ["#ff6b8a", "#ffeb3b", "#9c27b0", "#ff9800", "#e91e63", "#03a9f4", "#f44336"];
-  const colorIndex = Math.floor(colorVariant * flowerColors.length);
-  const flowerColor = flowerColors[colorIndex % flowerColors.length];
+  // Use palette-based flower colors
+  const colorIndex = Math.floor(colorVariant * FLOWER_COLORS.length);
+  const flowerColor = FLOWER_COLORS[colorIndex % FLOWER_COLORS.length];
 
   return (
     <group position={[x, y, z]} scale={scale * 0.5} rotation={[0, rotation, 0]}>
       {/* Stem */}
       <mesh position={[0, 0.15, 0]} receiveShadow={shadows}>
         <cylinderGeometry args={[0.015, 0.02, 0.3, 4]} />
-        <VegMaterial color="#228b22" isRich={isRich} />
+        <VegMaterial color={PALETTE.meadow} isRich={isRich} />
       </mesh>
       {/* Flower head */}
       <mesh position={[0, 0.35, 0]} receiveShadow={shadows}>
@@ -769,7 +792,7 @@ function Flower({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       {/* Center */}
       <mesh position={[0, 0.38, 0.05]} receiveShadow={shadows}>
         <sphereGeometry args={[0.03, 4, 4]} />
-        <VegMaterial color="#ffd700" isRich={isRich} />
+        <VegMaterial color={PALETTE.amber} isRich={isRich} />
       </mesh>
     </group>
   );

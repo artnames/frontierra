@@ -1,5 +1,6 @@
 // EnhancedWaterPlane - Water rendering with smooth contour-based rivers
 // CRITICAL: Uses shared constants from worldConstants.ts for collision alignment
+// CRITICAL: Uses canonical palette from src/theme/palette.ts
 // Rivers use Marching Squares + Chaikin smoothing for smooth silhouettes
 
 import { useMemo, useRef, useEffect } from "react";
@@ -13,6 +14,7 @@ import {
   computeRiverCarveDepth,
 } from "@/lib/worldConstants";
 import { buildSmoothRiverGeometry, hasRiverCells } from "@/lib/riverContourMesh";
+import { toThreeColor, ROLES } from "@/theme/palette";
 
 interface EnhancedWaterPlaneProps {
   world: WorldData;
@@ -186,12 +188,18 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   }, [world, worldX, worldY, waterHeight]);
 
   const material = useMemo(() => {
+    // Use palette colors for water
+    const deepColor = toThreeColor(ROLES.waterDeep, { linear: true });
+    const shallowColor = toThreeColor(ROLES.waterShallow, { linear: true });
+    const foamColor = toThreeColor(ROLES.foam, { linear: true });
+    
     const m = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
         uOpacity: { value: 0.75 },
-        uDeep: { value: new THREE.Color(0x082540) },
-        uShallow: { value: new THREE.Color(0x206080) },
+        uDeep: { value: deepColor },
+        uShallow: { value: shallowColor },
+        uFoam: { value: foamColor },
       },
       vertexShader: `
         attribute float aEdge;
@@ -210,6 +218,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
         uniform float uOpacity;
         uniform vec3 uDeep;
         uniform vec3 uShallow;
+        uniform vec3 uFoam;
 
         varying float vEdge;
         varying vec3 vWPos;
@@ -233,8 +242,9 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
           float edgeFade = smoothstep(0.0, 1.0, vEdge);
           float a = uOpacity * mix(0.35, 1.0, edgeFade);
 
-          float foam = (1.0 - edgeFade) * 0.18;
-          col += foam;
+          // Add foam at edges using palette color
+          float foamAmount = (1.0 - edgeFade) * 0.25;
+          col = mix(col, uFoam, foamAmount);
 
           gl_FragColor = vec4(col, a);
         }

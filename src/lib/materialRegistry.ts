@@ -1,7 +1,9 @@
-// Material Registry - BRIGHT & VIBRANT Version
+// Material Registry - Uses Canonical Palette
 // Optimized for Zelda: Breath of the Wild / Genshin Impact visual style
-// Colors are deliberately LIGHTER and more SATURATED for a sunny, cheerful feel
 // CRITICAL: No Math.random(), no Date, no network calls. All textures reproducible.
+// CRITICAL: All colors derive from src/theme/palette.ts
+
+import { PALETTE, ROLES, hexToRgb01 } from "@/theme/palette";
 
 export type MaterialKind = "ground" | "forest" | "mountain" | "snow" | "water" | "path" | "rock" | "riverbed" | "sand";
 
@@ -63,101 +65,98 @@ export function getMaterialKind(tileType: string, elevation: number, moisture: n
 }
 
 // ============================================
-// BRIGHT & VIBRANT COLOR PALETTES
+// COLOR PALETTES - Derived from canonical palette
 // ============================================
-// Designed for sunny, cheerful Zelda/Genshin look
-// All colors are LIGHTER than typical realistic palettes
 
 export const MATERIAL_PALETTES: Record<MaterialKind, { base: string; accent: string; dark: string; light: string }> = {
-  // GROUND - Warm, sunlit earth (like Hyrule Field in daylight)
+  // GROUND - Uses palette meadow/forest blend
   ground: {
-    base: "#a89070", // Light warm brown
-    accent: "#c4a888", // Sunlit highlights
-    dark: "#7a6850", // Gentle shadow (not too dark!)
-    light: "#e0d0b8", // Bright sun-bleached areas
+    base: PALETTE.meadow,
+    accent: PALETTE.lime,
+    dark: PALETTE.forest,
+    light: PALETTE.mist,
   },
 
-  // FOREST - Vibrant, lush green (Genshin's Mondstadt fields)
+  // FOREST - Deep greens from palette
   forest: {
-    base: "#5a9848", // Vibrant green (not dark!)
-    accent: "#78b860", // Bright leaf highlights
-    dark: "#3d7030", // Shaded areas (still visible)
-    light: "#98d878", // Sun-dappled bright green
+    base: PALETTE.forest,
+    accent: PALETTE.meadow,
+    dark: PALETTE.deep,
+    light: PALETTE.lime,
   },
 
-  // MOUNTAIN - Light grey-blue (airy mountain feel)
+  // MOUNTAIN - Rock tones
   mountain: {
-    base: "#8890a0", // Light blue-grey
-    accent: "#a0a8b8", // Lighter highlights
-    dark: "#606878", // Soft shadow
-    light: "#c8d0e0", // Bright exposed rock
+    base: PALETTE.sage,
+    accent: PALETTE.mist,
+    dark: PALETTE.deep,
+    light: PALETTE.mist,
   },
 
-  // RIVERBED - Visible underwater stones
+  // RIVERBED - Underwater tones
   riverbed: {
-    base: "#6a6050", // Warm brown-grey
-    accent: "#807060", // Lighter stones
-    dark: "#4a4038", // Shadow (still visible underwater)
-    light: "#a09080", // Bright wet stones
+    base: PALETTE.forest,
+    accent: PALETTE.sage,
+    dark: PALETTE.abyss,
+    light: PALETTE.meadow,
   },
 
-  // SNOW - Bright, clean white (Dragonspine/Hebra)
+  // SNOW - Bright whites with mist
   snow: {
-    base: "#f0f4ff", // Bright blue-white
-    accent: "#ffffff", // Pure white highlights
-    dark: "#d0d8f0", // Very light shadow (blue tint)
-    light: "#ffffff", // Maximum brightness
+    base: PALETTE.mist,
+    accent: '#ffffff',
+    dark: PALETTE.sage,
+    light: '#ffffff',
   },
 
-  // WATER - Clear, inviting blue (tropical feel)
+  // WATER - Deep blues
   water: {
-    base: "#50a0c8", // Bright cyan-blue
-    accent: "#70c0e8", // Surface highlights
-    dark: "#3080a8", // Deeper areas (still bright)
-    light: "#90e0ff", // Sparkling surface
+    base: PALETTE.abyss,
+    accent: PALETTE.forest,
+    dark: PALETTE.deep,
+    light: PALETTE.mist,
   },
 
-  // PATH - Light dusty trail
+  // PATH - Warm earth tones
   path: {
-    base: "#c0a880", // Light tan
-    accent: "#d8c8a0", // Dusty highlights
-    dark: "#988860", // Worn areas
-    light: "#f0e8d0", // Sun-bleached path
+    base: PALETTE.rust,
+    accent: PALETTE.coral,
+    dark: PALETTE.deep,
+    light: PALETTE.mist,
   },
 
-  // ROCK - Light neutral stone
+  // ROCK - Grey-green stone
   rock: {
-    base: "#989898", // Light grey
-    accent: "#b8b8b8", // Highlights
-    dark: "#707070", // Crevices (not black!)
-    light: "#d8d8d8", // Bright surfaces
+    base: PALETTE.sage,
+    accent: PALETTE.mist,
+    dark: PALETTE.deep,
+    light: PALETTE.mist,
   },
 
-  // SAND - Golden, bright beaches
+  // SAND - Warm coral tones
   sand: {
-    base: "#e8d090", // Bright golden sand
-    accent: "#f8e8b0", // Highlights
-    dark: "#c8a860", // Ripple shadows
-    light: "#fff8d8", // Sun-bleached crests
+    base: PALETTE.coral,
+    accent: PALETTE.mist,
+    dark: PALETTE.rust,
+    light: PALETTE.mist,
   },
 };
 
 // ============================================
 // BASE COLORS FOR TERRAIN SHADING
 // ============================================
-// These are used by TexturedTerrain.tsx for vertex colors
-// Made BRIGHTER to prevent dark terrain
+// These are used by terrain components for vertex colors
 
 export const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
-  ground: { r: 0.66, g: 0.56, b: 0.44 }, // Warm light brown
-  forest: { r: 0.35, g: 0.6, b: 0.28 }, // Vibrant green
-  mountain: { r: 0.53, g: 0.56, b: 0.63 }, // Light blue-grey
-  snow: { r: 0.94, g: 0.96, b: 1.0 }, // Bright white
-  water: { r: 0.31, g: 0.63, b: 0.78 }, // Bright blue
-  path: { r: 0.75, g: 0.66, b: 0.5 }, // Light tan
-  rock: { r: 0.6, g: 0.6, b: 0.6 }, // Light grey
-  sand: { r: 0.91, g: 0.82, b: 0.56 }, // Bright sand
-  riverbed: { r: 0.42, g: 0.38, b: 0.31 }, // Visible brown
+  ground: hexToRgb01(ROLES.terrainLow),
+  forest: hexToRgb01(ROLES.terrainMid),
+  mountain: hexToRgb01(ROLES.rock),
+  snow: { r: 0.94, g: 0.96, b: 1.0 }, // Keep snow bright
+  water: hexToRgb01(ROLES.waterDeep),
+  path: hexToRgb01(ROLES.dirtWood),
+  rock: hexToRgb01(ROLES.rock),
+  sand: hexToRgb01(ROLES.sand),
+  riverbed: hexToRgb01(ROLES.waterShallow),
 };
 
 // ============================================

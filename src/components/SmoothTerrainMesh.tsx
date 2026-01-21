@@ -2,6 +2,7 @@
 // Uses shared vertices + proper vertex normals for non-faceted appearance
 // CRITICAL: No Math.random() or Date.now() - all rendering is deterministic
 // CRITICAL: Uses shared height functions from worldConstants.ts for collision alignment
+// CRITICAL: Uses canonical palette from src/theme/palette.ts
 
 import { useMemo, useEffect } from "react";
 import * as THREE from "three";
@@ -16,6 +17,7 @@ import {
 } from "@/lib/worldConstants";
 import { MaterialKind, getMaterialKind } from "@/lib/materialRegistry";
 import { createTerrainPbrDetailMaterial } from "@/lib/terrainPbrMaterial";
+import { TERRAIN_COLORS, hexToRgb01, ROLES } from "@/theme/palette";
 
 interface SmoothTerrainMeshProps {
   world: WorldData;
@@ -24,17 +26,21 @@ interface SmoothTerrainMeshProps {
   microDetailEnabled?: boolean;
 }
 
+// Use canonical palette colors
 const BASE_COLORS: Record<string, { r: number; g: number; b: number }> = {
-  ground: { r: 0.5, g: 0.44, b: 0.28 },
-  forest: { r: 0.18, g: 0.35, b: 0.15 },
-  mountain: { r: 0.45, g: 0.43, b: 0.42 },
-  snow: { r: 0.95, g: 0.95, b: 1.0 },
-  water: { r: 0.15, g: 0.35, b: 0.45 },
-  riverbed: { r: 0.28, g: 0.26, b: 0.2 },
-  path: { r: 0.58, g: 0.48, b: 0.35 },
-  rock: { r: 0.42, g: 0.42, b: 0.42 },
-  sand: { r: 0.76, g: 0.62, b: 0.38 },
+  ground: TERRAIN_COLORS.ground,
+  forest: TERRAIN_COLORS.forest,
+  mountain: TERRAIN_COLORS.mountain,
+  snow: TERRAIN_COLORS.snow,
+  water: TERRAIN_COLORS.water,
+  riverbed: TERRAIN_COLORS.riverbed,
+  path: TERRAIN_COLORS.path,
+  rock: TERRAIN_COLORS.rock,
+  sand: TERRAIN_COLORS.sand,
 };
+
+// Wet riverbed color from palette
+const WET_BED_COLOR = hexToRgb01(ROLES.waterDeep);
 
 const PBR_SETTINGS = {
   roughness: 0.88,
@@ -123,14 +129,13 @@ export function SmoothTerrainMesh({
           // Use shared river mask for coloring
           const mask = computeRiverMask(world.terrain, x, flippedY);
           if (mask > 0) {
-            // Darker than water so the transparent surface still pops
-            const wetBed = { r: 0.06, g: 0.14, b: 0.18 };
+            // Use palette-based wet bed color
             const wet = Math.min(1, mask * 0.45);
 
             baseColor = {
-              r: baseColor.r * (1 - wet) + wetBed.r * wet,
-              g: baseColor.g * (1 - wet) + wetBed.g * wet,
-              b: baseColor.b * (1 - wet) + wetBed.b * wet,
+              r: baseColor.r * (1 - wet) + WET_BED_COLOR.r * wet,
+              g: baseColor.g * (1 - wet) + WET_BED_COLOR.g * wet,
+              b: baseColor.b * (1 - wet) + WET_BED_COLOR.b * wet,
             };
           }
         }
