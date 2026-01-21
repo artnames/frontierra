@@ -4,6 +4,7 @@
 // Rivers use Marching Squares + Chaikin smoothing for smooth silhouettes
 // FIX A: Proper geometry/material disposal with refs to avoid race conditions
 // RIVER FIX: Ensure rivers are always visible with proper colors and depth settings
+// RIVER DEBUG: Reports geometry stats to global registry for overlay
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
@@ -15,8 +16,9 @@ import {
   RIVER_WATER_ABOVE_BED,
   computeRiverCarveDepth,
 } from "@/lib/worldConstants";
-import { buildSmoothRiverGeometry, hasRiverCells } from "@/lib/riverContourMesh";
+import { buildSmoothRiverGeometry, hasRiverCells, countRiverCellsInWorld } from "@/lib/riverContourMesh";
 import { toThreeColor, ROLES, PALETTE } from "@/theme/palette";
+import { setGlobalRiverStats } from "@/hooks/useGeneratorProof";
 
 const DEV = import.meta.env.DEV;
 
@@ -140,62 +142,92 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     return result;
   }, [world, waterHeight]);
 
+  // Count river cells for debug stats
+  const riverCellCount = useMemo(() => {
+    return world ? countRiverCellsInWorld(world) : 0;
+  }, [world]);
+
   // River geometry - smooth contour-based mesh using Marching Squares
+  // RIVER FIX: Always try to render rivers if riverCellCount > 0
   const riverGeo = useMemo(() => {
     if (!world || !world.terrain || world.terrain.length === 0) {
+      // Report zero stats
+      setGlobalRiverStats({ riverCellCount: 0, riverVertices: 0, riverIndices: 0 });
       return new THREE.BufferGeometry();
     }
 
-    // Try smooth contour-based mesh first
-    if (hasRivers) {
+    // SURFACE_LIFT ensures river renders above terrain
+    const SURFACE_LIFT = 0.15; // Increased for visibility
+    const bankClearance = 0.02;
+
+    let geo: THREE.BufferGeometry;
+
+    // Try smooth contour-based mesh first if we have river cells
+    if (riverCellCount > 0) {
       const smoothGeo = buildSmoothRiverGeometry(world, worldX, worldY);
       
       // Check if we got valid geometry
       const posAttr = smoothGeo.getAttribute('position');
-      if (posAttr && posAttr.count >= 3) {
-        if (DEV) {
-          console.debug(`[EnhancedWaterPlane] River contour mesh: ${posAttr.count} vertices`);
-        }
-        return smoothGeo;
-      }
-      smoothGeo.dispose();
+      const indexCount = smoothGeo.index?.count ?? 0;
       
-      if (DEV) {
-        console.warn('[EnhancedWaterPlane] Contour mesh failed, using cell-based fallback');
-      }
-    }
-
-    // Fallback: cell-based geometry (old method)
-    const SURFACE_LIFT = 0.12; // Larger lift to ensure visibility above terrain
-    const bankClearance = 0.02;
-
-    if (DEV) {
-      console.debug('[EnhancedWaterPlane] Using cell-based river fallback');
-    }
-
-    return buildWaterGeometry(
-      world,
-      worldX,
-      worldY,
-      (c) => !!c.hasRiver && c.type !== "water",
-      (cell, x, y, fy) => {
-        const baseH = cell.elevation * heightScale;
-        const carve = computeRiverCarveDepth(
-          world.terrain,
-          x,
-          y,
-          fy,
-          true,
-          world.seed
+      if (posAttr && posAttr.count >= 3 && indexCount >= 3) {
+        if (DEV) {
+          console.debug(`[EnhancedWaterPlane] River contour mesh: ${posAttr.count} vertices, ${indexCount} indices`);
+        }
+        geo = smoothGeo;
+      } else {
+        smoothGeo.dispose();
+        
+        if (DEV) {
+          console.warn(`[EnhancedWaterPlane] Contour mesh failed (${posAttr?.count ?? 0} verts, ${indexCount} indices), using cell-based fallback`);
+        }
+        
+        // Fallback: cell-based geometry (guaranteed to work if riverCellCount > 0)
+        geo = buildWaterGeometry(
+          world,
+          worldX,
+          worldY,
+          (c) => !!c.hasRiver && c.type !== "water",
+          (cell, x, y, fy) => {
+            const baseH = cell.elevation * heightScale;
+            const carve = computeRiverCarveDepth(
+              world.terrain,
+              x,
+              y,
+              fy,
+              true,
+              world.seed
+            );
+            const bedHeight = baseH - carve;
+            const waterSurface = bedHeight + RIVER_WATER_ABOVE_BED;
+            const surface = Math.min(waterSurface, baseH - bankClearance);
+            return surface + SURFACE_LIFT;
+          },
+          0.85, // High edge floor for visible edges
         );
-        const bedHeight = baseH - carve;
-        const waterSurface = bedHeight + RIVER_WATER_ABOVE_BED;
-        const surface = Math.min(waterSurface, baseH - bankClearance);
-        return surface + SURFACE_LIFT;
-      },
-      0.85, // High edge floor for visible edges
-    );
-  }, [world, worldX, worldY, heightScale, hasRivers]);
+      }
+    } else {
+      // No river cells
+      geo = new THREE.BufferGeometry();
+    }
+
+    // Report geometry stats to global registry for overlay
+    const posAttr = geo.getAttribute('position');
+    const vertexCount = posAttr?.count ?? 0;
+    const indexCount = geo.index?.count ?? 0;
+    
+    setGlobalRiverStats({
+      riverCellCount,
+      riverVertices: vertexCount,
+      riverIndices: indexCount
+    });
+
+    if (DEV && riverCellCount > 0) {
+      console.debug(`[EnhancedWaterPlane] Final river stats: cells=${riverCellCount}, vertices=${vertexCount}, indices=${indexCount}`);
+    }
+
+    return geo;
+  }, [world, worldX, worldY, heightScale, riverCellCount]);
 
   // Lake/ocean geometry - flat plane at water level
   const lakeGeo = useMemo(() => {

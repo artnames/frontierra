@@ -281,3 +281,23 @@ export function hasRiverCells(world: WorldData): boolean {
   
   return false;
 }
+
+/**
+ * Count total river cells in the world terrain grid
+ * Used for debug overlay statistics
+ */
+export function countRiverCellsInWorld(world: WorldData): number {
+  if (!world?.terrain) return 0;
+  
+  let count = 0;
+  for (const row of world.terrain) {
+    if (!row) continue;
+    for (const cell of row) {
+      if (cell?.hasRiver && cell.type !== 'water') {
+        count++;
+      }
+    }
+  }
+  
+  return count;
+}
