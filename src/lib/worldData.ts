@@ -278,7 +278,7 @@ export function cacheWorldData(world: WorldData): void {
 // ============================================
 
 export function getElevationAt(world: WorldData, worldX: number, worldY: number): number {
-  // Guard against incomplete world data
+  // FIX #6: Guard against incomplete world data
   if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
     return 0;
   }
@@ -290,7 +290,9 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
   const gridX = Math.floor(worldX);
   const gridY = Math.floor(worldY);
 
-  if (gridX < 0 || gridX >= world.gridSize - 1 || gridY < 0 || gridY >= world.gridSize - 1) {
+  // FIX #6: Explicit bounds checks with safe fallback
+  if (gridX < 0 || gridX >= world.gridSize || gridY < 0 || gridY >= world.gridSize) {
+    // Return safe height (0) for out-of-bounds positions
     return 0;
   }
 
@@ -298,7 +300,17 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
   // P5.js draws from top-left, Three.js PlaneGeometry maps from bottom-left
   const flippedY = world.gridSize - 1 - gridY;
 
-  const cell = world.terrain[flippedY]?.[gridX];
+  // FIX #6: Additional bounds check for flipped coordinate
+  if (flippedY < 0 || flippedY >= world.terrain.length) {
+    return 0;
+  }
+
+  const row = world.terrain[flippedY];
+  if (!row || gridX >= row.length) {
+    return 0;
+  }
+
+  const cell = row[gridX];
   if (!cell) return 0;
 
   // Use the unified getSurfaceHeightAt function from worldConstants
@@ -313,11 +325,16 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
     world.seed
   );
 
+  // FIX #6: Guard against NaN/Infinity in height calculation
+  if (!Number.isFinite(height)) {
+    return 0;
+  }
+
   return height;
 }
 
 export function isWalkable(world: WorldData, worldX: number, worldY: number): boolean {
-  // Guard against incomplete world data
+  // FIX #6: Guard against incomplete world data - safely return false
   if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
     return false;
   }
@@ -329,6 +346,7 @@ export function isWalkable(world: WorldData, worldX: number, worldY: number): bo
   const gridX = Math.floor(worldX);
   const gridY = Math.floor(worldY);
 
+  // FIX #6: Explicit bounds check
   if (gridX < 0 || gridX >= world.gridSize || gridY < 0 || gridY >= world.gridSize) {
     return false;
   }
@@ -336,7 +354,17 @@ export function isWalkable(world: WorldData, worldX: number, worldY: number): bo
   // COORDINATE FIX: Flip Y-axis to match P5.js [y][x] grid with Three.js
   const flippedY = world.gridSize - 1 - gridY;
 
-  const cell = world.terrain[flippedY]?.[gridX];
+  // FIX #6: Additional bounds check for flipped coordinate
+  if (flippedY < 0 || flippedY >= world.terrain.length) {
+    return false;
+  }
+
+  const row = world.terrain[flippedY];
+  if (!row || gridX >= row.length) {
+    return false;
+  }
+
+  const cell = row[gridX];
   if (!cell) return false;
 
   // Bridges are walkable over water
@@ -386,7 +414,7 @@ export function isWorldValid(world: WorldData): boolean {
  * Returns true if the cell is water or a river (but NOT a bridge).
  */
 export function isWaterAt(world: WorldData, worldX: number, worldY: number): boolean {
-  // Guard against incomplete world data - safely return false
+  // FIX #6: Guard against incomplete world data - safely return false
   if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
     return false;
   }
@@ -394,6 +422,7 @@ export function isWaterAt(world: WorldData, worldX: number, worldY: number): boo
   const gridX = Math.floor(worldX);
   const gridY = Math.floor(worldY);
 
+  // FIX #6: Explicit bounds check
   if (gridX < 0 || gridX >= world.gridSize || gridY < 0 || gridY >= world.gridSize) {
     return false;
   }
@@ -401,7 +430,17 @@ export function isWaterAt(world: WorldData, worldX: number, worldY: number): boo
   // COORDINATE FIX: Flip Y-axis to match P5.js [y][x] grid with Three.js
   const flippedY = world.gridSize - 1 - gridY;
 
-  const cell = world.terrain[flippedY]?.[gridX];
+  // FIX #6: Additional bounds check for flipped coordinate
+  if (flippedY < 0 || flippedY >= world.terrain.length) {
+    return false;
+  }
+
+  const row = world.terrain[flippedY];
+  if (!row || gridX >= row.length) {
+    return false;
+  }
+
+  const cell = row[gridX];
   if (!cell) return false;
 
   // Bridges are walkable over water

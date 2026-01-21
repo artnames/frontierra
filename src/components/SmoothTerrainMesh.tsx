@@ -3,7 +3,7 @@
 // CRITICAL: No Math.random() or Date.now() - all rendering is deterministic
 // CRITICAL: Uses shared height functions from worldConstants.ts for collision alignment
 
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { WorldData, TerrainCell } from "@/lib/worldData";
 import { 
@@ -193,6 +193,14 @@ export function SmoothTerrainMesh({
       baseMetalness: PBR_SETTINGS.metalness,
     });
   }, [microDetailEnabled, worldX, worldY, world?.gridSize]);
+
+  // FIX #5: Dispose geometry and material on unmount/regeneration
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+      material.dispose();
+    };
+  }, [geometry, material]);
 
   // Early return after hooks
   if (!world || !world.terrain || world.terrain.length === 0) {

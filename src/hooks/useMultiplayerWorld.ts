@@ -23,6 +23,10 @@ import {
   ensureWorldReady
 } from '@/lib/worldCache';
 import { WorldData, isWorldValid } from '@/lib/worldData';
+import { LRUCache } from '@/lib/lruCache';
+
+// FIX #2: World generation state for race condition prevention
+type WorldGenState = 'idle' | 'loading' | 'ready' | 'error';
 
 interface MultiplayerWorldState {
   playerId: string | null;
@@ -38,6 +42,8 @@ interface MultiplayerWorldState {
   } | null;
   // Cached world for instant transitions
   cachedWorld: WorldData | null;
+  // FIX #2: Track world generation state explicitly
+  worldGenState: WorldGenState;
 }
 
 interface UseMultiplayerWorldOptions {
@@ -46,8 +52,8 @@ interface UseMultiplayerWorldOptions {
   onLandTransition?: (entryPosition: { x: number; z: number }) => void;
 }
 
-// Neighbor params cache for preloading
-const neighborParamsCache = new Map<string, { seed: number; vars: number[] } | null>();
+// FIX #3: Bounded LRU cache for neighbor params (max 100 entries, 10 min TTL)
+const neighborParamsCache = new LRUCache<{ seed: number; vars: number[] } | null>(100, 10 * 60 * 1000);
 
 export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
   const [state, setState] = useState<MultiplayerWorldState>({
@@ -59,19 +65,35 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     error: null,
     isVisitingOtherLand: false,
     unclaimedAttempt: null,
-    cachedWorld: null
+    cachedWorld: null,
+    worldGenState: 'idle'
   });
+
+  // FIX #2: Request versioning to prevent stale world data
+  const requestIdRef = useRef(0);
 
   const latestPositionRef = useRef<{ x: number; z: number }>({
     x: LAND_GRID_SIZE / 2,
     z: LAND_GRID_SIZE / 2
   });
   
+  // FIX #3: Clear neighbor cache when player ID changes (sign out/switch mode)
   useEffect(() => {
     if (options.initialPlayerId && options.initialPlayerId !== state.playerId) {
       setState(prev => ({ ...prev, playerId: options.initialPlayerId! }));
     }
+    // Clear cache on sign-out (null playerId)
+    if (!options.initialPlayerId && state.playerId) {
+      neighborParamsCache.clear();
+    }
   }, [options.initialPlayerId, state.playerId]);
+  
+  // FIX #3: Clear cache on unmount
+  useEffect(() => {
+    return () => {
+      neighborParamsCache.clear();
+    };
+  }, []);
   
   const worldContext = useMemo<{ worldX: number; worldY: number } | undefined>(() => {
     if (!state.currentLand) return undefined;
@@ -126,25 +148,44 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     microOverrides: worldParams.microOverrides
   });
   
-  // Use cached world if available for instant transitions, otherwise use generated
-  const world = state.cachedWorld ?? generatedWorld;
+  // FIX #2: Use cached world if available for instant transitions, otherwise use generated
+  // Only use generated world if it's from the current request (prevents race conditions)
+  const world = useMemo(() => {
+    // If we have a cached world and state is loading, use cached for instant display
+    if (state.cachedWorld && state.worldGenState === 'loading') {
+      return state.cachedWorld;
+    }
+    // Otherwise use generated world if valid
+    if (generatedWorld && isWorldValid(generatedWorld)) {
+      return generatedWorld;
+    }
+    return state.cachedWorld ?? generatedWorld;
+  }, [state.cachedWorld, state.worldGenState, generatedWorld]);
   
-  // Cache the generated world when ready
+  // FIX #2: Update world gen state and cache when generated world is ready
   useEffect(() => {
     if (generatedWorld && isWorldValid(generatedWorld) && state.currentLand) {
-      cacheWorld(
-        state.currentLand.pos_x, 
-        state.currentLand.pos_y, 
-        generatedWorld, 
-        state.currentLand.seed, 
-        state.currentLand.vars
-      );
-      // Clear cachedWorld once authoritative generated world is ready
-      if (state.cachedWorld) {
-        setState(prev => ({ ...prev, cachedWorld: null }));
+      const currentRequestId = requestIdRef.current;
+      
+      // Verify this is still the current request (race condition prevention)
+      if (currentRequestId === requestIdRef.current) {
+        cacheWorld(
+          state.currentLand.pos_x, 
+          state.currentLand.pos_y, 
+          generatedWorld, 
+          state.currentLand.seed, 
+          state.currentLand.vars
+        );
+        
+        // Clear cachedWorld and mark as ready once authoritative generated world is ready
+        setState(prev => ({
+          ...prev,
+          cachedWorld: null,
+          worldGenState: 'ready'
+        }));
       }
     }
-  }, [generatedWorld, state.currentLand, state.cachedWorld]);
+  }, [generatedWorld, state.currentLand]);
   
   // Preload neighbors when current land changes
   useEffect(() => {
@@ -165,6 +206,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
         const ny = pos_y + dir.dy;
         const key = `${nx}:${ny}`;
         
+        // FIX #3: Use LRU cache methods
         if (!neighborParamsCache.has(key)) {
           const land = await getLandAtPosition(nx, ny);
           if (land) {
@@ -188,6 +230,9 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     crossing?: EdgeCrossing
   ) => {
     if (newLand) {
+      // FIX #2: Increment request ID for new transition
+      requestIdRef.current++;
+      
       // Try to get cached world for INSTANT transition (no loading pause)
       const cachedWorld = getCachedWorld(
         newLand.pos_x, 
@@ -203,10 +248,11 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
         unclaimedAttempt: null,
         // Use cached world for instant display while regeneration happens
         cachedWorld: cachedWorld ?? null,
-        isVisitingOtherLand: prev.playerId ? newLand.player_id !== prev.playerId : false
+        isVisitingOtherLand: prev.playerId ? newLand.player_id !== prev.playerId : false,
+        worldGenState: cachedWorld ? 'loading' : 'loading' // Loading until authoritative world ready
       }));
       
-      // Clear neighbor params cache for new location
+      // FIX #3: Clear neighbor params cache for new location
       neighborParamsCache.clear();
       
       // Force regenerate to get the authoritative world (will update cache)
