@@ -160,22 +160,23 @@ export function buildSmoothRiverGeometry(
     console.debug(`[riverContourMesh] Mask stats: min=${min.toFixed(2)}, max=${max.toFixed(2)}, avg=${count > 0 ? (sum/count).toFixed(2) : 'N/A'}, nonzero=${count}`);
   }
   
-  // Step 2: Dilate slightly to prevent gaps at cell boundaries
-  mask = dilateRiverMask(mask, size, size, 1);
+  // Step 2: Dilate more to fill gaps and make rivers wider/more visible
+  mask = dilateRiverMask(mask, size, size, 2); // Increased from 1 to 2
   
-  // Step 3: Blur for smoother contours
+  // Step 3: Triple blur for very smooth contours (removes blocky look)
   mask = blurRiverMask(mask, size, size);
-  mask = blurRiverMask(mask, size, size); // Double blur for extra smoothness
+  mask = blurRiverMask(mask, size, size);
+  mask = blurRiverMask(mask, size, size); // Third blur pass
 
-  // Step 4: Extract contours at iso=0.2 (lower threshold for better river capture)
-  const contours = marchingSquares(mask, size, size, 0.2);
+  // Step 4: Extract contours at lower iso threshold for better river capture
+  // Lower threshold = more area captured = wider rivers
+  const contours = marchingSquares(mask, size, size, 0.15); // Lowered from 0.2
   
   if (DEV) {
     console.debug(`[riverContourMesh] Contours extracted: ${contours.length} polylines`);
   }
   
   // RIVER FIX: Don't return empty - this causes invisible rivers
-  // Instead, log a warning and proceed (fallback in caller will handle)
   if (contours.length === 0) {
     if (DEV) {
       console.warn('[riverContourMesh] No contours extracted - river may be invisible');
@@ -183,8 +184,9 @@ export function buildSmoothRiverGeometry(
     return new THREE.BufferGeometry();
   }
 
-  // Step 5: Smooth contours with Chaikin
-  const smoothContours = contours.map(c => smoothPolylineChaikin(c, 3, true));
+  // Step 5: Smooth contours with MORE Chaikin iterations for natural curves
+  // 4 iterations gives very smooth, non-blocky shorelines
+  const smoothContours = contours.map(c => smoothPolylineChaikin(c, 4, true)); // Increased from 3
 
   // Step 6: Build geometry from all contours
   const positions: number[] = [];
@@ -200,6 +202,23 @@ export function buildSmoothRiverGeometry(
     // Add vertices for this contour
     const contourVertexStart = positions.length / 3;
     
+    // Pre-compute center of contour for edge distance calculation
+    let cx = 0, cy = 0;
+    for (const [px, py] of contour) {
+      cx += px;
+      cy += py;
+    }
+    cx /= contour.length;
+    cy /= contour.length;
+    
+    // Find max distance from center for normalization
+    let maxDist = 0;
+    for (const [px, py] of contour) {
+      const d = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
+      if (d > maxDist) maxDist = d;
+    }
+    maxDist = Math.max(maxDist, 0.5); // Prevent division by zero
+    
     for (const [px, py] of contour) {
       const waterY = sampleWaterHeightBilinear(world, px, py);
       
@@ -209,9 +228,11 @@ export function buildSmoothRiverGeometry(
         (py + worldY * (size - 1)) * 0.12
       );
       
-      // RIVER FIX: Higher edge value for better visibility
-      // Edge attribute: 1 for interior, lower for edges
-      edges.push(0.85); // Increased from 0.7 for more visible interior
+      // Edge attribute based on distance from center
+      // Interior vertices (near center) get 1.0, edge vertices get lower values
+      const dist = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
+      const edgeVal = 0.6 + 0.4 * (1.0 - dist / maxDist); // 0.6 at edge, 1.0 at center
+      edges.push(edgeVal);
     }
 
     // Triangulate the contour

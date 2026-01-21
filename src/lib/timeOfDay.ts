@@ -168,6 +168,7 @@ function colorToHex(c: { r: number; g: number; b: number }): string {
 // Sky color presets - MOONLIT NIGHT (Zelda BOTW-style)
 // Uses canonical palette colors
 // Night should feel dark but still allow comfortable exploration
+// FIX: Horizon colors now use neutral tones, not green
 const SKY_PRESETS = {
   midnight: {
     zenith: SKY_COLORS.nightZenith, // From palette abyss
@@ -175,23 +176,23 @@ const SKY_PRESETS = {
   },
   dawn: {
     zenith: SKY_COLORS.twilightZenith, // From palette rust
-    horizon: hexToRgb01(PALETTE.flame), // Warm dawn horizon
+    horizon: hexToRgb01(PALETTE.coral), // Warm coral dawn horizon (not flame - too orange)
   },
   morning: {
-    zenith: { r: 0.4, g: 0.55, b: 0.75 }, // Blended toward mist
-    horizon: SKY_COLORS.dayHorizon, // From palette meadow
+    zenith: { r: 0.5, g: 0.55, b: 0.65 }, // Neutral gray-blue (not green)
+    horizon: SKY_COLORS.dayHorizon, // Now uses mist (neutral)
   },
   noon: {
     zenith: SKY_COLORS.dayZenith, // From palette mist
-    horizon: SKY_COLORS.dayHorizon, // From palette meadow
+    horizon: SKY_COLORS.dayHorizon, // From palette mist (neutral)
   },
   afternoon: {
-    zenith: { r: 0.4, g: 0.55, b: 0.75 },
+    zenith: { r: 0.5, g: 0.55, b: 0.65 }, // Neutral gray-blue
     horizon: SKY_COLORS.dayHorizon,
   },
   dusk: {
     zenith: SKY_COLORS.twilightZenith, // From palette rust
-    horizon: hexToRgb01(PALETTE.amber), // Warm dusk horizon
+    horizon: hexToRgb01(PALETTE.coral), // Warm coral dusk horizon
   },
   night: {
     zenith: SKY_COLORS.nightZenith,

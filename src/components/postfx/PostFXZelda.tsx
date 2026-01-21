@@ -18,12 +18,12 @@ export interface PostFXZeldaProps {
 }
 
 // Strength presets - tuned for BRIGHT Zelda/Genshin look
-// VIGNETTE FIX: Made vignette much more transparent - barely visible darkening
+// VIGNETTE FIX: Made vignette almost invisible - just a subtle focus hint
 const STRENGTH_PRESETS = {
   subtle: {
     bloom: 0.15,
-    vignette: 0.015, // Almost no vignette (was 0.03)
-    vignetteOffset: 0.99, // Very far to edges (was 0.98)
+    vignette: 0.008, // Almost invisible
+    vignetteOffset: 1.0, // At extreme edges only
     saturation: 1.12,
     contrast: 1.02,
     brightness: 1.08,
@@ -32,19 +32,19 @@ const STRENGTH_PRESETS = {
   },
   strong: {
     bloom: 0.28,
-    vignette: 0.03, // Very light (was 0.06)
-    vignetteOffset: 0.98, // Far to edges (was 0.96)
+    vignette: 0.015, // Very subtle
+    vignetteOffset: 0.99, // Far to edges
     saturation: 1.22,
     contrast: 1.05,
     brightness: 1.12,
     warmth: 0.03,
     noise: 0.01,
   },
-  // "zelda" preset - vivid colors, minimal vignette for transparent edges
+  // "zelda" preset - vivid colors, barely-there vignette
   zelda: {
     bloom: 0.22,
-    vignette: 0.02, // Very subtle (was 0.04) - barely visible darkening
-    vignetteOffset: 0.99, // Pushed to extreme edges (was 0.97)
+    vignette: 0.01, // Barely visible - just gentle focus
+    vignetteOffset: 1.0, // At extreme edges only
     saturation: 1.18,
     contrast: 1.04,
     brightness: 1.1,
@@ -104,12 +104,12 @@ class ScreenPostFXMaterial extends THREE.ShaderMaterial {
           return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
         }
         
-        // Ultra-soft vignette - almost transparent, just subtle focus hint
+        // Ultra-soft vignette - almost invisible, just subtle focus hint at extreme edges
         float vignette(vec2 uv, float strength, float offset) {
           vec2 coord = (uv - 0.5) * 2.0;
           float dist = length(coord);
-          // Very gentle falloff with minimal darkening (0.15 = barely visible)
-          float vig = 1.0 - smoothstep(offset, offset + strength * 3.0, dist) * 0.15;
+          // Extremely gentle falloff - 0.08 means max 8% darkening at corners
+          float vig = 1.0 - smoothstep(offset, offset + strength * 4.0, dist) * 0.08;
           return vig;
         }
         

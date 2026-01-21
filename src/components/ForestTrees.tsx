@@ -87,24 +87,41 @@ function seededRandom(x: number, y: number, seedOffset: number): number {
 }
 
 // Helper to create color strings from palette with variation
-// VEGETATION FIX: Safe color helper that never returns white/undefined
+// VEGETATION FIX: Safe color helper that NEVER returns white/undefined
+// Always returns a valid green-family color from the palette
 function getVegColor(baseColor: { r: number; g: number; b: number } | undefined | null, variation: number, shift: number = 20): string {
-  // VEGETATION FIX: Fallback to meadow green if baseColor is invalid
-  if (!baseColor || typeof baseColor.r !== 'number' || typeof baseColor.g !== 'number' || typeof baseColor.b !== 'number') {
-    if (import.meta.env.DEV) {
-      console.warn('[ForestTrees] Invalid baseColor, using fallback meadow green');
+  // VEGETATION FIX: Fallback to meadow green if baseColor is invalid or missing
+  // This is the ONLY way vegetation can get a color - so it must never fail
+  const fallbackColor = { r: 0.537, g: 0.612, b: 0.435 }; // #899C6F meadow green
+  
+  let safeColor = fallbackColor;
+  
+  if (baseColor && 
+      typeof baseColor.r === 'number' && Number.isFinite(baseColor.r) &&
+      typeof baseColor.g === 'number' && Number.isFinite(baseColor.g) &&
+      typeof baseColor.b === 'number' && Number.isFinite(baseColor.b)) {
+    // Validate that values are in expected 0-1 range
+    if (baseColor.r >= 0 && baseColor.r <= 1 && 
+        baseColor.g >= 0 && baseColor.g <= 1 && 
+        baseColor.b >= 0 && baseColor.b <= 1) {
+      safeColor = baseColor;
+    } else if (import.meta.env.DEV) {
+      console.warn('[ForestTrees] baseColor out of 0-1 range, using fallback');
     }
-    // Fallback to meadow green (from palette)
-    baseColor = { r: 0.537, g: 0.612, b: 0.435 }; // #899C6F
+  } else if (import.meta.env.DEV) {
+    console.warn('[ForestTrees] Invalid baseColor, using fallback meadow green');
   }
   
-  // Ensure values are valid numbers
-  const r = Number.isFinite(baseColor.r) ? baseColor.r : 0.5;
-  const g = Number.isFinite(baseColor.g) ? baseColor.g : 0.5;
-  const b = Number.isFinite(baseColor.b) ? baseColor.b : 0.5;
+  // Apply deterministic variation
+  const safeVariation = Number.isFinite(variation) ? variation : 0.5;
+  const safeShift = Number.isFinite(shift) ? shift : 20;
+  const vShift = Math.floor(safeVariation * safeShift) - safeShift / 2;
   
-  const vShift = Math.floor(variation * shift) - shift / 2;
-  return `rgb(${Math.max(0, Math.min(255, Math.round(r * 255) + vShift))}, ${Math.max(0, Math.min(255, Math.round(g * 255) + vShift))}, ${Math.max(0, Math.min(255, Math.round(b * 255) + vShift * 0.5))})`;
+  const r = Math.max(0, Math.min(255, Math.round(safeColor.r * 255) + vShift));
+  const g = Math.max(0, Math.min(255, Math.round(safeColor.g * 255) + vShift));
+  const b = Math.max(0, Math.min(255, Math.round(safeColor.b * 255) + Math.floor(vShift * 0.5)));
+  
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 // Palette-based flower colors using accent hues
