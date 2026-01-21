@@ -104,24 +104,70 @@ export function marchingSquares(
 }
 
 /**
+ * Create a spatial hash key for a point
+ * Uses fixed precision to handle floating point comparison
+ */
+function pointKey(pt: Point, epsilon: number = 0.001): string {
+  // Round to nearest epsilon to handle floating point comparison
+  const precision = 1 / epsilon;
+  const x = Math.round(pt[0] * precision);
+  const y = Math.round(pt[1] * precision);
+  return `${x}:${y}`;
+}
+
+/**
+ * Build spatial index for O(1) segment lookups by endpoint
+ * Returns a map from point key to list of { segmentIndex, isEnd }
+ */
+function buildSpatialIndex(segments: [Point, Point][]): Map<string, { idx: number; isEnd: boolean }[]> {
+  const index = new Map<string, { idx: number; isEnd: boolean }[]>();
+  
+  for (let i = 0; i < segments.length; i++) {
+    const [start, end] = segments[i];
+    const startKey = pointKey(start);
+    const endKey = pointKey(end);
+    
+    // Add start point
+    if (!index.has(startKey)) {
+      index.set(startKey, []);
+    }
+    index.get(startKey)!.push({ idx: i, isEnd: false });
+    
+    // Add end point
+    if (!index.has(endKey)) {
+      index.set(endKey, []);
+    }
+    index.get(endKey)!.push({ idx: i, isEnd: true });
+  }
+  
+  return index;
+}
+
+/**
  * Chain disconnected segments into continuous polylines
+ * Uses spatial hash for O(1) endpoint lookups instead of O(n) linear scan
  */
 function chainSegments(segments: [Point, Point][]): Polyline[] {
+  if (segments.length === 0) return [];
+  
   const polylines: Polyline[] = [];
   const used = new Set<number>();
-  const epsilon = 0.001;
+  
+  // Build spatial index for O(1) lookups
+  const spatialIndex = buildSpatialIndex(segments);
 
-  const pointsEqual = (a: Point, b: Point): boolean => {
-    return Math.abs(a[0] - b[0]) < epsilon && Math.abs(a[1] - b[1]) < epsilon;
-  };
-
-  // Find segment that starts or ends at given point
+  // Find segment that starts or ends at given point using spatial index
   const findConnecting = (pt: Point, exclude: Set<number>): { idx: number; reverse: boolean } | null => {
-    for (let i = 0; i < segments.length; i++) {
-      if (exclude.has(i)) continue;
-      const [start, end] = segments[i];
-      if (pointsEqual(start, pt)) return { idx: i, reverse: false };
-      if (pointsEqual(end, pt)) return { idx: i, reverse: true };
+    const key = pointKey(pt);
+    const candidates = spatialIndex.get(key);
+    if (!candidates) return null;
+    
+    for (const { idx, isEnd } of candidates) {
+      if (exclude.has(idx)) continue;
+      // If isEnd is true, the segment's END is at this point, so we DON'T reverse
+      // If isEnd is false, the segment's START is at this point, so we also DON'T reverse
+      // The reverse flag indicates whether we need to traverse the segment backwards
+      return { idx, reverse: isEnd };
     }
     return null;
   };
