@@ -1,5 +1,7 @@
 // Discovery Game Hook
 // Manages discovery minigame state and actions
+// FIX #5: Properly resets state when land changes
+// FIX #12: Auto-updates cooldown UI every second
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PlayerLand } from '@/lib/multiplayer/types';
@@ -36,6 +38,19 @@ export function useDiscoveryGame({
     
     getDiscoveryPoints(playerId).then(setDiscoveryPoints);
   }, [playerId, enabled]);
+
+  // FIX #5: Reset checkedLandRef when land changes to avoid stale state
+  useEffect(() => {
+    if (!currentLand) {
+      checkedLandRef.current = null;
+      return;
+    }
+    
+    const landKey = `${currentLand.pos_x},${currentLand.pos_y}`;
+    if (checkedLandRef.current !== landKey) {
+      checkedLandRef.current = null; // Reset when land changes
+    }
+  }, [currentLand?.pos_x, currentLand?.pos_y]);
 
   // Check if we can discover the current land
   useEffect(() => {
@@ -110,29 +125,52 @@ export function useDiscoveryGame({
     setLastDiscoveryResult(null);
   }, []);
 
-  // Format cooldown time remaining
-  const getCooldownTimeRemaining = useCallback((): string | null => {
-    if (!cooldownEndsAt) return null;
-    
-    const now = new Date();
-    const diff = cooldownEndsAt.getTime() - now.getTime();
-    
-    if (diff <= 0) return null;
-    
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
+  // FIX #12: Cooldown time remaining with auto-update
+  const [cooldownTimeRemaining, setCooldownTimeRemaining] = useState<string | null>(null);
+  
+  // Update cooldown time remaining every second when cooldown is active
+  useEffect(() => {
+    if (!cooldownEndsAt) {
+      setCooldownTimeRemaining(null);
+      return;
     }
-    return `${minutes}m`;
+    
+    const updateCooldown = () => {
+      const now = new Date();
+      const diff = cooldownEndsAt.getTime() - now.getTime();
+      
+      if (diff <= 0) {
+        setCooldownTimeRemaining(null);
+        setCanDiscoverCurrent(true); // Cooldown expired, can discover again
+        return;
+      }
+      
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      if (hours > 0) {
+        setCooldownTimeRemaining(`${hours}h ${minutes}m`);
+      } else if (minutes > 0) {
+        setCooldownTimeRemaining(`${minutes}m ${seconds}s`);
+      } else {
+        setCooldownTimeRemaining(`${seconds}s`);
+      }
+    };
+    
+    // Update immediately
+    updateCooldown();
+    
+    // Update every second
+    const interval = setInterval(updateCooldown, 1000);
+    return () => clearInterval(interval);
   }, [cooldownEndsAt]);
 
   return {
     discoveryPoints,
     canDiscoverCurrent,
     cooldownEndsAt,
-    cooldownTimeRemaining: getCooldownTimeRemaining(),
+    cooldownTimeRemaining,
     lastDiscoveryResult,
     isProcessing,
     handleDiscovery,
