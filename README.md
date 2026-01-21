@@ -4,11 +4,63 @@ A deterministic procedural world generator and first-person explorer built with 
 
 ## Overview
 
-Frontierra generates infinite, explorable 3D worlds from a seed number and parameter array. The same inputs always produce identical worlds, enabling multiplayer synchronization without transmitting world data.
+Frontierra generates infinite, explorable 3D worlds from a seed number and parameter array. The same inputs always produce identical worlds, enabling multiplayer synchronization without transmitting world data. Explore procedurally generated terrain with rivers, forests, and dynamic day/night cycles.
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 18+ (recommend using [nvm](https://github.com/nvm-sh/nvm))
+- npm, pnpm, or bun
+
+### Installation
+
+```sh
+git clone https://github.com/your-username/frontierra.git
+cd frontierra
+npm install
+```
+
+### Development
+
+```sh
+npm run dev
+```
+
+The app will be available at `http://localhost:8080`.
+
+### Build for Production
+
+```sh
+npm run build
+```
+
+The build output is in the `dist/` directory.
+
+### Preview Production Build
+
+```sh
+npm run preview
+```
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and fill in the values:
+
+```sh
+cp .env.example .env
+```
+
+Required variables:
+- `VITE_SUPABASE_URL` - Your Supabase project URL
+- `VITE_SUPABASE_PUBLISHABLE_KEY` - Your Supabase anon/public key
+- `VITE_SUPABASE_PROJECT_ID` - Your Supabase project ID
+
+These are needed for multiplayer features (land ownership, discovery points, social features). Solo mode works without them.
 
 ## Technology Stack
 
-- **React** - UI framework
+- **React 18** - UI framework
 - **Vite** - Build tool and dev server
 - **TypeScript** - Type safety
 - **Three.js** + **@react-three/fiber** - 3D rendering
@@ -16,60 +68,6 @@ Frontierra generates infinite, explorable 3D worlds from a seed number and param
 - **shadcn/ui** - UI components
 - **@nexart/codemode-sdk** - Deterministic world generation
 - **Supabase** - Backend (authentication, database, real-time)
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+ (recommend using [nvm](https://github.com/nvm-sh/nvm))
-- npm or bun
-
-### Local Development
-
-```sh
-# Clone the repository
-git clone <YOUR_GIT_URL>
-cd <YOUR_PROJECT_NAME>
-
-# Install dependencies
-npm install
-
-# Start the development server
-npm run dev
-```
-
-The app will be available at `http://localhost:8080`.
-
-### Environment Variables
-
-Create a `.env` file in the project root with:
-
-```env
-VITE_SUPABASE_URL=your_supabase_project_url
-VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
-VITE_SUPABASE_PROJECT_ID=your_project_id
-```
-
-## Building for Production
-
-```sh
-# Create optimized production build
-npm run build
-
-# Preview the production build locally
-npm run preview
-```
-
-The build output is in the `dist/` directory.
-
-## Deployment
-
-Deploy the `dist/` folder to any static hosting service:
-
-- **Netlify**: Connect your repo and set build command to `npm run build`
-- **Vercel**: Import project, auto-detects Vite
-- **Cloudflare Pages**: Set build command and output directory
-- **GitHub Pages**: Use GitHub Actions to build and deploy
 
 ## Project Structure
 
@@ -110,19 +108,33 @@ All components (terrain mesh, collision, water) use these shared functions to en
 
 ## Scripts
 
-- `npm run dev` - Start development server
-- `npm run build` - Create production build
-- `npm run preview` - Preview production build
-- `npm run lint` - Run ESLint
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development server |
+| `npm run build` | Create production build |
+| `npm run preview` | Preview production build |
+| `npm run lint` | Run ESLint |
+
+## Deployment
+
+Deploy the `dist/` folder to any static hosting service:
+
+- **Vercel**: Import project, auto-detects Vite
+- **Netlify**: Connect repo, set build command to `npm run build`, publish directory to `dist`
+- **Cloudflare Pages**: Set build command and output directory
+- **GitHub Pages**: Use GitHub Actions to build and deploy
+
+Example Netlify config (`netlify.toml`):
+```toml
+[build]
+  command = "npm run build"
+  publish = "dist"
+```
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run `npm run lint` to check for issues
-5. Submit a pull request
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-See LICENSE file for details.
+MIT License - see [LICENSE](LICENSE) for details.
