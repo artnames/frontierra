@@ -1,5 +1,6 @@
-// EnhancedWaterPlane - Water rendering with shared height functions
+// EnhancedWaterPlane - Water rendering with smooth contour-based rivers
 // CRITICAL: Uses shared constants from worldConstants.ts for collision alignment
+// Rivers use Marching Squares + Chaikin smoothing for smooth silhouettes
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
@@ -11,6 +12,7 @@ import {
   RIVER_WATER_ABOVE_BED,
   computeRiverCarveDepth,
 } from "@/lib/worldConstants";
+import { buildSmoothRiverGeometry, hasRiverCells } from "@/lib/riverContourMesh";
 
 interface EnhancedWaterPlaneProps {
   world: WorldData;
@@ -119,43 +121,50 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     return getWaterHeight(world.vars);
   }, [world?.vars]);
 
-  // River geometry - water sits just above carved riverbed
+  // River geometry - smooth contour-based mesh using Marching Squares
+  // Falls back to cell-based if contour extraction fails
   const riverGeo = useMemo(() => {
     if (!world || !world.terrain || world.terrain.length === 0) {
       return new THREE.BufferGeometry();
     }
 
-    const SURFACE_LIFT = 0.02; // z-fight safety
-    const bankClearance = 0.02; // never above local ground
+    // Try smooth contour-based mesh first
+    if (hasRiverCells(world)) {
+      const smoothGeo = buildSmoothRiverGeometry(world, worldX, worldY);
+      
+      // Check if we got valid geometry
+      const posAttr = smoothGeo.getAttribute('position');
+      if (posAttr && posAttr.count >= 3) {
+        return smoothGeo;
+      }
+      smoothGeo.dispose();
+    }
+
+    // Fallback: cell-based geometry (old method)
+    const SURFACE_LIFT = 0.02;
+    const bankClearance = 0.02;
 
     return buildWaterGeometry(
       world,
       worldX,
       worldY,
-      // Only render river water on river tiles that aren't ocean
       (c) => !!c.hasRiver && c.type !== "water",
       (cell, x, y, fy) => {
-        // Use shared carve function (MUST match SmoothTerrainMesh and collision)
         const baseH = cell.elevation * heightScale;
         const carve = computeRiverCarveDepth(
           world.terrain,
           x,
           y,
           fy,
-          true, // isRiverCell
+          true,
           world.seed
         );
-
-        // River surface = carved bed + water offset
         const bedHeight = baseH - carve;
         const waterSurface = bedHeight + RIVER_WATER_ABOVE_BED;
-
-        // Never let water go above the local ground
         const surface = Math.min(waterSurface, baseH - bankClearance);
-
         return surface + SURFACE_LIFT;
       },
-      0.55, // keep opacity on thin river edges
+      0.55,
     );
   }, [world, worldX, worldY, heightScale]);
 
