@@ -55,7 +55,8 @@ const PBR_SETTINGS = {
 function getCellMaterialKind(cell: TerrainCell): MaterialKind {
   if (cell.type === "water") return "water";
   if (cell.hasRiver) return "riverbed";
-  if (cell.isPath || cell.isBridge || cell.type === "path" || cell.type === "bridge") return "path";
+  // Bridge removed - just check for path
+  if (cell.isPath || cell.type === "path") return "path";
   return getMaterialKind(cell.type, cell.elevation, cell.moisture);
 }
 
@@ -118,7 +119,8 @@ export function SmoothTerrainMesh({
             h = baseH - carve;
           }
 
-          if (cell.isPath && !cell.isBridge) {
+          // Bridge removed - paths use terrain height
+          if (cell.isPath) {
             h = Math.min(h, pathMaxHeight);
           }
         }

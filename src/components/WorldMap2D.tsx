@@ -1,9 +1,10 @@
 // 2D World Map - Direct visualization of NexArt RGBA channels
 // NEW ENCODING: RGB = Tile Type, Alpha = Elevation
+// CRITICAL: Uses SAME canonical generator as 3D to ensure parity
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { Check, Share2 } from 'lucide-react';
-import { WorldParams, WORLD_LAYOUT_SOURCE } from '@/lib/worldGenerator';
+import { WorldParams } from '@/lib/worldGenerator';
 import { normalizeNexArtInput } from '@/lib/nexartWorld';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -11,11 +12,18 @@ import { useToast } from '@/hooks/use-toast';
 interface WorldMap2DProps {
   params: WorldParams;
   getShareUrl: () => string;
+  // V2: Accept mappingVersion to ensure 2D and 3D use same generator
+  mappingVersion?: 'v1' | 'v2';
+  isMultiplayer?: boolean;
+  worldX?: number;
+  worldY?: number;
+  microOverrides?: Map<number, number>;
 }
 
 const NEXART_TIMEOUT_MS = 10000;
 
 // Tile type legend (matches RGB colors in NexArt)
+// NOTE: Bridge removed from system
 const TILE_LEGEND = [
   { label: 'Water', color: '#1e4878', desc: 'Low elevation' },
   { label: 'Ground', color: '#9a8a64', desc: 'Base terrain' },
@@ -26,7 +34,15 @@ const TILE_LEGEND = [
   { label: 'Object', color: '#ffdc3c', desc: 'Placed items' },
 ];
 
-export function WorldMap2D({ params, getShareUrl }: WorldMap2DProps) {
+export function WorldMap2D({ 
+  params, 
+  getShareUrl,
+  mappingVersion = 'v1',
+  isMultiplayer = false,
+  worldX,
+  worldY,
+  microOverrides
+}: WorldMap2DProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +58,8 @@ export function WorldMap2D({ params, getShareUrl }: WorldMap2DProps) {
     mode: 'static'
   }), [params.seed, params.vars]);
 
-  const genKey = `${input.seed}:${input.vars.join(',')}`;
+  // Include mappingVersion in genKey to regenerate when it changes
+  const genKey = `${input.seed}:${input.vars.join(',')}:${mappingVersion}:${worldX ?? ''}:${worldY ?? ''}`;
 
   useEffect(() => {
     if (genKey === lastGenerated) return;
@@ -60,13 +77,17 @@ export function WorldMap2D({ params, getShareUrl }: WorldMap2DProps) {
           setTimeout(() => reject(new Error('NexArt execution timeout')), NEXART_TIMEOUT_MS);
         });
 
-        // Use CANONICAL source selector - same as 3D explorer
+        // Use CANONICAL source selector - SAME as 3D explorer
+        // Pass the SAME mappingVersion to ensure 2D/3D parity
         const { getCanonicalWorldLayoutSource } = await import('@/lib/generatorCanonical');
         const canonicalResult = getCanonicalWorldLayoutSource({
-          mappingVersion: 'v1', // 2D map uses V1 for visualization
-          isMultiplayer: false,
+          mappingVersion,  // Use prop, not hardcoded 'v1'
+          isMultiplayer,
           seed: input.seed,
-          vars: input.vars
+          vars: input.vars,
+          worldX,
+          worldY,
+          microOverrides
         });
 
         const executionPromise = executeCodeMode({

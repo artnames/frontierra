@@ -24,10 +24,10 @@ export interface TerrainCell {
   y: number;
   elevation: number; // From NexArt Alpha channel (CURVED - applied once)
   moisture: number; // Derived from NexArt Green channel
-  type: "water" | "ground" | "forest" | "mountain" | "path" | "bridge";
+  type: "water" | "ground" | "forest" | "mountain" | "path";  // Bridge removed
   hasRiver: boolean;
   isPath: boolean;
-  isBridge: boolean;
+  // isBridge removed - no bridge tiles in V2
 }
 
 export interface WorldObject {
@@ -74,8 +74,7 @@ function tileTypeToString(type: TileType): TerrainCell["type"] {
       return "mountain";
     case TileType.PATH:
       return "path";
-    case TileType.BRIDGE:
-      return "bridge";
+    // Bridge case removed - no bridge tiles
     default:
       return "ground";
   }
@@ -137,10 +136,8 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
       // Determine type from RGB classification first, then elevation
       let type: TerrainCell["type"];
 
-      // Check for path/bridge from RGB
-      if (cell.isBridge) {
-        type = "bridge";
-      } else if (cell.isPath) {
+      // Check for path from RGB (bridge removed)
+      if (cell.isPath) {
         type = "path";
       } else if (cell.tileType === 0 || rawElevation < rawWaterLevel) {
         // WATER - compare raw elevations (before curve)
@@ -167,7 +164,7 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
         type,
         hasRiver: cell.isRiver,
         isPath: cell.isPath,
-        isBridge: cell.isBridge,
+        // isBridge removed
       };
     }),
   );
@@ -367,12 +364,7 @@ export function isWalkable(world: WorldData, worldX: number, worldY: number): bo
   const cell = row[gridX];
   if (!cell) return false;
 
-  // Bridges are walkable over water
-  if (cell.isBridge || cell.type === "bridge") {
-    return true;
-  }
-
-  // Water and rivers are not walkable
+  // Bridge logic removed - water and rivers are not walkable
   if (cell.type === "water" || cell.hasRiver) {
     return false;
   }
@@ -443,12 +435,7 @@ export function isWaterAt(world: WorldData, worldX: number, worldY: number): boo
   const cell = row[gridX];
   if (!cell) return false;
 
-  // Bridges are walkable over water
-  if (cell.isBridge || cell.type === "bridge") {
-    return false;
-  }
-
-  // Water type or river = water
+  // Bridge logic removed - just check for water type or river
   return cell.type === "water" || cell.hasRiver;
 }
 
