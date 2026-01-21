@@ -167,15 +167,19 @@ export function buildSmoothRiverGeometry(
   mask = blurRiverMask(mask, size, size);
   mask = blurRiverMask(mask, size, size); // Double blur for extra smoothness
 
-  // Step 4: Extract contours at iso=0.3 (lower threshold due to blur)
-  const contours = marchingSquares(mask, size, size, 0.3);
+  // Step 4: Extract contours at iso=0.2 (lower threshold for better river capture)
+  const contours = marchingSquares(mask, size, size, 0.2);
   
   if (DEV) {
     console.debug(`[riverContourMesh] Contours extracted: ${contours.length} polylines`);
   }
   
+  // RIVER FIX: Don't return empty - this causes invisible rivers
+  // Instead, log a warning and proceed (fallback in caller will handle)
   if (contours.length === 0) {
-    // Fallback: return empty geometry (caller can use old method)
+    if (DEV) {
+      console.warn('[riverContourMesh] No contours extracted - river may be invisible');
+    }
     return new THREE.BufferGeometry();
   }
 

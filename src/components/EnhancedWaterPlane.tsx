@@ -166,8 +166,12 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     }
 
     // Fallback: cell-based geometry (old method)
-    const SURFACE_LIFT = 0.05; // RIVER FIX: Increased lift to prevent z-fighting
+    const SURFACE_LIFT = 0.12; // Larger lift to ensure visibility above terrain
     const bankClearance = 0.02;
+
+    if (DEV) {
+      console.debug('[EnhancedWaterPlane] Using cell-based river fallback');
+    }
 
     return buildWaterGeometry(
       world,
@@ -189,7 +193,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
         const surface = Math.min(waterSurface, baseH - bankClearance);
         return surface + SURFACE_LIFT;
       },
-      0.75, // RIVER FIX: Increased edge floor from 0.55 for more visible edges
+      0.85, // High edge floor for visible edges
     );
   }, [world, worldX, worldY, heightScale, hasRivers]);
 
@@ -211,16 +215,16 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   }, [world, worldX, worldY, waterHeight]);
 
   const material = useMemo(() => {
-    // RIVER FIX: Use palette colors for water with proper fallbacks
-    // Use abyss (#001C24) for deep water as specified in the palette
-    const deepColor = toThreeColor(PALETTE.abyss, { linear: true });
-    const shallowColor = toThreeColor(PALETTE.forest, { linear: true });
+    // RIVER VISIBILITY FIX: Use brighter, more visible water colors
+    // Deep water uses a lighter teal instead of near-black abyss
+    const deepColor = new THREE.Color(0.05, 0.25, 0.35); // Visible teal-blue
+    const shallowColor = new THREE.Color(0.15, 0.4, 0.45); // Lighter teal
     const foamColor = toThreeColor(PALETTE.mist, { linear: true });
     
     if (DEV) {
       console.debug('[EnhancedWaterPlane] Water colors:', {
-        deep: PALETTE.abyss,
-        shallow: PALETTE.forest,
+        deep: 'rgb(13,64,89)',
+        shallow: 'rgb(38,102,115)',
         foam: PALETTE.mist
       });
     }
@@ -228,7 +232,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     const m = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uOpacity: { value: 0.85 }, // RIVER FIX: Increased base opacity from 0.75
+        uOpacity: { value: 0.92 }, // High opacity for visibility
         uDeep: { value: deepColor },
         uShallow: { value: shallowColor },
         uFoam: { value: foamColor },
@@ -269,27 +273,31 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
           float w2 = noise(vWPos.xz * 2.0 - t * 0.4);
           float w = (w1 + w2) * 0.5;
 
-          // RIVER FIX: Base color blend between deep and shallow
-          vec3 col = mix(uDeep, uShallow, w * 0.6 + 0.2);
+          // Blend between deep and shallow with more shallow bias for visibility
+          vec3 col = mix(uDeep, uShallow, w * 0.5 + 0.35);
 
-          // RIVER FIX: Improved edge fade - minimum opacity of 0.5 at edges
+          // Edge fade with high minimum opacity (0.7 at edges)
           float edgeFade = smoothstep(0.0, 1.0, vEdge);
-          float a = uOpacity * mix(0.5, 1.0, edgeFade);
+          float a = uOpacity * mix(0.7, 1.0, edgeFade);
 
-          // Add foam at edges using palette color
-          float foamAmount = (1.0 - edgeFade) * 0.3;
+          // Subtle foam at edges
+          float foamAmount = (1.0 - edgeFade) * 0.2;
           col = mix(col, uFoam, foamAmount);
+
+          // Add slight specular highlight for water look
+          float spec = pow(max(0.0, w * 0.5 + 0.5), 4.0) * 0.15;
+          col += vec3(spec);
 
           gl_FragColor = vec4(col, a);
         }
       `,
       transparent: true,
-      side: THREE.DoubleSide, // RIVER FIX: Render both sides to ensure visibility
+      side: THREE.DoubleSide,
       depthWrite: false,
-      depthTest: true, // RIVER FIX: Enable depth test
+      depthTest: true,
       polygonOffset: true,
-      polygonOffsetFactor: -2, // RIVER FIX: Stronger offset to prevent z-fighting
-      polygonOffsetUnits: -2,
+      polygonOffsetFactor: -3, // Strong offset to render above terrain
+      polygonOffsetUnits: -3,
     });
 
     matRef.current = m;
