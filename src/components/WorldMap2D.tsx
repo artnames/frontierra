@@ -60,8 +60,17 @@ export function WorldMap2D({ params, getShareUrl }: WorldMap2DProps) {
           setTimeout(() => reject(new Error('NexArt execution timeout')), NEXART_TIMEOUT_MS);
         });
 
+        // Use CANONICAL source selector - same as 3D explorer
+        const { getCanonicalWorldLayoutSource } = await import('@/lib/generatorCanonical');
+        const canonicalResult = getCanonicalWorldLayoutSource({
+          mappingVersion: 'v1', // 2D map uses V1 for visualization
+          isMultiplayer: false,
+          seed: input.seed,
+          vars: input.vars
+        });
+
         const executionPromise = executeCodeMode({
-          source: WORLD_LAYOUT_SOURCE,
+          source: canonicalResult.source,
           width: 64,
           height: 64,
           seed: input.seed,
