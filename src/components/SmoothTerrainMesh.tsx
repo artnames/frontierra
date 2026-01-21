@@ -3,8 +3,9 @@
 // CRITICAL: No Math.random() or Date.now() - all rendering is deterministic
 // CRITICAL: Uses shared height functions from worldConstants.ts for collision alignment
 // CRITICAL: Uses canonical palette from src/theme/palette.ts
+// FIX A: Proper geometry/material disposal with refs to avoid race conditions
 
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import * as THREE from "three";
 import { WorldData, TerrainCell } from "@/lib/worldData";
 import { 
@@ -68,6 +69,10 @@ export function SmoothTerrainMesh({
   // Use shared water height function for consistency
   const waterHeight = getWaterHeight(world?.vars || []);
   const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
+
+  // FIX A: Track previous resources for safe disposal
+  const prevGeometryRef = useRef<THREE.BufferGeometry | null>(null);
+  const prevMaterialRef = useRef<THREE.Material | null>(null);
 
   const geometry = useMemo(() => {
     // Guard against incomplete world data
@@ -199,11 +204,46 @@ export function SmoothTerrainMesh({
     });
   }, [microDetailEnabled, worldX, worldY, world?.gridSize]);
 
-  // FIX #5: Dispose geometry and material on unmount/regeneration
+  // FIX A: Dispose previous resources when new ones are created, and current on unmount
   useEffect(() => {
+    // Dispose previous geometry if different
+    if (prevGeometryRef.current && prevGeometryRef.current !== geometry) {
+      try {
+        prevGeometryRef.current.dispose();
+      } catch (e) {
+        // Ignore disposal errors (already disposed)
+      }
+    }
+    prevGeometryRef.current = geometry;
+
+    // Dispose previous material if different
+    if (prevMaterialRef.current && prevMaterialRef.current !== material) {
+      try {
+        prevMaterialRef.current.dispose();
+      } catch (e) {
+        // Ignore disposal errors
+      }
+    }
+    prevMaterialRef.current = material;
+
+    // Cleanup on unmount only
     return () => {
-      geometry.dispose();
-      material.dispose();
+      if (prevGeometryRef.current) {
+        try {
+          prevGeometryRef.current.dispose();
+        } catch (e) {
+          // Ignore
+        }
+        prevGeometryRef.current = null;
+      }
+      if (prevMaterialRef.current) {
+        try {
+          prevMaterialRef.current.dispose();
+        } catch (e) {
+          // Ignore
+        }
+        prevMaterialRef.current = null;
+      }
     };
   }, [geometry, material]);
 

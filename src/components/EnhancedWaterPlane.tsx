@@ -2,6 +2,7 @@
 // CRITICAL: Uses shared constants from worldConstants.ts for collision alignment
 // CRITICAL: Uses canonical palette from src/theme/palette.ts
 // Rivers use Marching Squares + Chaikin smoothing for smooth silhouettes
+// FIX A: Proper geometry/material disposal with refs to avoid race conditions
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
@@ -116,15 +117,18 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   const matRef = useRef<THREE.ShaderMaterial>(null);
   const heightScale = WORLD_HEIGHT_SCALE;
 
+  // FIX A: Track previous resources for safe disposal
+  const prevRiverGeoRef = useRef<THREE.BufferGeometry | null>(null);
+  const prevLakeGeoRef = useRef<THREE.BufferGeometry | null>(null);
+  const prevMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
+
   // Water surface height for lakes/ocean - uses shared function
-  // Call hooks unconditionally
   const waterHeight = useMemo(() => {
     if (!world?.vars) return 0;
     return getWaterHeight(world.vars);
   }, [world?.vars]);
 
   // River geometry - smooth contour-based mesh using Marching Squares
-  // Falls back to cell-based if contour extraction fails
   const riverGeo = useMemo(() => {
     if (!world || !world.terrain || world.terrain.length === 0) {
       return new THREE.BufferGeometry();
@@ -265,14 +269,63 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     if (animated && matRef.current) matRef.current.uniforms.uTime.value += dt;
   });
 
-  // FIX #6: Dispose geometry and material on unmount/regeneration
+  // FIX A: Dispose previous resources when new ones are created, and current on unmount
   useEffect(() => {
+    // Dispose previous river geometry if different
+    if (prevRiverGeoRef.current && prevRiverGeoRef.current !== riverGeo) {
+      try {
+        prevRiverGeoRef.current.dispose();
+      } catch (e) {
+        // Ignore disposal errors (already disposed)
+      }
+    }
+    prevRiverGeoRef.current = riverGeo;
+
+    // Dispose previous lake geometry if different
+    if (prevLakeGeoRef.current && prevLakeGeoRef.current !== lakeGeo) {
+      try {
+        prevLakeGeoRef.current.dispose();
+      } catch (e) {
+        // Ignore disposal errors
+      }
+    }
+    prevLakeGeoRef.current = lakeGeo;
+
+    // Cleanup on unmount only
     return () => {
-      riverGeo.dispose();
-      lakeGeo.dispose();
-      material.dispose();
+      if (prevRiverGeoRef.current) {
+        try {
+          prevRiverGeoRef.current.dispose();
+        } catch (e) {
+          // Ignore
+        }
+        prevRiverGeoRef.current = null;
+      }
+      if (prevLakeGeoRef.current) {
+        try {
+          prevLakeGeoRef.current.dispose();
+        } catch (e) {
+          // Ignore
+        }
+        prevLakeGeoRef.current = null;
+      }
     };
-  }, [riverGeo, lakeGeo, material]);
+  }, [riverGeo, lakeGeo]);
+
+  // FIX A: Dispose material only on unmount (material is stable)
+  useEffect(() => {
+    prevMaterialRef.current = material;
+    return () => {
+      if (prevMaterialRef.current) {
+        try {
+          prevMaterialRef.current.dispose();
+        } catch (e) {
+          // Ignore
+        }
+        prevMaterialRef.current = null;
+      }
+    };
+  }, [material]);
 
   // Early return after all hooks
   if (!world || !world.terrain || world.terrain.length === 0 || !world.vars) {

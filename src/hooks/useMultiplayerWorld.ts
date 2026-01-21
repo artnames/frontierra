@@ -2,6 +2,9 @@
 // Manages the deterministic world loading and edge transitions
 // Integrates with World A shared macro geography via worldContext
 // Uses deterministic neighbor preloading for seamless transitions
+// FIX B: Proper request versioning with AbortController pattern
+// FIX C: Validates micro_overrides from DB (range + type safety)
+// FIX D: Proactive LRU cache pruning every 60s
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { PlayerLand, LAND_GRID_SIZE, WORLD_A_GRID_WIDTH, WORLD_A_GRID_HEIGHT, EdgeCrossing, getNeighborPosition } from '@/lib/multiplayer/types';
@@ -25,8 +28,14 @@ import {
 import { WorldData, isWorldValid } from '@/lib/worldData';
 import { LRUCache } from '@/lib/lruCache';
 
-// FIX #2: World generation state for race condition prevention
+// FIX B: World generation state for race condition prevention
 type WorldGenState = 'idle' | 'loading' | 'ready' | 'error';
+
+// Valid micro override index range
+const MICRO_OVERRIDE_MIN_INDEX = 10;
+const MICRO_OVERRIDE_MAX_INDEX = 23;
+const MICRO_OVERRIDE_MIN_VALUE = 0;
+const MICRO_OVERRIDE_MAX_VALUE = 100;
 
 interface MultiplayerWorldState {
   playerId: string | null;
@@ -42,7 +51,7 @@ interface MultiplayerWorldState {
   } | null;
   // Cached world for instant transitions
   cachedWorld: WorldData | null;
-  // FIX #2: Track world generation state explicitly
+  // FIX B: Track world generation state explicitly
   worldGenState: WorldGenState;
 }
 
@@ -52,8 +61,41 @@ interface UseMultiplayerWorldOptions {
   onLandTransition?: (entryPosition: { x: number; z: number }) => void;
 }
 
-// FIX #3: Bounded LRU cache for neighbor params (max 100 entries, 10 min TTL)
+// FIX D: Bounded LRU cache for neighbor params (max 100 entries, 10 min TTL)
 const neighborParamsCache = new LRUCache<{ seed: number; vars: number[] } | null>(100, 10 * 60 * 1000);
+
+// FIX C: Validate micro_overrides from DB
+function validateMicroOverrides(raw: unknown): Map<number, number> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  
+  const result = new Map<number, number>();
+  let invalidCount = 0;
+  
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const idx = parseInt(key, 10);
+    
+    // Validate index range [10..23]
+    if (isNaN(idx) || idx < MICRO_OVERRIDE_MIN_INDEX || idx > MICRO_OVERRIDE_MAX_INDEX) {
+      invalidCount++;
+      continue;
+    }
+    
+    // Validate value is number in range [0..100]
+    if (typeof value !== 'number' || value < MICRO_OVERRIDE_MIN_VALUE || value > MICRO_OVERRIDE_MAX_VALUE) {
+      invalidCount++;
+      continue;
+    }
+    
+    result.set(idx, value);
+  }
+  
+  // Log warning once if there were invalid entries
+  if (invalidCount > 0) {
+    console.warn(`[MultiplayerWorld] Dropped ${invalidCount} invalid micro_overrides entries (must be index 10-23, value 0-100)`);
+  }
+  
+  return result.size > 0 ? result : undefined;
+}
 
 export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
   const [state, setState] = useState<MultiplayerWorldState>({
@@ -69,15 +111,17 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     worldGenState: 'idle'
   });
 
-  // FIX #2: Request versioning to prevent stale world data
+  // FIX B: Request versioning to prevent stale world data
   const requestIdRef = useRef(0);
+  // FIX B: Track current land key for race detection
+  const currentLandKeyRef = useRef<string>('');
 
   const latestPositionRef = useRef<{ x: number; z: number }>({
     x: LAND_GRID_SIZE / 2,
     z: LAND_GRID_SIZE / 2
   });
   
-  // FIX #3: Clear neighbor cache when player ID changes (sign out/switch mode)
+  // Update player ID when it changes
   useEffect(() => {
     if (options.initialPlayerId && options.initialPlayerId !== state.playerId) {
       setState(prev => ({ ...prev, playerId: options.initialPlayerId! }));
@@ -88,9 +132,17 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     }
   }, [options.initialPlayerId, state.playerId]);
   
-  // FIX #3: Clear cache on unmount
+  // FIX D: Proactive cache pruning every 60 seconds + cleanup on unmount
   useEffect(() => {
+    const pruneInterval = setInterval(() => {
+      const pruned = neighborParamsCache.prune();
+      if (pruned > 0) {
+        console.debug(`[MultiplayerWorld] Pruned ${pruned} expired cache entries`);
+      }
+    }, 60 * 1000);
+    
     return () => {
+      clearInterval(pruneInterval);
       neighborParamsCache.clear();
     };
   }, []);
@@ -102,6 +154,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
   }, [state.currentLand?.pos_x, state.currentLand?.pos_y]);
   
   // Extract world params including V2 settings from land
+  // FIX C: Use validated micro_overrides
   const worldParams = useMemo(() => {
     const land = state.currentLand;
     if (!land) {
@@ -113,18 +166,8 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
       };
     }
     
-    // Convert micro_overrides from Record to Map
-    let microOverrides: Map<number, number> | undefined;
-    if (land.micro_overrides && typeof land.micro_overrides === 'object') {
-      microOverrides = new Map();
-      for (const [key, value] of Object.entries(land.micro_overrides)) {
-        const idx = parseInt(key, 10);
-        if (!isNaN(idx) && typeof value === 'number') {
-          microOverrides.set(idx, value);
-        }
-      }
-      if (microOverrides.size === 0) microOverrides = undefined;
-    }
+    // FIX C: Validate micro_overrides from DB
+    const microOverrides = validateMicroOverrides(land.micro_overrides);
     
     return {
       seed: land.seed,
@@ -148,7 +191,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     microOverrides: worldParams.microOverrides
   });
   
-  // FIX #2: Use cached world if available for instant transitions, otherwise use generated
+  // FIX B: Use cached world if available for instant transitions, otherwise use generated
   // Only use generated world if it's from the current request (prevents race conditions)
   const world = useMemo(() => {
     // If we have a cached world and state is loading, use cached for instant display
@@ -162,9 +205,17 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     return state.cachedWorld ?? generatedWorld;
   }, [state.cachedWorld, state.worldGenState, generatedWorld]);
   
-  // FIX #2: Update world gen state and cache when generated world is ready
+  // FIX B: Update world gen state and cache when generated world is ready
+  // Uses land key comparison to prevent race conditions
   useEffect(() => {
-    if (generatedWorld && isWorldValid(generatedWorld) && state.currentLand) {
+    if (!state.currentLand) return;
+    
+    const landKey = `${state.currentLand.pos_x}:${state.currentLand.pos_y}:${state.currentLand.seed}`;
+    
+    // Only process if this is still the current land
+    if (landKey !== currentLandKeyRef.current) return;
+    
+    if (generatedWorld && isWorldValid(generatedWorld)) {
       const currentRequestId = requestIdRef.current;
       
       // Verify this is still the current request (race condition prevention)
@@ -178,11 +229,18 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
         );
         
         // Clear cachedWorld and mark as ready once authoritative generated world is ready
-        setState(prev => ({
-          ...prev,
-          cachedWorld: null,
-          worldGenState: 'ready'
-        }));
+        setState(prev => {
+          // Double-check we're still on the same land
+          if (prev.currentLand?.pos_x !== state.currentLand!.pos_x ||
+              prev.currentLand?.pos_y !== state.currentLand!.pos_y) {
+            return prev;
+          }
+          return {
+            ...prev,
+            cachedWorld: null,
+            worldGenState: 'ready'
+          };
+        });
       }
     }
   }, [generatedWorld, state.currentLand]);
@@ -206,7 +264,6 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
         const ny = pos_y + dir.dy;
         const key = `${nx}:${ny}`;
         
-        // FIX #3: Use LRU cache methods
         if (!neighborParamsCache.has(key)) {
           const land = await getLandAtPosition(nx, ny);
           if (land) {
@@ -230,8 +287,10 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     crossing?: EdgeCrossing
   ) => {
     if (newLand) {
-      // FIX #2: Increment request ID for new transition
+      // FIX B: Increment request ID for new transition
       requestIdRef.current++;
+      const newLandKey = `${newLand.pos_x}:${newLand.pos_y}:${newLand.seed}`;
+      currentLandKeyRef.current = newLandKey;
       
       // Try to get cached world for INSTANT transition (no loading pause)
       const cachedWorld = getCachedWorld(
@@ -249,10 +308,10 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
         // Use cached world for instant display while regeneration happens
         cachedWorld: cachedWorld ?? null,
         isVisitingOtherLand: prev.playerId ? newLand.player_id !== prev.playerId : false,
-        worldGenState: cachedWorld ? 'loading' : 'loading' // Loading until authoritative world ready
+        worldGenState: 'loading' // Loading until authoritative world ready
       }));
       
-      // FIX #3: Clear neighbor params cache for new location
+      // Clear neighbor params cache for new location
       neighborParamsCache.clear();
       
       // Force regenerate to get the authoritative world (will update cache)
@@ -320,6 +379,9 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
       }
       
       if (land) {
+        // FIX B: Set land key for race detection
+        currentLandKeyRef.current = `${land.pos_x}:${land.pos_y}:${land.seed}`;
+        
         const neighbors = await getLandsInArea(
           land.pos_x - 1, land.pos_y - 1,
           land.pos_x + 1, land.pos_y + 1
@@ -352,6 +414,10 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     
     const land = await getLandAtPosition(landX, landY);
     if (land) {
+      // FIX B: Update request ID and land key
+      requestIdRef.current++;
+      currentLandKeyRef.current = `${land.pos_x}:${land.pos_y}:${land.seed}`;
+      
       // Try to get cached world for instant transition
       const cached = getCachedWorld(landX, landY, land.seed, land.vars);
       
@@ -369,7 +435,8 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
         playerPosition: { x: LAND_GRID_SIZE / 2, z: LAND_GRID_SIZE / 2 },
         isLoading: false,
         isVisitingOtherLand: land.player_id !== prev.playerId,
-        cachedWorld: cached ?? null
+        cachedWorld: cached ?? null,
+        worldGenState: 'loading'
       }));
     } else {
       setState(prev => ({ ...prev, isLoading: false, error: 'Land not found' }));
