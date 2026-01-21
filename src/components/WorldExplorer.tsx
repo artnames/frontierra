@@ -1,7 +1,8 @@
 // World Explorer - 3D First-Person View of NexArt World
 // Uses debounced NexArt generation with atomic world swap
+// Performance: Uses quality profile for mobile optimization
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
 import { WorldData, distanceToObject } from "@/lib/worldData";
 import { useNexArtWorld } from "@/hooks/useNexArtWorld";
@@ -27,6 +28,7 @@ import { DiscoveryToast } from "@/components/DiscoveryToast";
 import { MobileControls } from "@/components/MobileControls";
 import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { useVisualSettings } from "@/hooks/useVisualSettings";
+import { useQualityProfile, mergeQualityWithUserSettings } from "@/hooks/useQualityProfile";
 import { useIsMobile } from "@/hooks/use-mobile";
 import * as THREE from "three";
 
@@ -205,6 +207,7 @@ export function WorldExplorer({
   const [actions, setActions] = useState<WorldAction[]>(initialActions);
 
   const isMobile = useIsMobile();
+  const qualityProfile = useQualityProfile();
 
   const handleMobileMove = useCallback((forward: boolean, backward: boolean, left: boolean, right: boolean) => {
     setMobileMovement(forward, backward, left, right);
@@ -226,6 +229,16 @@ export function WorldExplorer({
     postfxOutlineEnabled,
     postfxNoiseEnabled,
   } = useVisualSettings();
+
+  // Merge user settings with quality profile (quality profile can force features off)
+  const effectiveSettings = useMemo(() => 
+    mergeQualityWithUserSettings(qualityProfile, {
+      shadowsEnabled,
+      postfxBloomEnabled,
+      waterAnimation,
+      fogEnabled,
+      microDetailEnabled,
+    }), [qualityProfile, shadowsEnabled, postfxBloomEnabled, waterAnimation, fogEnabled, microDetailEnabled]);
 
   const { world, isLoading, isVerifying, error } = useNexArtWorld({
     seed,
@@ -342,8 +355,9 @@ export function WorldExplorer({
 
       <Canvas
         camera={{ fov: 45, near: 0.01, far: 1000 }}
-        gl={{ antialias: false }}
-        shadows={shadowsEnabled}
+        gl={{ antialias: qualityProfile.antialiasEnabled }}
+        dpr={qualityProfile.devicePixelRatioCap}
+        shadows={effectiveSettings.shadowsEnabled}
         style={{ position: "absolute", inset: 0 }}
         onCreated={({ gl }) => {
           gl.outputColorSpace = THREE.SRGBColorSpace;
@@ -370,17 +384,17 @@ export function WorldExplorer({
             worldY={worldY}
             useTextures={materialRichness}
             showVegetation={showVegetation}
-            fogEnabled={fogEnabled}
-            microDetailEnabled={microDetailEnabled}
-            shadowsEnabled={shadowsEnabled}
+            fogEnabled={effectiveSettings.fogEnabled}
+            microDetailEnabled={effectiveSettings.microDetailEnabled}
+            shadowsEnabled={effectiveSettings.shadowsEnabled}
             smoothShading={smoothShading}
-            waterAnimation={waterAnimation}
+            waterAnimation={effectiveSettings.waterAnimationEnabled}
             outlineEnabled={postfxOutlineEnabled}
           />
         </group>
 
         <PostFXZelda
-          enabled
+          enabled={effectiveSettings.postFxEnabled}
           strength="zelda"
           outlineEnabled={postfxOutlineEnabled}
           bloomEnabled={postfxBloomEnabled}

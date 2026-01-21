@@ -68,9 +68,20 @@
     @apply border-border;
   }
 
-  body {
+  html, body {
     @apply bg-background text-foreground font-mono antialiased;
     font-family: 'JetBrains Mono', monospace;
+    /* Prevent overscroll/bounce on mobile */
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Prevent pull-to-refresh and other mobile gestures on game container */
+  body {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   h1, h2, h3, h4, h5, h6 {

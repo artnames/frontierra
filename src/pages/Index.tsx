@@ -49,6 +49,8 @@ import { SocialPanel } from "@/components/social/SocialPanel";
 import { UnclaimedLandModal } from "@/components/UnclaimedLandModal";
 import { ClaimLandModal } from "@/components/ClaimLandModal";
 import { DiscoveryPointsHUD } from "@/components/DiscoveryPointsHUD";
+import { MobileLandscapeGate } from "@/components/MobileLandscapeGate";
+import { WelcomeScreen, useWelcomeScreen } from "@/components/WelcomeScreen";
 import { useMultiplayerWorld } from "@/hooks/useMultiplayerWorld";
 import { useDiscoveryGame } from "@/hooks/useDiscoveryGame";
 import { useToast } from "@/hooks/use-toast";
@@ -75,6 +77,9 @@ const Index = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  
+  // Welcome screen for first-time visitors
+  const { showWelcome, dismissWelcome } = useWelcomeScreen();
 
   // Authentication
   const { user, isAuthenticated, isLoading: isAuthLoading, signOut } = useAuth();
@@ -174,6 +179,17 @@ const Index = () => {
     }
     setPendingMultiplayerSwitch(false);
   }, [isAuthenticated, user?.id, navigate, multiplayer]);
+
+  // Welcome screen handlers
+  const handleWelcomeMultiplayer = useCallback(() => {
+    dismissWelcome();
+    handleMultiplayerClick();
+  }, [dismissWelcome, handleMultiplayerClick]);
+
+  const handleWelcomeSolo = useCallback(() => {
+    dismissWelcome();
+    setWorldMode("solo");
+  }, [dismissWelcome]);
 
   // Handle land claimed from modal
   const handleLandClaimed = useCallback(
@@ -360,9 +376,18 @@ const Index = () => {
   const isInvalid = deterministicTest && !deterministicTest.isValid;
 
   return (
+    <MobileLandscapeGate>
     <div
-      className={`h-screen bg-background flex flex-col overflow-hidden ${isInvalid ? "border-4 border-destructive" : ""}`}
+      className={`h-screen bg-background flex flex-col overflow-hidden touch-none ${isInvalid ? "border-4 border-destructive" : ""}`}
     >
+      {/* Welcome Screen for first-time visitors */}
+      {showWelcome && (
+        <WelcomeScreen
+          onSelectMultiplayer={handleWelcomeMultiplayer}
+          onSelectSolo={handleWelcomeSolo}
+          isAuthenticated={isAuthenticated}
+        />
+      )}
       {/* Compact Header */}
       <header
         className={`relative z-50 border-b ${isInvalid ? "border-destructive bg-destructive/10" : "border-border bg-card/80"} backdrop-blur-sm flex-shrink-0`}
@@ -1070,6 +1095,7 @@ const Index = () => {
         </div>
       </footer>
     </div>
+    </MobileLandscapeGate>
   );
 };
 
