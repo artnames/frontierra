@@ -1,48 +1,42 @@
-// World Constants - Shared across worldData.ts and WorldRenderer.tsx
+// World Constants - Shared across worldData.ts, SmoothTerrainMesh, EnhancedWaterPlane
 // This ensures deterministic, synchronized scales for 3D projection
+// SINGLE SOURCE OF TRUTH for all height calculations
 
 // Height scale for converting NexArt elevation (0-1) to 3D world units
-// Increased to 35 for dramatic mountains
 export const WORLD_HEIGHT_SCALE = 35;
 
 // ============================================
 // PERCEPTUAL ELEVATION CURVE
-// Must match the curve in worldData.ts exactly
 // Transforms linear Alpha (0-1) into perceptually-shaped elevation
+// Applied ONCE during worldData generation - cells store curved values
 // ============================================
-function applyElevationCurve(rawElevation: number): number {
+export function applyElevationCurve(rawElevation: number): number {
   const e = rawElevation;
 
   if (e < 0.3) {
-    // Low elevation: flatten for walkable plains
-    // Maps 0-0.30 → 0-0.10
     return e * 0.33;
   } else if (e < 0.5) {
-    // Mid elevation: gentle rolling hills
-    // Maps 0.30-0.50 → 0.10-0.25
     const t = (e - 0.3) / 0.2;
     return 0.1 + t * 0.15;
   } else if (e < 0.7) {
-    // Upper-mid: steeper hills transitioning to mountains
-    // Maps 0.50-0.70 → 0.25-0.50
     const t = (e - 0.5) / 0.2;
     return 0.25 + Math.pow(t, 1.2) * 0.25;
   } else {
-    // High elevation: exponential amplification for dramatic peaks
-    // Maps 0.70-1.0 → 0.50-1.0
     const t = (e - 0.7) / 0.3;
     return 0.5 + Math.pow(t, 1.5) * 0.5;
   }
 }
 
+// ============================================
+// WATER LEVEL FUNCTIONS
+// ============================================
+
 // Raw water level from VAR[4] (uncurved, 0-1 range)
-// VAR[4] 0=0.10, 50=0.325, 100=0.55 (matches worldGenerator.ts)
 export function getWaterLevelRaw(vars: number[]): number {
   return ((vars[4] ?? 50) / 100) * 0.45 + 0.1;
 }
 
 // Water level in CURVED terrain space (0-1 range, curved)
-// This is where the flat water plane should sit to match curved terrain
 export function getWaterLevel(vars: number[]): number {
   const raw = getWaterLevelRaw(vars);
   return applyElevationCurve(raw);
@@ -53,29 +47,145 @@ export function getWaterHeight(vars: number[]): number {
   return getWaterLevel(vars) * WORLD_HEIGHT_SCALE;
 }
 
-// River depth below water level (in world units, not scaled)
-export const RIVER_DEPTH_OFFSET = 1.5;
-
-// Path max height above water (in world units, not scaled)
+// Path max height above water (in world units)
 export const PATH_HEIGHT_OFFSET = 0.8;
 
 // Fixed bridge height - bridges sit just above the water surface
-// This is an absolute height, not relative to scaled water level
 export const BRIDGE_FIXED_HEIGHT = 2.5;
 
 // ============================================
-// RIVER CARVING CONSTANTS
-// Must be identical in worldData.ts and SmoothTerrainMesh.tsx
+// RIVER CARVING CONSTANTS - SINGLE SOURCE OF TRUTH
+// Used by: SmoothTerrainMesh, worldData.ts getElevationAt, EnhancedWaterPlane
 // ============================================
 
-// Carve amounts for river geometry (world units)
-export const RIVER_BANK_CARVE = 1.0;      // Shallow carve for banks
-export const RIVER_BED_MIN = 2.4;          // Minimum bed carve at center
-export const RIVER_BED_MAX = 20;           // Maximum bed carve at center
-export const RIVER_CARVE_CLAMP_MIN = 0.5;  // Min visible carve for river cells
-export const RIVER_CARVE_CLAMP_MAX = 1.8;  // Max carve for visual mesh
-export const RIVER_BANK_CLAMP_MIN = 0.18;  // Min visible carve for bank cells
-export const RIVER_BANK_CLAMP_MAX = 0.9;   // Max carve for bank cells
+// Bank carve (tiles adjacent to river)
+export const RIVER_BANK_CARVE = 1.0;
 
-// Water above carved riverbed (for EnhancedWaterPlane)
-export const RIVER_WATER_ABOVE_BED = 0.3;
+// Bed carve range (center of river)
+export const RIVER_BED_MIN = 1.2;
+export const RIVER_BED_MAX = 2.0;
+
+// Clamping for river center cells
+export const RIVER_CARVE_CLAMP_MIN = 0.8;
+export const RIVER_CARVE_CLAMP_MAX = 1.6;
+
+// Clamping for bank cells
+export const RIVER_BANK_CLAMP_MIN = 0.2;
+export const RIVER_BANK_CLAMP_MAX = 0.8;
+
+// Water surface sits this far above the carved riverbed
+export const RIVER_WATER_ABOVE_BED = 0.25;
+
+// Legacy constant (deprecated, use RIVER_BED_MIN/MAX instead)
+export const RIVER_DEPTH_OFFSET = 1.5;
+
+// ============================================
+// SHARED RIVER CARVE COMPUTATION
+// This MUST be used by all systems: visual mesh, collision, water surface
+// ============================================
+
+/**
+ * Compute river mask (0-1) based on distance to nearest river cell
+ * 1 = river center, 0.6 = adjacent, 0.25 = 2 tiles away, 0 = outside
+ */
+export function computeRiverMask(
+  terrain: { hasRiver?: boolean }[][],
+  x: number,
+  flippedY: number
+): number {
+  let best = 0;
+
+  for (let dy = -2; dy <= 2; dy++) {
+    const row = terrain[flippedY + dy];
+    if (!row) continue;
+
+    for (let dx = -2; dx <= 2; dx++) {
+      const c = row[x + dx];
+      if (!c?.hasRiver) continue;
+
+      const d = Math.max(Math.abs(dx), Math.abs(dy));
+      const w = d === 0 ? 1 : d === 1 ? 0.6 : 0.25;
+      if (w > best) best = w;
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Deterministic micro-variation for natural-looking riverbed
+ */
+export function getRiverMicroVariation(x: number, y: number, seed: number): number {
+  const n = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.1) * 43758.5453;
+  return (n - Math.floor(n)) * 0.15 - 0.075;
+}
+
+/**
+ * Compute river carve depth at a cell position
+ * Returns the amount to subtract from base terrain height
+ * MUST be used consistently across visual mesh and collision
+ */
+export function computeRiverCarveDepth(
+  terrain: { hasRiver?: boolean }[][],
+  x: number,
+  y: number,
+  flippedY: number,
+  isRiverCell: boolean,
+  seed: number
+): number {
+  const mask = computeRiverMask(terrain, x, flippedY);
+  if (mask <= 0) return 0;
+
+  const centerFactor = isRiverCell ? 1 : mask;
+  const bedNoise = getRiverMicroVariation(x * 3.1, y * 3.1, seed) * 0.6;
+
+  const bedCarve = RIVER_BED_MIN + (RIVER_BED_MAX - RIVER_BED_MIN) * centerFactor;
+  const rawCarve = (isRiverCell ? bedCarve + bedNoise : RIVER_BANK_CARVE) * mask;
+
+  // Apply clamping based on cell type
+  const MIN_CLAMP = isRiverCell ? RIVER_CARVE_CLAMP_MIN : RIVER_BANK_CLAMP_MIN;
+  const MAX_CLAMP = isRiverCell ? RIVER_CARVE_CLAMP_MAX : RIVER_BANK_CLAMP_MAX;
+
+  return Math.min(MAX_CLAMP, Math.max(MIN_CLAMP, rawCarve));
+}
+
+/**
+ * Get terrain height at a cell (already curved elevation * scale)
+ */
+export function getTerrainHeightAtCell(cellElevation: number): number {
+  return cellElevation * WORLD_HEIGHT_SCALE;
+}
+
+/**
+ * Get riverbed height at a position (terrain height minus carve)
+ */
+export function getRiverbedHeight(
+  terrain: { hasRiver?: boolean; elevation?: number }[][],
+  x: number,
+  y: number,
+  flippedY: number,
+  cellElevation: number,
+  isRiverCell: boolean,
+  seed: number
+): number {
+  const baseH = getTerrainHeightAtCell(cellElevation);
+  const carve = computeRiverCarveDepth(terrain, x, y, flippedY, isRiverCell, seed);
+  return baseH - carve;
+}
+
+/**
+ * Get water surface height at a river position
+ * Uses the carved riverbed height + water offset
+ */
+export function getRiverWaterSurfaceHeight(
+  terrain: { hasRiver?: boolean; elevation?: number }[][],
+  x: number,
+  y: number,
+  flippedY: number,
+  cellElevation: number,
+  seed: number
+): number {
+  // River water sits just above the carved riverbed
+  const bedHeight = getRiverbedHeight(terrain, x, y, flippedY, cellElevation, true, seed);
+  return bedHeight + RIVER_WATER_ABOVE_BED;
+}

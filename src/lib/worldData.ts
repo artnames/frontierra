@@ -1,6 +1,7 @@
 // World Data - Derived ENTIRELY from NexArt Canonical Layout
 // This module provides the 3D projection interface for NexArt-generated worlds
 // CRITICAL: No noise/random functions allowed. All data comes from NexArt pixels.
+// CRITICAL: Uses shared constants from worldConstants.ts for height/collision alignment
 
 import { NexArtWorldGrid, TileType, GridCell, generateNexArtWorld, verifyNexArtWorld } from "./nexartWorld";
 import { WorldParams } from "./worldGenerator";
@@ -11,13 +12,9 @@ import {
   getWaterHeight,
   PATH_HEIGHT_OFFSET,
   BRIDGE_FIXED_HEIGHT,
-  RIVER_BANK_CARVE,
-  RIVER_BED_MIN,
-  RIVER_BED_MAX,
-  RIVER_CARVE_CLAMP_MIN,
-  RIVER_CARVE_CLAMP_MAX,
-  RIVER_BANK_CLAMP_MIN,
-  RIVER_BANK_CLAMP_MAX,
+  computeRiverCarveDepth,
+  getRiverMicroVariation,
+  computeRiverMask,
 } from "./worldConstants";
 
 // ============================================
@@ -27,7 +24,7 @@ import {
 export interface TerrainCell {
   x: number;
   y: number;
-  elevation: number; // From NexArt Alpha channel
+  elevation: number; // From NexArt Alpha channel (CURVED - applied once)
   moisture: number; // Derived from NexArt Green channel
   type: "water" | "ground" | "forest" | "mountain" | "path" | "bridge";
   hasRiver: boolean;
@@ -281,52 +278,11 @@ export function cacheWorldData(world: WorldData): void {
 // WORLD QUERY FUNCTIONS - Derived from NexArt
 // ============================================
 
-// Deterministic micro-variation for river carving (matches SmoothTerrainMesh)
-function getMicroVariation(x: number, y: number, seed: number): number {
-  const n = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.1) * 43758.5453;
-  return (n - Math.floor(n)) * 0.15 - 0.075;
-}
-
-// Compute river influence mask (matches SmoothTerrainMesh logic)
-function computeRiverMask(world: WorldData, x: number, flippedY: number): number {
-  let best = 0;
-  
-  for (let dy = -2; dy <= 2; dy++) {
-    const row = world.terrain[flippedY + dy];
-    if (!row) continue;
-    
-    for (let dx = -2; dx <= 2; dx++) {
-      const c = row[x + dx];
-      if (!c?.hasRiver) continue;
-      
-      const d = Math.max(Math.abs(dx), Math.abs(dy)); // Chebyshev distance
-      const w = d === 0 ? 1 : d === 1 ? 0.6 : 0.25;
-      if (w > best) best = w;
-    }
-  }
-  
-  return best;
-}
-
-// Compute river carve amount (matches SmoothTerrainMesh logic exactly)
-// Uses shared constants from worldConstants.ts for consistency
+// Legacy local river carve function - now uses shared implementation from worldConstants
 function computeRiverCarve(world: WorldData, x: number, y: number, flippedY: number, cell: TerrainCell): number {
   const isRiver = !!cell?.hasRiver;
-  const mask = computeRiverMask(world, x, flippedY);
-  if (mask <= 0) return 0;
-  
-  const centerFactor = isRiver ? 1 : mask;
-  const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed) * 0.6;
-  
-  // Use shared constants for determinism
-  const bedCarve = RIVER_BED_MIN + (RIVER_BED_MAX - RIVER_BED_MIN) * centerFactor;
-  const rawCarve = (isRiver ? bedCarve + bedNoise : RIVER_BANK_CARVE) * mask;
-  
-  // Apply same clamping as SmoothTerrainMesh for visual/collision alignment
-  const MIN_CLAMP = isRiver ? RIVER_CARVE_CLAMP_MIN : RIVER_BANK_CLAMP_MIN;
-  const MAX_CLAMP = isRiver ? RIVER_CARVE_CLAMP_MAX : RIVER_BANK_CLAMP_MAX;
-  
-  return Math.min(MAX_CLAMP, Math.max(MIN_CLAMP, rawCarve));
+  // Use the shared computeRiverCarveDepth function from worldConstants
+  return computeRiverCarveDepth(world.terrain, x, y, flippedY, isRiver, world.seed);
 }
 
 export function getElevationAt(world: WorldData, worldX: number, worldY: number): number {

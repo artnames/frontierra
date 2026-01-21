@@ -1,8 +1,16 @@
+// EnhancedWaterPlane - Water rendering with shared height functions
+// CRITICAL: Uses shared constants from worldConstants.ts for collision alignment
+
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { WorldData, TerrainCell } from "@/lib/worldData";
-import { WORLD_HEIGHT_SCALE, getWaterHeight, RIVER_WATER_ABOVE_BED } from "@/lib/worldConstants";
+import { 
+  WORLD_HEIGHT_SCALE, 
+  getWaterHeight, 
+  RIVER_WATER_ABOVE_BED,
+  computeRiverCarveDepth,
+} from "@/lib/worldConstants";
 
 interface EnhancedWaterPlaneProps {
   world: WorldData;
@@ -82,7 +90,6 @@ function buildWaterGeometry(
       const interior = isPicked(fy, x) && isPicked(fy, x + 1) && isPicked(fy - 1, x) && isPicked(fy - 1, x + 1);
 
       if (!interior) {
-        // keep a minimum edge value instead of forcing 0
         const e = Math.max(0, Math.min(1, edgeFloor));
         edge[v00] = Math.min(edge[v00], e);
         edge[v10] = Math.min(edge[v10], e);
@@ -103,28 +110,21 @@ function buildWaterGeometry(
 
 export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = true }: EnhancedWaterPlaneProps) {
   const matRef = useRef<THREE.ShaderMaterial>(null);
-
-  // Early return if world data isn't ready
-  if (!world || !world.terrain || world.terrain.length === 0 || !world.vars) {
-    return null;
-  }
-
   const heightScale = WORLD_HEIGHT_SCALE;
 
-  // Water surface height:
-  // getWaterHeight returns the curved water level in world units,
-  // matching how terrain elevations are curved. Water stays flat but at the correct height.
+  // Water surface height for lakes/ocean - uses shared function
+  // Call hooks unconditionally
   const waterHeight = useMemo(() => {
+    if (!world?.vars) return 0;
     return getWaterHeight(world.vars);
-  }, [world.vars]);
+  }, [world?.vars]);
 
-  // === River vertical rule ===
-  // The river surface sits just above the carved riverbed.
-  // We use the same carve logic as SmoothTerrainMesh to ensure alignment.
-  // BED_DEPTH matches the visual carve, WATER_ABOVE_BED from shared constants.
-  const BED_DEPTH = 1.5; // Matches visual carve (between RIVER_CARVE_CLAMP_MIN and MAX)
-
+  // River geometry - water sits just above carved riverbed
   const riverGeo = useMemo(() => {
+    if (!world || !world.terrain || world.terrain.length === 0) {
+      return new THREE.BufferGeometry();
+    }
+
     const SURFACE_LIFT = 0.02; // z-fight safety
     const bankClearance = 0.02; // never above local ground
 
@@ -132,27 +132,39 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       world,
       worldX,
       worldY,
-      // Avoid rendering a second water surface on tiles that have become ocean/lake water.
-      // (Prevents "water on top of water" at river mouths / flooded rivers.)
+      // Only render river water on river tiles that aren't ocean
       (c) => !!c.hasRiver && c.type !== "water",
-      (cell) => {
-        // Use the already-curved elevation from the cell (matches terrain mesh)
-        const gl = cell.elevation * heightScale;
+      (cell, x, y, fy) => {
+        // Use shared carve function (MUST match SmoothTerrainMesh and collision)
+        const baseH = cell.elevation * heightScale;
+        const carve = computeRiverCarveDepth(
+          world.terrain,
+          x,
+          y,
+          fy,
+          true, // isRiverCell
+          world.seed
+        );
 
-        // River surface sits just above the carved bed
-        // BED_DEPTH matches visual carve, RIVER_WATER_ABOVE_BED from shared constants
-        const rl = gl - BED_DEPTH + RIVER_WATER_ABOVE_BED;
+        // River surface = carved bed + water offset
+        const bedHeight = baseH - carve;
+        const waterSurface = bedHeight + RIVER_WATER_ABOVE_BED;
 
-        // Never let water go above the local ground (prevents floating sheets on slopes)
-        const surface = Math.min(rl, gl - bankClearance);
+        // Never let water go above the local ground
+        const surface = Math.min(waterSurface, baseH - bankClearance);
 
         return surface + SURFACE_LIFT;
       },
-      0.55, // IMPORTANT: keep opacity on thin river edges
+      0.55, // keep opacity on thin river edges
     );
   }, [world, worldX, worldY, heightScale]);
 
+  // Lake/ocean geometry - flat plane at water level
   const lakeGeo = useMemo(() => {
+    if (!world || !world.terrain || world.terrain.length === 0) {
+      return new THREE.BufferGeometry();
+    }
+
     const SURFACE_LIFT = 0.02;
     return buildWaterGeometry(
       world,
@@ -210,7 +222,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
           vec3 col = mix(uDeep, uShallow, w);
 
           float edgeFade = smoothstep(0.0, 1.0, vEdge);
-          float a = uOpacity * mix(0.35, 1.0, edgeFade); // keep some alpha at edges
+          float a = uOpacity * mix(0.35, 1.0, edgeFade);
 
           float foam = (1.0 - edgeFade) * 0.18;
           col += foam;
@@ -241,6 +253,11 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       material.dispose();
     };
   }, [riverGeo, lakeGeo, material]);
+
+  // Early return after all hooks
+  if (!world || !world.terrain || world.terrain.length === 0 || !world.vars) {
+    return null;
+  }
 
   return (
     <>

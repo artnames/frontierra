@@ -1,73 +1,128 @@
-# Welcome to your Lovable project
+# Frontierra - Deterministic World Explorer
 
-## Project info
+A deterministic procedural world generator and first-person explorer built with React, Three.js, and the NexArt Code Mode SDK.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Overview
 
-## How can I edit this code?
+Frontierra generates infinite, explorable 3D worlds from a seed number and parameter array. The same inputs always produce identical worlds, enabling multiplayer synchronization without transmitting world data.
 
-There are several ways of editing your application.
+## Technology Stack
 
-**Use Lovable**
+- **React** - UI framework
+- **Vite** - Build tool and dev server
+- **TypeScript** - Type safety
+- **Three.js** + **@react-three/fiber** - 3D rendering
+- **Tailwind CSS** - Styling
+- **shadcn/ui** - UI components
+- **@nexart/codemode-sdk** - Deterministic world generation
+- **Supabase** - Backend (authentication, database, real-time)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Getting Started
 
-Changes made via Lovable will be committed automatically to this repo.
+### Prerequisites
 
-**Use your preferred IDE**
+- Node.js 18+ (recommend using [nvm](https://github.com/nvm-sh/nvm))
+- npm or bun
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+### Local Development
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# Clone the repository
 git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
 cd <YOUR_PROJECT_NAME>
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start the development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The app will be available at `http://localhost:8080`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Environment Variables
 
-**Use GitHub Codespaces**
+Create a `.env` file in the project root with:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```env
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
+VITE_SUPABASE_PROJECT_ID=your_project_id
+```
 
-## What technologies are used for this project?
+## Building for Production
 
-This project is built with:
+```sh
+# Create optimized production build
+npm run build
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+# Preview the production build locally
+npm run preview
+```
 
-## How can I deploy this project?
+The build output is in the `dist/` directory.
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## Deployment
 
-## Can I connect a custom domain to my Lovable project?
+Deploy the `dist/` folder to any static hosting service:
 
-Yes, you can!
+- **Netlify**: Connect your repo and set build command to `npm run build`
+- **Vercel**: Import project, auto-detects Vite
+- **Cloudflare Pages**: Set build command and output directory
+- **GitHub Pages**: Use GitHub Actions to build and deploy
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## Project Structure
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```
+src/
+├── components/       # React components
+│   ├── ui/          # shadcn/ui components
+│   ├── social/      # Multiplayer/social features
+│   └── ...          # World rendering components
+├── hooks/           # Custom React hooks
+├── lib/             # Core libraries
+│   ├── worldConstants.ts  # Shared height/carve constants
+│   ├── worldData.ts       # World data structures
+│   ├── nexartWorld.ts     # NexArt SDK integration
+│   └── multiplayer/       # Multiplayer logic
+├── pages/           # Route pages
+└── integrations/    # External service integrations
+```
+
+## Key Concepts
+
+### Determinism
+
+All world generation is deterministic. Given:
+- `seed`: A number
+- `vars`: An array of 10 numbers (0-100)
+
+The world will always generate identically. This is critical for multiplayer where players need to see the same world without transferring terrain data.
+
+### Height System
+
+The project uses a unified height system defined in `src/lib/worldConstants.ts`:
+- `WORLD_HEIGHT_SCALE` - Converts 0-1 elevation to world units
+- `computeRiverCarveDepth()` - Shared river carving logic
+- `getWaterHeight()` - Water surface height calculation
+
+All components (terrain mesh, collision, water) use these shared functions to ensure visual-collision alignment.
+
+## Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Create production build
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run `npm run lint` to check for issues
+5. Submit a pull request
+
+## License
+
+See LICENSE file for details.

@@ -1,22 +1,18 @@
 // SmoothTerrainMesh - Terrain with indexed geometry for smooth shading
 // Uses shared vertices + proper vertex normals for non-faceted appearance
 // CRITICAL: No Math.random() or Date.now() - all rendering is deterministic
+// CRITICAL: Uses shared height functions from worldConstants.ts for collision alignment
 
 import { useMemo } from "react";
 import * as THREE from "three";
 import { WorldData, TerrainCell } from "@/lib/worldData";
 import { 
-  WORLD_HEIGHT_SCALE, 
-  getWaterLevel, 
-  RIVER_DEPTH_OFFSET, 
+  WORLD_HEIGHT_SCALE,
+  getWaterHeight,
   PATH_HEIGHT_OFFSET,
-  RIVER_BANK_CARVE,
-  RIVER_BED_MIN,
-  RIVER_BED_MAX,
-  RIVER_CARVE_CLAMP_MIN,
-  RIVER_CARVE_CLAMP_MAX,
-  RIVER_BANK_CLAMP_MIN,
-  RIVER_BANK_CLAMP_MAX,
+  computeRiverCarveDepth,
+  getRiverMicroVariation,
+  computeRiverMask,
 } from "@/lib/worldConstants";
 import { MaterialKind, getMaterialKind } from "@/lib/materialRegistry";
 import { createTerrainPbrDetailMaterial } from "@/lib/terrainPbrMaterial";
@@ -49,11 +45,6 @@ const PBR_SETTINGS = {
   slopeAO: 0.12,
 };
 
-function getMicroVariation(x: number, y: number, seed: number): number {
-  const n = Math.sin(x * 12.9898 + y * 78.233 + seed * 0.1) * 43758.5453;
-  return (n - Math.floor(n)) * 0.15 - 0.075;
-}
-
 function getCellMaterialKind(cell: TerrainCell): MaterialKind {
   if (cell.type === "water") return "water";
   if (cell.hasRiver) return "riverbed";
@@ -67,57 +58,10 @@ export function SmoothTerrainMesh({
   worldY = 0,
   microDetailEnabled = true,
 }: SmoothTerrainMeshProps) {
-  // Early return if world data isn't ready
-  if (!world || !world.terrain || world.terrain.length === 0) {
-    return null;
-  }
-
   const heightScale = WORLD_HEIGHT_SCALE;
-  const waterLevel = getWaterLevel(world.vars);
-  const waterHeight = waterLevel * heightScale;
-
+  // Use shared water height function for consistency
+  const waterHeight = getWaterHeight(world?.vars || []);
   const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
-
-  // Deterministic river carve amount (world units), computed from local context only.
-  const computeRiverMask = (x: number, flippedY: number) => {
-    // 0..1 mask based on distance (radius 2). Deterministic.
-    // 1 = river center, ~0.6 = adjacent, ~0.25 = 2 tiles away, 0 = outside.
-    let best = 0;
-
-    for (let dy = -2; dy <= 2; dy++) {
-      const row = world.terrain[flippedY + dy];
-      if (!row) continue;
-
-      for (let dx = -2; dx <= 2; dx++) {
-        const c = row[x + dx];
-        if (!c?.hasRiver) continue;
-
-        const d = Math.max(Math.abs(dx), Math.abs(dy)); // Chebyshev distance (cheap)
-        const w = d === 0 ? 1 : d === 1 ? 0.6 : 0.25;
-        if (w > best) best = w;
-      }
-    }
-
-    return best; // 0..1
-  };
-
-  // Compute river carve using shared constants (matches worldData.ts exactly)
-  const computeRiverCarve = (x: number, y: number, flippedY: number, cell: TerrainCell) => {
-    const isRiver = !!cell.hasRiver;
-    const mask = computeRiverMask(x, flippedY);
-    if (mask <= 0) return 0;
-
-    // deep in center, shallow at banks
-    const centerFactor = isRiver ? 1 : mask; // center tiles get full depth
-
-    const bedNoise = getMicroVariation(x * 3.1, y * 3.1, world.seed) * 0.6;
-
-    // Use shared constants from worldConstants.ts
-    const bedCarve = RIVER_BED_MIN + (RIVER_BED_MAX - RIVER_BED_MIN) * centerFactor;
-    const rawCarve = (isRiver ? bedCarve + bedNoise : RIVER_BANK_CARVE) * mask;
-
-    return Math.max(0, rawCarve);
-  };
 
   const geometry = useMemo(() => {
     // Guard against incomplete world data
@@ -144,21 +88,23 @@ export function SmoothTerrainMesh({
         let h = 0;
 
         if (cell) {
+          // cell.elevation is already curved (applied in nexartGridToWorldData)
           const baseH = cell.elevation * heightScale;
           h = baseH;
 
-          // Carve riverbed relative to baseH only (cannot ever go above baseH)
-          const rawCarve = computeRiverCarve(x, y, flippedY, cell);
+          // Use shared river carve function (matches collision exactly)
+          const isRiver = !!cell.hasRiver;
+          const carve = computeRiverCarveDepth(
+            world.terrain,
+            x,
+            y,
+            flippedY,
+            isRiver,
+            world.seed
+          );
 
-          if (rawCarve > 0) {
-            const isRiver = !!cell.hasRiver;
-
-            // Apply same clamping as worldData.ts for collision alignment
-            const MIN_CLAMP = isRiver ? RIVER_CARVE_CLAMP_MIN : RIVER_BANK_CLAMP_MIN;
-            const MAX_CLAMP = isRiver ? RIVER_CARVE_CLAMP_MAX : RIVER_BANK_CLAMP_MAX;
-
-            const clampedCarve = Math.min(MAX_CLAMP, Math.max(MIN_CLAMP, rawCarve));
-            h = baseH - clampedCarve;
+          if (carve > 0) {
+            h = baseH - carve;
           }
 
           if (cell.isPath && !cell.isBridge) {
@@ -174,12 +120,11 @@ export function SmoothTerrainMesh({
         let baseColor = BASE_COLORS[kind] || BASE_COLORS.ground;
 
         if (cell) {
-          const mask = computeRiverMask(x, flippedY); // 0..1
+          // Use shared river mask for coloring
+          const mask = computeRiverMask(world.terrain, x, flippedY);
           if (mask > 0) {
             // Darker than water so the transparent surface still pops
             const wetBed = { r: 0.06, g: 0.14, b: 0.18 };
-
-            // Keep subtle; center is stronger, banks weaker
             const wet = Math.min(1, mask * 0.45);
 
             baseColor = {
@@ -190,7 +135,7 @@ export function SmoothTerrainMesh({
           }
         }
 
-        const microVar = getMicroVariation(x, y, world.seed);
+        const microVar = getRiverMicroVariation(x, y, world.seed);
         const elevLight = 0.7 + (cell ? Math.pow(cell.elevation, 0.7) * 0.4 : 0) + microVar;
 
         colors[vi * 3] = Math.min(1, baseColor.r * elevLight);
@@ -231,6 +176,8 @@ export function SmoothTerrainMesh({
   }, [world, heightScale, pathMaxHeight, worldX, worldY]);
 
   const material = useMemo(() => {
+    if (!world?.gridSize) return new THREE.MeshStandardMaterial({ vertexColors: true });
+    
     const worldOffset = new THREE.Vector2(worldX * world.gridSize, worldY * world.gridSize);
 
     return createTerrainPbrDetailMaterial({
@@ -245,7 +192,12 @@ export function SmoothTerrainMesh({
       baseRoughness: PBR_SETTINGS.roughness,
       baseMetalness: PBR_SETTINGS.metalness,
     });
-  }, [microDetailEnabled, worldX, worldY, world.gridSize]);
+  }, [microDetailEnabled, worldX, worldY, world?.gridSize]);
+
+  // Early return after hooks
+  if (!world || !world.terrain || world.terrain.length === 0) {
+    return null;
+  }
 
   return <mesh geometry={geometry} material={material} receiveShadow />;
 }
