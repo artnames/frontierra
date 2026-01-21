@@ -225,21 +225,22 @@ export const VEGETATION_COLORS = {
 
 // ============================================
 // SKY/ATMOSPHERE COLORS
+// FIX: Sky horizon was using meadow green - now uses neutral mist-sage blend
 // ============================================
 
 export const SKY_COLORS = {
-  dayZenith: hexToRgb01(ROLES.skyDay),
-  dayHorizon: hexToRgb01(PALETTE.meadow),
-  nightZenith: hexToRgb01(ROLES.skyNight),
-  nightHorizon: hexToRgb01(ROLES.fogNight),
-  twilightZenith: hexToRgb01(ROLES.skyTwilight),
-  twilightHorizon: hexToRgb01(ROLES.accentWarm),
+  dayZenith: hexToRgb01(ROLES.skyDay),      // Mist - light sage
+  dayHorizon: hexToRgb01(PALETTE.mist),      // FIX: Use mist instead of meadow (was green!)
+  nightZenith: hexToRgb01(ROLES.skyNight),   // Abyss - deep dark blue
+  nightHorizon: hexToRgb01(ROLES.fogNight),  // Deep forest
+  twilightZenith: hexToRgb01(ROLES.skyTwilight), // Rust - warm twilight
+  twilightHorizon: hexToRgb01(PALETTE.coral),    // Coral - warm horizon (not flame)
 } as const;
 
 export const FOG_COLORS = {
-  day: hexToRgb01(ROLES.fogDay),
-  night: hexToRgb01(ROLES.fogNight),
-  twilight: hexToRgb01(ROLES.fogTwilight),
+  day: hexToRgb01(ROLES.fogDay),      // Mist
+  night: hexToRgb01(ROLES.fogNight),  // Deep
+  twilight: hexToRgb01(ROLES.fogTwilight), // Sage
 } as const;
 
 // ============================================

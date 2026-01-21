@@ -76,16 +76,17 @@ export function EnhancedAtmosphere({
   );
   
   // Hemisphere light colors using palette
+  // FIX: Use neutral sky colors instead of green-tinted ones
   const skyColor = useMemo(() => {
     if (night) return PALETTE.abyss;
-    if (twilight) return PALETTE.rust;
-    return PALETTE.mist;
+    if (twilight) return PALETTE.coral;  // FIX: Use coral instead of rust for warmer twilight
+    return PALETTE.mist;  // Neutral light gray-sage
   }, [night, twilight]);
   
   const groundColor = useMemo(() => {
     if (night) return PALETTE.deep;
     if (twilight) return PALETTE.rust;
-    return PALETTE.meadow; // Green tint from ground reflection
+    return PALETTE.sage; // FIX: Use sage (neutral gray-green) instead of meadow (pure green)
   }, [night, twilight]);
   
   // Get fog density based on time

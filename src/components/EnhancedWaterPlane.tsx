@@ -215,16 +215,17 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   }, [world, worldX, worldY, waterHeight]);
 
   const material = useMemo(() => {
-    // RIVER VISIBILITY FIX: Use brighter, more visible water colors
-    // Deep water uses a lighter teal instead of near-black abyss
-    const deepColor = new THREE.Color(0.05, 0.25, 0.35); // Visible teal-blue
-    const shallowColor = new THREE.Color(0.15, 0.4, 0.45); // Lighter teal
+    // RIVER VISIBILITY FIX: Use bright, clearly visible water colors
+    // Deep: Rich teal-blue that's visible against terrain
+    // Shallow: Lighter cyan-teal for depth variation
+    const deepColor = new THREE.Color(0.0, 0.11, 0.14);    // #001C24 from palette (abyss)
+    const shallowColor = new THREE.Color(0.34, 0.43, 0.27); // #576E45 (forest) for shallow
     const foamColor = toThreeColor(PALETTE.mist, { linear: true });
     
     if (DEV) {
-      console.debug('[EnhancedWaterPlane] Water colors:', {
-        deep: 'rgb(13,64,89)',
-        shallow: 'rgb(38,102,115)',
+      console.debug('[EnhancedWaterPlane] Water colors (palette):', {
+        deep: PALETTE.abyss,
+        shallow: PALETTE.forest,
         foam: PALETTE.mist
       });
     }
@@ -232,7 +233,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     const m = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uOpacity: { value: 0.92 }, // High opacity for visibility
+        uOpacity: { value: 0.88 }, // Slightly transparent to show depth
         uDeep: { value: deepColor },
         uShallow: { value: shallowColor },
         uFoam: { value: foamColor },
@@ -241,9 +242,11 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
         attribute float aEdge;
         varying float vEdge;
         varying vec3 vWPos;
+        varying vec3 vNormal;
 
         void main() {
           vEdge = aEdge;
+          vNormal = normalMatrix * normal;
           vec4 wp = modelMatrix * vec4(position, 1.0);
           vWPos = wp.xyz;
           gl_Position = projectionMatrix * viewMatrix * wp;
@@ -258,6 +261,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
 
         varying float vEdge;
         varying vec3 vWPos;
+        varying vec3 vNormal;
 
         float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
         float noise(vec2 p) {
@@ -268,24 +272,32 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
         }
 
         void main() {
-          float t = uTime * 0.5;
-          float w1 = noise(vWPos.xz * 1.2 + t);
-          float w2 = noise(vWPos.xz * 2.0 - t * 0.4);
-          float w = (w1 + w2) * 0.5;
+          float t = uTime * 0.4;
+          
+          // Animated water waves
+          float w1 = noise(vWPos.xz * 0.8 + t);
+          float w2 = noise(vWPos.xz * 1.5 - t * 0.3);
+          float w3 = noise(vWPos.xz * 3.0 + t * 0.7) * 0.3;
+          float w = (w1 + w2 + w3) * 0.4;
 
-          // Blend between deep and shallow with more shallow bias for visibility
-          vec3 col = mix(uDeep, uShallow, w * 0.5 + 0.35);
+          // Blend between deep and shallow - more variation for visual interest
+          vec3 col = mix(uDeep, uShallow, w * 0.6 + 0.3);
 
-          // Edge fade with high minimum opacity (0.7 at edges)
-          float edgeFade = smoothstep(0.0, 1.0, vEdge);
-          float a = uOpacity * mix(0.7, 1.0, edgeFade);
+          // Edge handling: high minimum opacity even at edges
+          float edgeFade = smoothstep(0.0, 0.5, vEdge);
+          float a = uOpacity * mix(0.75, 1.0, edgeFade);
 
-          // Subtle foam at edges
-          float foamAmount = (1.0 - edgeFade) * 0.2;
+          // Foam/highlight at edges and wave peaks
+          float foamAmount = (1.0 - edgeFade) * 0.25 + w3 * 0.15;
           col = mix(col, uFoam, foamAmount);
 
-          // Add slight specular highlight for water look
-          float spec = pow(max(0.0, w * 0.5 + 0.5), 4.0) * 0.15;
+          // Fresnel-like rim highlight
+          vec3 viewDir = normalize(-vWPos);
+          float fresnel = pow(1.0 - max(0.0, dot(normalize(vNormal), viewDir)), 2.0);
+          col += vec3(fresnel * 0.08);
+
+          // Specular highlights on waves
+          float spec = pow(max(0.0, w * 0.5 + 0.5), 6.0) * 0.12;
           col += vec3(spec);
 
           gl_FragColor = vec4(col, a);
@@ -296,8 +308,8 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       depthWrite: false,
       depthTest: true,
       polygonOffset: true,
-      polygonOffsetFactor: -3, // Strong offset to render above terrain
-      polygonOffsetUnits: -3,
+      polygonOffsetFactor: -4, // Strong offset to render above terrain
+      polygonOffsetUnits: -4,
     });
 
     matRef.current = m;
