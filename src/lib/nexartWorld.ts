@@ -134,31 +134,29 @@ export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<
   // Check for V2 mapping mode
   const isV2Mode = params.mappingVersion === 'v2';
   
-  // Determine which source to use
-  // V2 UNIFIED: Both Solo and Multiplayer use the same unified generator
+  // CANONICAL SOURCE SELECTION - Single entry point
+  // Both Solo and Multiplayer use the same selector
   const isWorldA = !!input.worldContext;
-  let source: string;
+  
+  // Import canonical selector
+  const { getCanonicalWorldLayoutSource } = await import('./generatorCanonical');
+  
+  const canonicalResult = getCanonicalWorldLayoutSource({
+    mappingVersion: params.mappingVersion ?? 'v1',
+    isMultiplayer: isWorldA,
+    seed: input.seed,
+    vars: input.vars,
+    worldX: input.worldContext?.worldX,
+    worldY: input.worldContext?.worldY,
+    microOverrides: params.microOverrides
+  });
+  
+  let source = canonicalResult.source;
   let effectiveWorldContext = input.worldContext;
   
-  if (isV2Mode) {
-    // V2 is a REFINEMENT of V1, not a replacement
-    // Uses the same base logic but with micro-refinements
-    source = WORLD_V2_REFINEMENT_SOURCE;
-    
-    // V2 Solo doesn't need world context - it uses refined V1 logic
-    // Only World A mode uses world context
-    if (isWorldA) {
-      // Keep the existing world context for multiplayer
-    } else {
-      // Solo V2 uses the refinement source without world context injection
-      effectiveWorldContext = undefined;
-    }
-  } else if (isWorldA) {
-    // V1 World A mode (legacy multiplayer)
-    source = WORLD_A_LAYOUT_SOURCE;
-  } else {
-    // V1 legacy Solo mode
-    source = WORLD_LAYOUT_SOURCE;
+  // V2 Solo doesn't need world context injection
+  if (isV2Mode && !isWorldA) {
+    effectiveWorldContext = undefined;
   }
   
   // Compute the combined seed (includes world position for unified/World A modes)
