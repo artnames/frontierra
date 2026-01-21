@@ -62,40 +62,52 @@ function triangulatePolygon(points: Point[]): number[] {
 
 /**
  * Compute water height at a grid position using existing river carve logic
- * COORDINATE FIX: maskY is the y-coordinate from the mask/contour (0..size)
- * This corresponds to terrain array index: terrainRowIndex = size - 1 - maskY
- * This matches how terrain mesh samples: for render Z=y, it uses terrain[size-1-y]
+ * 
+ * COORDINATE SYSTEM (must match SmoothTerrainMesh exactly):
+ * - SmoothTerrainMesh: for loop y=0..size, places vertex at Z=y, samples terrain[size-1-y][x]
+ * - buildRiverMaskField: for loop y=0..size, fy=size-1-y, samples terrain[fy][x], writes mask[y*size+x]
+ * - marchingSquares: produces contour points (px, py) in mask coordinate space
+ * 
+ * Therefore: contour point (px, py) corresponds to:
+ * - Render position: X=px, Z=py (same as terrain mesh)
+ * - Terrain array: terrain[size-1-py][px]
  */
 function computeWaterHeightAt(
   world: WorldData,
-  maskX: number,  // X coordinate from mask/contour (same as grid X)
-  maskY: number   // Y coordinate from mask/contour (0=top of mask = terrain row size-1)
+  contourX: number,  // X from contour (same as render X and grid X)
+  contourY: number   // Y from contour = render Z coordinate
 ): number {
   const size = world.gridSize;
   
-  // Convert mask Y to terrain array row index
-  // Mask y=0 corresponds to terrain row (size-1)
-  // Mask y=(size-1) corresponds to terrain row 0
-  const terrainRowIndex = size - 1 - Math.floor(maskY);
-  const clampedX = Math.max(0, Math.min(size - 1, Math.floor(maskX)));
-  const clampedRowIndex = Math.max(0, Math.min(size - 1, terrainRowIndex));
+  // Clamp to valid grid range
+  const gridX = Math.max(0, Math.min(size - 1, Math.floor(contourX)));
+  const gridY = Math.max(0, Math.min(size - 1, Math.floor(contourY)));
   
-  const row = world.terrain[clampedRowIndex];
+  // Convert render Y to terrain array row index (same as terrain mesh does)
+  const terrainRowIndex = size - 1 - gridY;
+  
+  const row = world.terrain[terrainRowIndex];
   if (!row) return 0;
   
-  const cell = row[clampedX];
+  const cell = row[gridX];
   if (!cell) return 0;
 
   const SURFACE_LIFT = 0.15; // Match the lift in EnhancedWaterPlane
   const bankClearance = 0.02;
   
+  // Base height (elevation already has curve applied)
   const baseH = cell.elevation * WORLD_HEIGHT_SCALE;
+  
+  // Use same parameters as terrain mesh:
+  // - x = gridX (same)
+  // - y = gridY (render Y, for noise calculation)  
+  // - flippedY = terrainRowIndex (for terrain array access)
   const carve = computeRiverCarveDepth(
     world.terrain,
-    clampedX,
-    Math.floor(maskY),  // renderY for the carve function
-    clampedRowIndex,    // flipped terrain array index
-    true,
+    gridX,
+    gridY,           // render Y (same as terrain mesh)
+    terrainRowIndex, // flipped index for terrain array
+    true,            // isRiverCell - we're sampling river positions
     world.seed
   );
   
@@ -132,9 +144,12 @@ function sampleWaterHeightBilinear(
 
 /**
  * Build smooth river geometry from contours
- * COORDINATE FIX: Ensure river mesh uses same XYZ as terrain
- * - Terrain: iterates y=0..size, places vertex at Z=y, samples terrain[size-1-y]
- * - We must output contour points in the same coordinate space
+ * 
+ * COORDINATE ALIGNMENT with SmoothTerrainMesh:
+ * - Terrain mesh: y loop 0..size → vertex at (x, height, y) → samples terrain[size-1-y][x]
+ * - River mask: y loop 0..size → fy=size-1-y → samples terrain[fy][x] → writes mask[y*size+x]
+ * - Marching squares: extracts contours in mask space (px, py)
+ * - Result: contour (px, py) → render (X=px, Z=py) → perfectly aligned with terrain
  */
 export function buildSmoothRiverGeometry(
   world: WorldData,
