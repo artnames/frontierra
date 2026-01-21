@@ -1,6 +1,7 @@
 // Surface Heights API - Canonical height calculations for collision and rendering
 // SINGLE SOURCE OF TRUTH for all height queries
 // No randomness - fully deterministic from NexArt data
+// BUG-001: Uses safeNumber to eliminate NaN sources at the source
 
 import { WorldData, TerrainCell } from "@/lib/worldData";
 import {
@@ -13,6 +14,7 @@ import {
   PATH_HEIGHT_OFFSET,
   computeRiverCarveDepth,
 } from "@/lib/worldConstants";
+import { safeNumber } from "@/lib/safeNumber";
 
 // ===========================================
 // COORDINATE HELPERS
@@ -78,33 +80,29 @@ export function getTerrainHeightAt(
   if (!result) return 0;
 
   const { cell, gridX, gridY, flippedY } = result;
-  const baseH = (cell.elevation ?? 0) * WORLD_HEIGHT_SCALE;
+  
+  // BUG-001: Use safeNumber at the source of potential NaN
+  const elevation = safeNumber(cell.elevation, 0, 'getTerrainHeightAt.elevation');
+  const baseH = elevation * WORLD_HEIGHT_SCALE;
 
   // Apply river carving if on/near river
   const isRiver = !!cell.hasRiver;
-  const carve = computeRiverCarveDepth(
-    world.terrain,
-    gridX,
-    gridY,
-    flippedY,
-    isRiver,
-    world.seed
+  const carve = safeNumber(
+    computeRiverCarveDepth(world.terrain, gridX, gridY, flippedY, isRiver, world.seed),
+    0,
+    'getTerrainHeightAt.carve'
   );
 
   // Apply path height capping
   let height = baseH - carve;
   if (cell.type === "path" && !cell.isBridge) {
-    const waterHeight = getWaterHeight(world.vars);
+    const waterHeight = safeNumber(getWaterHeight(world.vars), 0, 'getTerrainHeightAt.waterHeight');
     const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
     height = Math.min(height, pathMaxHeight);
   }
 
-  // Guard against NaN/Infinity
-  if (!Number.isFinite(height)) {
-    return 0;
-  }
-
-  return height;
+  // Final safety guard (should never trigger if safeNumber is used correctly)
+  return safeNumber(height, 0, 'getTerrainHeightAt.final');
 }
 
 // ===========================================
@@ -139,21 +137,20 @@ export function getWaterSurfaceHeightAt(
 
   // River water surface = carved riverbed + offset
   if (cell.hasRiver && cell.type !== "water") {
-    const baseH = (cell.elevation ?? 0) * WORLD_HEIGHT_SCALE;
-    const carve = computeRiverCarveDepth(
-      world.terrain,
-      gridX,
-      gridY,
-      flippedY,
-      true,
-      world.seed
+    // BUG-001: Use safeNumber at the source
+    const elevation = safeNumber(cell.elevation, 0, 'getWaterSurfaceHeightAt.elevation');
+    const baseH = elevation * WORLD_HEIGHT_SCALE;
+    const carve = safeNumber(
+      computeRiverCarveDepth(world.terrain, gridX, gridY, flippedY, true, world.seed),
+      0,
+      'getWaterSurfaceHeightAt.carve'
     );
     const riverbedHeight = baseH - carve;
-    return riverbedHeight + RIVER_WATER_ABOVE_BED;
+    return safeNumber(riverbedHeight + RIVER_WATER_ABOVE_BED, 0, 'getWaterSurfaceHeightAt.river');
   }
 
   // Ocean/lake water surface = global water level
-  return getWaterHeight(world.vars);
+  return safeNumber(getWaterHeight(world.vars), 0, 'getWaterSurfaceHeightAt.ocean');
 }
 
 /**
@@ -175,6 +172,7 @@ export function getWaterSurfaceHeightOrDefault(
 
 /**
  * Get bridge deck height at a position
+ * BUG-012: Fixed to sample along bridge orientation, not just 3x3 neighborhood
  * @returns Bridge deck height in world units, or null if not on a bridge
  */
 export function getBridgeDeckHeightAt(
@@ -185,42 +183,102 @@ export function getBridgeDeckHeightAt(
   const result = getTerrainCell(world, worldX, worldZ);
   if (!result) return null;
 
-  const { cell, gridX, flippedY } = result;
+  const { cell, gridX, gridY, flippedY } = result;
 
   // Not a bridge
   if (!cell.isBridge && cell.type !== "bridge") {
     return null;
   }
 
-  const cellElevation = cell.elevation ?? 0;
-  const waterHeight = getWaterHeight(world.vars);
+  // BUG-001: Use safeNumber at the source
+  const cellElevation = safeNumber(cell.elevation, 0, 'getBridgeDeckHeightAt.elevation');
+  const waterHeight = safeNumber(getWaterHeight(world.vars), 0, 'getBridgeDeckHeightAt.waterHeight');
   const baseTerrainH = cellElevation * WORLD_HEIGHT_SCALE;
 
-  // Sample nearby cells to find the appropriate deck height for the span
-  let maxLocalHeight = Math.max(baseTerrainH, waterHeight);
+  // BUG-012: Detect bridge orientation by checking neighbors
+  // Look for path/ground cells in cardinal directions to determine endpoints
+  const directions: Array<{ dx: number; dy: number; axis: 'NS' | 'EW' }> = [
+    { dx: 0, dy: -1, axis: 'NS' }, // North
+    { dx: 0, dy: 1, axis: 'NS' },  // South
+    { dx: -1, dy: 0, axis: 'EW' }, // West
+    { dx: 1, dy: 0, axis: 'EW' },  // East
+  ];
 
-  for (let dy = -1; dy <= 1; dy++) {
-    const row = world.terrain[flippedY + dy];
+  let bridgeAxis: 'NS' | 'EW' | null = null;
+  
+  // Find the bridge axis by looking for non-bridge endpoints
+  for (const dir of directions) {
+    const row = world.terrain[flippedY + dir.dy];
     if (!row) continue;
+    const neighbor = row[gridX + dir.dx];
+    if (!neighbor) continue;
+    
+    // If neighbor is path or ground (bridge endpoint), this is our axis
+    if ((neighbor.type === 'path' || neighbor.type === 'ground') && !neighbor.isBridge) {
+      bridgeAxis = dir.axis;
+      break;
+    }
+  }
 
-    for (let dx = -1; dx <= 1; dx++) {
-      const neighbor = row[gridX + dx];
-      if (!neighbor) continue;
+  // Sample along the bridge axis to find endpoint heights
+  let maxEndpointHeight = waterHeight;
+  
+  // If we found an axis, sample along it; otherwise fall back to 3x3
+  if (bridgeAxis === 'NS') {
+    // Sample North and South
+    for (const dy of [-1, -2, 1, 2]) {
+      const row = world.terrain[flippedY + dy];
+      if (!row) continue;
+      const neighbor = row[gridX];
+      if (!neighbor || neighbor.isBridge) continue;
+      
+      if (neighbor.type === 'water' || neighbor.hasRiver) {
+        maxEndpointHeight = Math.max(maxEndpointHeight, waterHeight);
+      } else {
+        const neighborH = safeNumber(neighbor.elevation, 0, 'getBridgeDeckHeightAt.neighbor') * WORLD_HEIGHT_SCALE;
+        maxEndpointHeight = Math.max(maxEndpointHeight, neighborH);
+      }
+    }
+  } else if (bridgeAxis === 'EW') {
+    // Sample East and West
+    const row = world.terrain[flippedY];
+    if (row) {
+      for (const dx of [-1, -2, 1, 2]) {
+        const neighbor = row[gridX + dx];
+        if (!neighbor || neighbor.isBridge) continue;
+        
+        if (neighbor.type === 'water' || neighbor.hasRiver) {
+          maxEndpointHeight = Math.max(maxEndpointHeight, waterHeight);
+        } else {
+          const neighborH = safeNumber(neighbor.elevation, 0, 'getBridgeDeckHeightAt.neighbor') * WORLD_HEIGHT_SCALE;
+          maxEndpointHeight = Math.max(maxEndpointHeight, neighborH);
+        }
+      }
+    }
+  } else {
+    // Fallback: 3x3 sampling (original behavior)
+    for (let dy = -1; dy <= 1; dy++) {
+      const row = world.terrain[flippedY + dy];
+      if (!row) continue;
 
-      // If neighbor is water/river, use water height
-      if (neighbor.type === "water" || neighbor.hasRiver) {
-        maxLocalHeight = Math.max(maxLocalHeight, waterHeight);
-      } else if (!neighbor.isBridge) {
-        // Use terrain height for non-bridge land cells
-        const neighborH = (neighbor.elevation ?? 0) * WORLD_HEIGHT_SCALE;
-        maxLocalHeight = Math.max(maxLocalHeight, neighborH);
+      for (let dx = -1; dx <= 1; dx++) {
+        const neighbor = row[gridX + dx];
+        if (!neighbor) continue;
+
+        if (neighbor.type === "water" || neighbor.hasRiver) {
+          maxEndpointHeight = Math.max(maxEndpointHeight, waterHeight);
+        } else if (!neighbor.isBridge) {
+          const neighborH = safeNumber(neighbor.elevation, 0, 'getBridgeDeckHeightAt.neighbor') * WORLD_HEIGHT_SCALE;
+          maxEndpointHeight = Math.max(maxEndpointHeight, neighborH);
+        }
       }
     }
   }
 
-  // Bridge deck = local maximum height + clearance, but at least minimum height
-  const deckHeight = maxLocalHeight + BRIDGE_DECK_CLEARANCE;
-  return Math.max(deckHeight, BRIDGE_MIN_HEIGHT);
+  // Bridge deck = max endpoint height + clearance, but at least minimum height
+  // Also ensure it's above water
+  const deckHeight = Math.max(maxEndpointHeight, waterHeight) + BRIDGE_DECK_CLEARANCE;
+  return safeNumber(Math.max(deckHeight, BRIDGE_MIN_HEIGHT), BRIDGE_MIN_HEIGHT, 'getBridgeDeckHeightAt.final');
 }
 
 // ===========================================
@@ -307,15 +365,14 @@ export function getRiverbedHeightAt(
     return null;
   }
 
-  const baseH = (cell.elevation ?? 0) * WORLD_HEIGHT_SCALE;
-  const carve = computeRiverCarveDepth(
-    world.terrain,
-    gridX,
-    gridY,
-    flippedY,
-    true,
-    world.seed
+  // BUG-001: Use safeNumber at the source
+  const elevation = safeNumber(cell.elevation, 0, 'getRiverbedHeightAt.elevation');
+  const baseH = elevation * WORLD_HEIGHT_SCALE;
+  const carve = safeNumber(
+    computeRiverCarveDepth(world.terrain, gridX, gridY, flippedY, true, world.seed),
+    0,
+    'getRiverbedHeightAt.carve'
   );
 
-  return baseH - carve;
+  return safeNumber(baseH - carve, 0, 'getRiverbedHeightAt.final');
 }

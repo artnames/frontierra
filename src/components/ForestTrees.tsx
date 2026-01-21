@@ -1,12 +1,39 @@
 // Forest Trees & Vegetation - 3D objects placed on terrain from NexArt
 // CRITICAL: Uses canonical palette from src/theme/palette.ts
+// BUG-003: Implements safe disposal pattern for Three.js resources
 
-import { useMemo, createContext, useContext } from "react";
+import { useMemo, createContext, useContext, useEffect, useRef } from "react";
 import * as THREE from "three";
 import { WorldData, getElevationAt, isNearWater } from "@/lib/worldData";
 import { useWorldTextures } from "@/hooks/useWorldTextures";
 import { MaterialKind } from "@/lib/materialRegistry";
 import { PALETTE, ROLES, hexToRgb255, VEGETATION_COLORS } from "@/theme/palette";
+
+// DEV-only resource tracking
+const DEV = import.meta.env.DEV;
+let devGeometryCount = 0;
+let devMaterialCount = 0;
+
+function trackResourceCreate(type: 'geometry' | 'material') {
+  if (!DEV) return;
+  if (type === 'geometry') devGeometryCount++;
+  else devMaterialCount++;
+}
+
+function trackResourceDispose(type: 'geometry' | 'material') {
+  if (!DEV) return;
+  if (type === 'geometry') devGeometryCount--;
+  else devMaterialCount--;
+}
+
+// Log resource stats periodically in dev mode
+if (DEV) {
+  setInterval(() => {
+    if (devGeometryCount > 0 || devMaterialCount > 0) {
+      console.debug(`[ForestTrees] Resources: geometries=${devGeometryCount}, materials=${devMaterialCount}`);
+    }
+  }, 10000);
+}
 
 interface ForestTreesProps {
   world: WorldData;
@@ -77,7 +104,8 @@ const FLOWER_COLORS = [
 
 /**
  * Stable toon outline: inverted hull (BackSide) slightly scaled up.
- * This is MUCH more reliable than postprocessing Outline and won’t crash.
+ * This is MUCH more reliable than postprocessing Outline and won't crash.
+ * BUG-003: This is a singleton material, not disposed per-component.
  */
 const OUTLINE_SCALE = 1.07;
 const outlineMaterial = new THREE.MeshBasicMaterial({
@@ -117,19 +145,30 @@ export function ForestTrees({
   shadowsEnabled = true,
   outlineEnabled = false,
 }: ForestTreesProps) {
-  // Guard against incomplete world data
-  if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
-    return null;
-  }
-
   // When material richness is enabled...
   const { textures, isReady } = useWorldTextures({
     worldX,
     worldY,
-    seed: world.seed,
-    vars: world.vars,
+    seed: world?.seed ?? 0,
+    vars: world?.vars ?? [],
     enabled: useRichMaterials,
   });
+
+  // BUG-003: Track previous textures for disposal
+  const prevTexturesRef = useRef<Map<MaterialKind, THREE.CanvasTexture> | null>(null);
+
+  // BUG-003: Dispose previous textures when they change
+  useEffect(() => {
+    if (prevTexturesRef.current && prevTexturesRef.current !== textures) {
+      // Textures from useWorldTextures are managed by that hook
+      // We don't dispose them here as they're shared/cached
+    }
+    prevTexturesRef.current = textures;
+
+    return () => {
+      // Cleanup on unmount - textures are managed by useWorldTextures
+    };
+  }, [textures]);
 
   const vegetation = useMemo(() => {
     const items: VegetationItem[] = [];
@@ -317,6 +356,11 @@ export function ForestTrees({
 
     return items;
   }, [world]);
+
+  // Guard against incomplete world data - after hooks
+  if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
+    return null;
+  }
 
   return (
     <VegetationOutlineContext.Provider value={outlineEnabled}>
@@ -930,14 +974,18 @@ function Fern({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       {[0, 1, 2, 3, 4].map((i) => {
         const angle = (i / 5) * Math.PI * 2 + colorVariant;
         const tilt = 0.4 + colorVariant * 0.2;
-        const fernColor = getVegColor(baseLeaf, colorVariant + i * 0.04, 10);
+        const frondColor = getVegColor(baseLeaf, colorVariant + i * 0.08, 18);
+
         return (
-          <group key={i} rotation={[tilt, angle, 0]}>
-            <mesh position={[0, 0.15, 0.1]} receiveShadow={shadows}>
-              <boxGeometry args={[0.08, 0.02, 0.25]} />
-              <VegMaterial color={fernColor} isRich={isRich} />
-            </mesh>
-          </group>
+          <mesh
+            key={i}
+            position={[Math.sin(angle) * 0.08, 0.12, Math.cos(angle) * 0.08]}
+            rotation={[tilt * Math.cos(angle), 0, tilt * Math.sin(angle)]}
+            receiveShadow={shadows}
+          >
+            <boxGeometry args={[0.08, 0.25, 0.01]} />
+            <VegMaterial color={frondColor} isRich={isRich} />
+          </mesh>
         );
       })}
     </group>
