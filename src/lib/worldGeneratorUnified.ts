@@ -268,44 +268,52 @@ function setup() {
   }
   
   // ============================================
-  // PATH GENERATION - Readable paths with bridges
+  // PATH GENERATION - Thin readable paths (NO BRIDGES)
+  // Paths SKIP water tiles entirely
   // ============================================
   
   var pathMask = [];
-  var bridgeMask = [];
   for (var i = 0; i < GRID_SIZE; i++) {
     pathMask[i] = [];
-    bridgeMask[i] = [];
     for (var j = 0; j < GRID_SIZE; j++) {
       pathMask[i][j] = 0;
-      bridgeMask[i][j] = 0;
     }
   }
   
   // Generate paths using major network as guide
+  // Reduced count and thinner width
   if (pathDensityVal > 0.1) {
-    var numPaths = floor(2 + pathDensityVal * 4);
+    var numPaths = 1 + floor(pathDensityVal * 4); // Reduced from 2 + val * 4
+    numPaths = min(numPaths, 5); // Cap at 5
+    
     for (var p = 0; p < numPaths; p++) {
       var startX = floor(random(4, GRID_SIZE - 4));
       var startY = floor(random(4, GRID_SIZE - 4));
       var endX = floor(random(4, GRID_SIZE - 4));
       var endY = floor(random(4, GRID_SIZE - 4));
       
-      // Carve path
+      // Carve path - THIN version
       var cx = startX;
       var cy = startY;
       var steps = 0;
-      var maxSteps = GRID_SIZE * 3;
+      var maxSteps = GRID_SIZE * 2; // Reduced from 3
       
       while ((abs(cx - endX) > 1 || abs(cy - endY) > 1) && steps < maxSteps) {
-        // Mark path cell with width
-        var pw = floor(pathWidth);
-        for (var dx = -pw; dx <= pw; dx++) {
-          for (var dy = -pw; dy <= pw; dy++) {
-            var nx = cx + dx;
-            var ny = cy + dy;
-            if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
-              pathMask[ny][nx] = 1;
+        // Mark ONLY the center cell at full strength
+        if (cx >= 0 && cx < GRID_SIZE && cy >= 0 && cy < GRID_SIZE) {
+          pathMask[cy][cx] = max(pathMask[cy][cx], 1.0);
+          
+          // Soft shoulder for direct neighbors only (much smaller values)
+          for (var dx = -1; dx <= 1; dx++) {
+            for (var dy = -1; dy <= 1; dy++) {
+              if (dx === 0 && dy === 0) continue;
+              var nx = cx + dx;
+              var ny = cy + dy;
+              if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+                var isDiag = (abs(dx) + abs(dy)) === 2;
+                var shoulder = isDiag ? 0.15 : 0.25; // Very soft falloff
+                pathMask[ny][nx] = max(pathMask[ny][nx], shoulder);
+              }
             }
           }
         }
@@ -314,7 +322,7 @@ function setup() {
         var moveX = cx < endX ? 1 : (cx > endX ? -1 : 0);
         var moveY = cy < endY ? 1 : (cy > endY ? -1 : 0);
         
-        if (random(1) < 0.3) {
+        if (random(1) < 0.25) { // Reduced wander frequency
           if (random(1) < 0.5) moveX = floor(random(-1, 2));
           else moveY = floor(random(-1, 2));
         }
@@ -364,8 +372,8 @@ function setup() {
       var elevation = constrain(baseElev + mtnContrib - erosion, 0, 1);
       
       // ============================================
-      // TILE CLASSIFICATION - Priority Order
-      // Object > Bridge > Path > River > Water > Snow > Mountain > Forest > Ground
+      // TILE CLASSIFICATION - Priority Order (NO BRIDGES)
+      // Object > Path > River > Water > Snow > Mountain > Forest > Ground
       // ============================================
       
       var tileR = 100;
@@ -390,27 +398,17 @@ function setup() {
         }
       }
       
-      // Check path
-      var isPath = pathMask[gy][gx] > 0;
+      // Check path - SKIP WATER (no bridges)
+      // Only mark as path if on solid ground (above water level and not river)
+      var isWaterTile = elevation < waterLevel;
+      var isPath = pathMask[gy][gx] > 0.55 && !isWaterTile && !isRiver;
       
-      // Check bridge (path crossing river/water)
-      var isBridge = isPath && (isRiver || elevation < waterLevel);
-      if (isBridge) {
-        isPath = false;
-        isRiver = false;
-      }
-      
-      // Determine tile type by priority
+      // Determine tile type by priority (NO BRIDGES)
       if (isObject) {
         tileR = 255;
         tileG = 220;
         tileB = 50;
         tileType = "object";
-      } else if (isBridge) {
-        tileR = 120;
-        tileG = 85;
-        tileB = 55;
-        tileType = "bridge";
       } else if (isPath) {
         tileR = 170;
         tileG = 145;

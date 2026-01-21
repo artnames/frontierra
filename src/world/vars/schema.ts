@@ -146,7 +146,7 @@ export const MACRO_VARS: VarDefinition[] = [
     default: 50,
     step: 1,
     isMacro: true,
-    affects: ['paths', 'bridges', 'navigation'],
+    affects: ['paths', 'navigation'],
     description: 'Density of walkable paths'
   },
   {

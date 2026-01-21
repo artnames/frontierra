@@ -13,7 +13,7 @@ import {
   setCameraToExploreView,
   setMobileMovement,
 } from "@/hooks/useFirstPersonControls";
-import { PlantedObject, GridOverlay, Bridges } from "@/components/WorldRenderer";
+import { PlantedObject, GridOverlay } from "@/components/WorldRenderer";
 import { EnhancedAtmosphere } from "@/components/EnhancedAtmosphere";
 import { SceneSetup } from "@/components/SceneSetup";
 import { TexturedTerrainMesh, SimpleTerrainMesh } from "@/components/TexturedTerrain";
@@ -125,7 +125,6 @@ function FirstPersonScene({
       )}
 
       <EnhancedWaterPlane world={world} worldX={worldX} worldY={worldY} animated={waterAnimation} />
-      <Bridges world={world} />
 
       {showVegetation && (
         <ForestTrees
