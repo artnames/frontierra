@@ -52,7 +52,6 @@ export function getMaterialKind(tileType: string, elevation: number, moisture: n
     case "mountain":
       return "mountain";
     case "path":
-    case "bridge":
       return "path";
     case "ground":
     default:

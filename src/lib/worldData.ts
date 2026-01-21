@@ -11,7 +11,6 @@ import {
   getWaterLevelRaw,
   getWaterHeight,
   PATH_HEIGHT_OFFSET,
-  BRIDGE_FIXED_HEIGHT,
   getSurfaceHeightAt,
 } from "./worldConstants";
 

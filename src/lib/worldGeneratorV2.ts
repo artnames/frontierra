@@ -533,9 +533,8 @@ function setup() {
       var isMountain = mMask > 0.20 && !isWater;
       var isSnowCap = mMask > 0.55 && mountainPeakHeight > 0.40 && mountainShape > 0.45;
       
-      // Path and bridge
+      // Path - paths stop at water (no bridges)
       var onPath = pathGrid[gy][gx] > 0.30;
-      var isBridge = onPath && isWater;
       var isPathTile = onPath && !isWater;
       
       var isObject = gx === objX && gy === objY;
@@ -548,7 +547,7 @@ function setup() {
       // ====== ELEVATION OUTPUT ======
       var elevation = floor(displayElevation * 255);
       
-      // ====== TILE TYPE PRIORITY (RGB) ======
+      // ====== TILE TYPE PRIORITY (RGB) - NO BRIDGES ======
       var tileR = 0;
       var tileG = 0;
       var tileB = 0;
@@ -557,10 +556,6 @@ function setup() {
         tileR = 255;
         tileG = 220;
         tileB = 60;
-      } else if (isBridge) {
-        tileR = 120;
-        tileG = 80;
-        tileB = 50;
       } else if (isPathTile) {
         tileR = 180;
         tileG = 150;
