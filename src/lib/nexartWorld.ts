@@ -135,24 +135,36 @@ export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<
   const isV2Mode = params.mappingVersion === 'v2';
   
   // Determine which source to use
+  // V2 UNIFIED: Both Solo and Multiplayer use the same unified generator
   const isWorldA = !!input.worldContext;
   let source: string;
+  let effectiveWorldContext = input.worldContext;
   
-  if (isWorldA) {
-    // World A mode always uses its own source (shared macro geography)
+  if (isV2Mode) {
+    // V2 uses unified generator for BOTH Solo and Multiplayer
+    source = WORLD_UNIFIED_LAYOUT_SOURCE_V2;
+    
+    // For Solo V2, derive world context from seed
+    if (!isWorldA) {
+      const soloContext = deriveSoloWorldContext(input.seed);
+      effectiveWorldContext = {
+        worldId: WORLD_A_ID,
+        worldX: soloContext.worldX,
+        worldY: soloContext.worldY
+      };
+    }
+  } else if (isWorldA) {
+    // V1 World A mode (legacy multiplayer)
     source = WORLD_A_LAYOUT_SOURCE;
-  } else if (isV2Mode) {
-    // V2 mode uses archetype-aware generation
-    source = WORLD_LAYOUT_SOURCE_V2;
   } else {
-    // V1 legacy mode
+    // V1 legacy Solo mode
     source = WORLD_LAYOUT_SOURCE;
   }
   
-  // Compute the combined seed for World A (includes world position)
+  // Compute the combined seed (includes world position for unified/World A modes)
   let executionSeed = input.seed;
-  if (input.worldContext) {
-    executionSeed = getWorldSeed(input.worldContext, input.seed);
+  if (effectiveWorldContext) {
+    executionSeed = getWorldSeed(effectiveWorldContext, input.seed);
   }
   
   try {
@@ -196,14 +208,16 @@ export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<
       );
       execOptions.source = finalSource;
       
-      console.log(`[NexArt V2] Archetype: ${v2Params.archetype} (${archetypeIndex})`, 
-        params.microOverrides?.size ? `with ${params.microOverrides.size} overrides` : '',
-        isWorldA ? `[World A ${input.worldContext?.worldX},${input.worldContext?.worldY}]` : '');
+      if (import.meta.env.DEV) {
+        console.log(`[NexArt V2 Unified] Archetype: ${v2Params.archetype} (${archetypeIndex})`, 
+          params.microOverrides?.size ? `with ${params.microOverrides.size} overrides` : '',
+          effectiveWorldContext ? `[World ${effectiveWorldContext.worldX},${effectiveWorldContext.worldY}]` : '[Solo derived]');
+      }
     }
     
-    // Inject World A coordinates
-    if (input.worldContext) {
-      const injection = `var WORLD_X = ${input.worldContext.worldX}; var WORLD_Y = ${input.worldContext.worldY};`;
+    // Inject World coordinates (for V2 unified or V1 World A)
+    if (effectiveWorldContext) {
+      const injection = `var WORLD_X = ${effectiveWorldContext.worldX}; var WORLD_Y = ${effectiveWorldContext.worldY};`;
       finalSource = finalSource.replace(
         'function setup() {',
         `function setup() { ${injection}`

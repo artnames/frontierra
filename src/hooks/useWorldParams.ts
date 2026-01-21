@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { WorldParams, DEFAULT_PARAMS } from '@/lib/worldGenerator';
 import { buildParamsV2, deriveMicroVars, selectArchetype, type MappingVersion, type ResolvedWorldParams } from '@/world';
+import { shouldUseV2Unified } from '@/lib/worldGeneratorUnified';
 
 // Simple V1 params builder (just passes through)
 function buildParamsV1(seed: number, vars: number[]) {
@@ -27,8 +28,14 @@ function parseParamsFromSearch(searchParams: URLSearchParams): ExtendedWorldPara
   
   let seed = DEFAULT_PARAMS.seed;
   let vars = [...DEFAULT_PARAMS.vars];
-  let mappingVersion: MappingVersion = 'v1';
   let microOverrides: Map<number, number> | undefined;
+  
+  // Determine mapping version using unified logic:
+  // - Explicit v=1 → V1
+  // - Explicit v=2 → V2
+  // - Legacy shared links (vars but no v) → V1 for backwards compat
+  // - Fresh sessions → V2 (default)
+  let mappingVersion: MappingVersion = shouldUseV2Unified(searchParams) ? 'v2' : 'v1';
   
   if (seedParam) {
     const parsed = parseInt(seedParam, 10);
@@ -43,10 +50,6 @@ function parseParamsFromSearch(searchParams: URLSearchParams): ExtendedWorldPara
     if (parsed.length === 10) {
       vars = parsed;
     }
-  }
-  
-  if (versionParam === 'v2') {
-    mappingVersion = 'v2';
   }
   
   // Parse micro overrides (format: "10:45,12:80,...")
