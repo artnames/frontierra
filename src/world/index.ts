@@ -16,5 +16,8 @@ export * from './vars/mapping_v1';
 // V2 new mapping with archetypes
 export * from './vars/mapping_v2';
 
+// V2 unified mapping with realistic coupling
+export * from './vars/mapping_v2_unified';
+
 // Derived fields
 export * from './fields/index';
