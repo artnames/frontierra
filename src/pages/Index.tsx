@@ -55,6 +55,8 @@ import { useMultiplayerWorld } from "@/hooks/useMultiplayerWorld";
 import { useDiscoveryGame } from "@/hooks/useDiscoveryGame";
 import { useToast } from "@/hooks/use-toast";
 import { useSearchParams } from "react-router-dom";
+import { GeneratorProofOverlay } from "@/components/GeneratorProofOverlay";
+import { useGeneratorProof } from "@/hooks/useGeneratorProof";
 
 type ViewMode = "map" | "firstperson";
 type SidebarTab = "parameters" | "contract" | "actions" | "worldmap" | "social";
@@ -257,6 +259,19 @@ const Index = () => {
     };
   }, [activeParams.seed, activeParams.vars]);
 
+  // Generator proof overlay data
+  const generatorProof = useGeneratorProof(
+    world,
+    activeMappingVersion,
+    worldMode === 'multiplayer',
+    activeParams.seed,
+    activeParams.vars,
+    activeMicroOverrides
+  );
+
+  // Show overlay in dev mode or with ?debug=1 URL param
+  const showDebugOverlay = import.meta.env.DEV || searchParams.get('debug') === '1';
+
   const handleGenerate = useCallback(() => {
     applyToUrl();
     setDeterministicTest(null);
@@ -380,6 +395,22 @@ const Index = () => {
     <div
       className={`h-screen bg-background flex flex-col overflow-hidden touch-none ${isInvalid ? "border-4 border-destructive" : ""}`}
     >
+      {/* Generator Proof Overlay - DEV only or ?debug=1 */}
+      {showDebugOverlay && (
+        <GeneratorProofOverlay
+          mode={generatorProof.mode}
+          sourceHash={generatorProof.sourceHash}
+          mappingVersion={generatorProof.mappingVersion}
+          isMultiplayer={generatorProof.isMultiplayer}
+          waterLevel={generatorProof.waterLevel}
+          biomeRichness={generatorProof.biomeRichness}
+          microVars={generatorProof.microVars}
+          riverCellCount={generatorProof.riverStats.riverCellCount}
+          riverVertices={generatorProof.riverStats.riverVertices}
+          riverIndices={generatorProof.riverStats.riverIndices}
+        />
+      )}
+      
       {/* Welcome Screen for first-time visitors */}
       {showWelcome && (
         <WelcomeScreen
