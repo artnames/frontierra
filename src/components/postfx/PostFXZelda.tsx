@@ -20,34 +20,35 @@ export interface PostFXZeldaProps {
 // Strength presets - tuned for BRIGHT Zelda/Genshin look
 const STRENGTH_PRESETS = {
   subtle: {
-    bloom: 0.12,
-    vignette: 0.08, // Very light vignette
-    vignetteOffset: 0.95, // Pushed to edges
-    saturation: 1.08,
-    contrast: 1.0, // No contrast boost (prevents dark crushing)
-    brightness: 1.05, // Slight brightness boost
-    warmth: 0.015,
-    noise: 0.006,
+    bloom: 0.15,
+    vignette: 0.06, // Very light vignette
+    vignetteOffset: 0.96, // Pushed to edges
+    saturation: 1.12,
+    contrast: 1.02,
+    brightness: 1.08, // Slight brightness boost
+    warmth: 0.018,
+    noise: 0.005,
   },
   strong: {
-    bloom: 0.25,
-    vignette: 0.15,
-    vignetteOffset: 0.92,
-    saturation: 1.15,
-    contrast: 1.02,
-    brightness: 1.08,
-    warmth: 0.025,
-    noise: 0.012,
+    bloom: 0.28,
+    vignette: 0.12,
+    vignetteOffset: 0.93,
+    saturation: 1.22,
+    contrast: 1.05,
+    brightness: 1.12,
+    warmth: 0.03,
+    noise: 0.01,
   },
+  // "popping" preset - vivid colors with more saturation
   zelda: {
-    bloom: 0.18,
-    vignette: 0.1, // Light vignette
-    vignetteOffset: 0.94, // Very edge-focused
-    saturation: 1.12, // Vibrant colors
-    contrast: 1.0, // Neutral contrast
-    brightness: 1.06, // Slightly brighter
-    warmth: 0.02, // Warm sunny feel
-    noise: 0.008,
+    bloom: 0.22,
+    vignette: 0.08, // Light vignette
+    vignetteOffset: 0.95, // Very edge-focused
+    saturation: 1.18, // Vibrant colors
+    contrast: 1.04, // Slight punch
+    brightness: 1.1, // Brighter
+    warmth: 0.025, // Warm sunny feel
+    noise: 0.006,
   },
 };
 

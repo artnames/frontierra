@@ -11,6 +11,7 @@ import {
   RIVER_DEPTH_OFFSET,
   PATH_HEIGHT_OFFSET,
   BRIDGE_FIXED_HEIGHT,
+  getBridgeDeckHeight,
 } from "@/lib/worldConstants";
 import { getTimeOfDay, getLightingParams, isNight, isTwilight, TimeOfDayContext } from "@/lib/timeOfDay";
 import { WORLD_A_ID } from "@/lib/worldContext";
@@ -247,7 +248,7 @@ interface BridgesProps {
 
 export function Bridges({ world }: BridgesProps) {
   const bridges = useMemo(() => {
-    const items: { x: number; z: number }[] = [];
+    const items: { x: number; z: number; flippedY: number }[] = [];
 
     // Guard against incomplete world data
     if (!world || !world.terrain || world.terrain.length === 0) {
@@ -260,7 +261,7 @@ export function Bridges({ world }: BridgesProps) {
         if (cell?.type === "bridge") {
           // COORDINATE FIX: Flip Y for Three.js positioning
           const flippedZ = world.gridSize - 1 - y;
-          items.push({ x, z: flippedZ });
+          items.push({ x, z: flippedZ, flippedY: y });
         }
       }
     }
@@ -271,15 +272,34 @@ export function Bridges({ world }: BridgesProps) {
   return (
     <group>
       {bridges.map((bridge, i) => (
-        <BridgePlank key={i} x={bridge.x} z={bridge.z} />
+        <BridgePlank key={i} world={world} x={bridge.x} z={bridge.z} flippedY={bridge.flippedY} />
       ))}
     </group>
   );
 }
 
-function BridgePlank({ x, z }: { x: number; z: number }) {
-  // Use fixed bridge height - just above water surface
-  const bridgeHeight = BRIDGE_FIXED_HEIGHT;
+interface BridgePlankProps {
+  world: WorldData;
+  x: number;
+  z: number;
+  flippedY: number;
+}
+
+function BridgePlank({ world, x, z, flippedY }: BridgePlankProps) {
+  // Use dynamic bridge height that accounts for local terrain/water
+  const bridgeHeight = useMemo(() => {
+    const cell = world.terrain[flippedY]?.[x];
+    if (!cell) return BRIDGE_FIXED_HEIGHT;
+    
+    return getBridgeDeckHeight(
+      world.terrain,
+      x,
+      flippedY,
+      cell.elevation,
+      world.vars,
+      world.seed
+    );
+  }, [world, x, z, flippedY]);
 
   return (
     <group position={[x, bridgeHeight, z]}>
