@@ -10,8 +10,6 @@ import {
   getWaterLevel,
   RIVER_DEPTH_OFFSET,
   PATH_HEIGHT_OFFSET,
-  BRIDGE_FIXED_HEIGHT,
-  getBridgeDeckHeight,
 } from "@/lib/worldConstants";
 import { getTimeOfDay, getLightingParams, isNight, isTwilight, TimeOfDayContext } from "@/lib/timeOfDay";
 import { WORLD_A_ID } from "@/lib/worldContext";
@@ -152,7 +150,7 @@ function getTileColor(
   }
 
   // Paths get distinct color for visibility
-  if (isPath && type !== "bridge") {
+  if (isPath) {
     return {
       r: (0.62 + microVar) * brightness * ao,
       g: (0.52 + microVar) * brightness * ao,
@@ -242,78 +240,8 @@ function getTileColor(
 // BRIDGES - From NexArt Blue channel (bridge biome)
 // ============================================
 
-interface BridgesProps {
-  world: WorldData;
-}
-
-export function Bridges({ world }: BridgesProps) {
-  const bridges = useMemo(() => {
-    const items: { x: number; z: number; flippedY: number }[] = [];
-
-    // Guard against incomplete world data
-    if (!world || !world.terrain || world.terrain.length === 0) {
-      return items;
-    }
-
-    for (let y = 0; y < world.gridSize; y++) {
-      for (let x = 0; x < world.gridSize; x++) {
-        const cell = world.terrain[y]?.[x];
-        if (cell?.type === "bridge") {
-          // COORDINATE FIX: Flip Y for Three.js positioning
-          const flippedZ = world.gridSize - 1 - y;
-          items.push({ x, z: flippedZ, flippedY: y });
-        }
-      }
-    }
-
-    return items;
-  }, [world]);
-
-  return (
-    <group>
-      {bridges.map((bridge, i) => (
-        <BridgePlank key={i} world={world} x={bridge.x} z={bridge.z} flippedY={bridge.flippedY} />
-      ))}
-    </group>
-  );
-}
-
-interface BridgePlankProps {
-  world: WorldData;
-  x: number;
-  z: number;
-  flippedY: number;
-}
-
-function BridgePlank({ world, x, z, flippedY }: BridgePlankProps) {
-  // Use dynamic bridge height that accounts for local terrain/water
-  const bridgeHeight = useMemo(() => {
-    const cell = world.terrain[flippedY]?.[x];
-    if (!cell) return BRIDGE_FIXED_HEIGHT;
-    
-    return getBridgeDeckHeight(
-      world.terrain,
-      x,
-      flippedY,
-      cell.elevation,
-      world.vars,
-      world.seed
-    );
-  }, [world, x, z, flippedY]);
-
-  return (
-    <group position={[x, bridgeHeight, z]}>
-      <mesh>
-        <boxGeometry args={[1.0, 0.15, 1.0]} />
-        <meshLambertMaterial color="#6b4423" />
-      </mesh>
-      <mesh position={[0, -0.2, 0]}>
-        <boxGeometry args={[0.15, 0.25, 0.8]} />
-        <meshLambertMaterial color="#4a2a10" />
-      </mesh>
-    </group>
-  );
-}
+// NOTE: Bridge components removed - V2 does not generate bridges
+// Bridge tiles no longer exist in V2 unified generator
 
 // ============================================
 // PLANTED OBJECT - From NexArt Alpha = 1
