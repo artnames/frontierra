@@ -71,8 +71,8 @@ export function TerrainMesh({ world }: TerrainMeshProps) {
           height = Math.min(height, riverDepth);
         }
 
-        // Paths flatten terrain for walkability - clamp to max path height
-        if (cell.isPath && !cell.isBridge) {
+        // Paths flatten terrain for walkability (bridge removed)
+        if (cell.isPath) {
           height = Math.min(height, pathMaxHeight);
         }
 
@@ -216,12 +216,7 @@ function getTileColor(
         b: (0.35 + microVar * 0.5) * brightness * ao,
       };
 
-    case "bridge":
-      return {
-        r: (0.4 + microVar) * brightness,
-        g: (0.28 + microVar) * brightness,
-        b: (0.16 + microVar * 0.5) * brightness,
-      };
+    // Bridge case removed - fall through to ground
 
     case "ground":
     default:
@@ -425,8 +420,8 @@ export function WaterPlane({ world }: { world: WorldData }) {
         if (cell.type === "water") {
           avgWaterElevation += cell.elevation;
           waterCellCount++;
-        } else if (cell.type !== "bridge") {
-          // Track minimum non-water elevation
+        } else {
+          // Track minimum non-water elevation (bridge removed)
           const cellHeight = cell.elevation * heightScale;
           if (cellHeight < minNonWaterElevation) {
             minNonWaterElevation = cellHeight;
@@ -585,7 +580,8 @@ export function TimeAwareWaterPlane({ world, worldX = 0, worldY = 0 }: TimeAware
       for (const cell of row) {
         if (cell.type === "water") {
           waterCellCount++;
-        } else if (cell.type !== "bridge") {
+        } else {
+          // Track minimum non-water elevation (bridge removed)
           const cellHeight = cell.elevation * heightScale;
           if (cellHeight < minNonWaterElevation) {
             minNonWaterElevation = cellHeight;

@@ -2,16 +2,14 @@ import { describe, it, expect } from "vitest";
 import {
   getWaterSurfaceHeightAt,
   getTerrainHeightAt,
-  getBridgeDeckHeightAt,
   getWalkableHeightAt,
   getRiverbedHeightAt,
   isOverWater,
-  isOnBridge,
 } from "./surfaceHeights";
 import { RIVER_WATER_ABOVE_BED } from "./worldConstants";
 import type { WorldData, TerrainCell } from "./worldData";
 
-// Helper to create a minimal mock world
+// Helper to create a minimal mock world (bridge removed)
 function createMockWorld(cells: Partial<TerrainCell>[][], vars: number[] = [50, 50, 50, 50, 50, 50, 50, 50, 50, 50]): WorldData {
   const gridSize = cells.length;
   const terrain: TerrainCell[][] = cells.map((row, y) =>
@@ -23,7 +21,6 @@ function createMockWorld(cells: Partial<TerrainCell>[][], vars: number[] = [50, 
       type: cell.type ?? "ground",
       hasRiver: cell.hasRiver ?? false,
       isPath: cell.isPath ?? false,
-      isBridge: cell.isBridge ?? false,
     }))
   );
 
@@ -72,11 +69,6 @@ describe("surfaceHeights", () => {
       expect(height).not.toBeNull();
       expect(height).toBeGreaterThan(0);
     });
-
-    it("should return null for bridge cells (over water)", () => {
-      const world = createMockWorld([[{ type: "bridge", isBridge: true }]]);
-      expect(getWaterSurfaceHeightAt(world, 0, 0)).toBeNull();
-    });
   });
 
   describe("water surface >= riverbed + offset", () => {
@@ -88,8 +80,6 @@ describe("surfaceHeights", () => {
         [{ type: "ground" }, { type: "ground" }, { type: "ground" }],
       ]);
 
-      // River is at (1, 1) in grid coords, but we need to account for Y-flip
-      // In a 3x3 grid, flippedY for gridY=1 is 3-1-1 = 1
       const waterHeight = getWaterSurfaceHeightAt(world, 1, 1);
       const riverbedHeight = getRiverbedHeightAt(world, 1, 1);
 
@@ -110,38 +100,17 @@ describe("surfaceHeights", () => {
     });
   });
 
-  describe("getBridgeDeckHeightAt", () => {
-    it("should return null for non-bridge cells", () => {
-      const world = createMockWorld([[{ type: "ground" }]]);
-      expect(getBridgeDeckHeightAt(world, 0, 0)).toBeNull();
-    });
-
-    it("should return height for bridge cells", () => {
-      const world = createMockWorld([[{ type: "bridge", isBridge: true, elevation: 0.3 }]]);
-      const height = getBridgeDeckHeightAt(world, 0, 0);
-      expect(height).not.toBeNull();
-      expect(height).toBeGreaterThan(0);
-    });
-  });
-
   describe("getWalkableHeightAt", () => {
     it("should return terrain height for ground cells", () => {
-      const world = createMockWorld([[{ type: "ground", elevation: 0.4 }]]);
-      const walkable = getWalkableHeightAt(world, 0, 0);
-      const terrain = getTerrainHeightAt(world, 0, 0);
-      expect(walkable).toBe(terrain);
+      const world = createMockWorld([[{ type: "ground", elevation: 0.5 }]]);
+      const height = getWalkableHeightAt(world, 0, 0);
+      expect(height).toBeGreaterThan(0);
     });
 
-    it("should return bridge height for bridge cells", () => {
-      const world = createMockWorld([[{ type: "bridge", isBridge: true, elevation: 0.3 }]]);
-      const walkable = getWalkableHeightAt(world, 0, 0);
-      const bridge = getBridgeDeckHeightAt(world, 0, 0);
-      const terrain = getTerrainHeightAt(world, 0, 0);
-      
-      expect(bridge).not.toBeNull();
-      if (bridge !== null) {
-        expect(walkable).toBe(Math.max(bridge, terrain));
-      }
+    it("should return terrain height for path cells", () => {
+      const world = createMockWorld([[{ type: "path", isPath: true, elevation: 0.5 }]]);
+      const height = getWalkableHeightAt(world, 0, 0);
+      expect(height).toBeGreaterThan(0);
     });
   });
 
@@ -156,26 +125,9 @@ describe("surfaceHeights", () => {
       expect(isOverWater(world, 0, 0)).toBe(true);
     });
 
-    it("should return false for bridge cells", () => {
-      const world = createMockWorld([[{ type: "bridge", isBridge: true }]]);
-      expect(isOverWater(world, 0, 0)).toBe(false);
-    });
-
     it("should return false for ground cells", () => {
       const world = createMockWorld([[{ type: "ground" }]]);
       expect(isOverWater(world, 0, 0)).toBe(false);
-    });
-  });
-
-  describe("isOnBridge", () => {
-    it("should return true for bridge cells", () => {
-      const world = createMockWorld([[{ type: "bridge", isBridge: true }]]);
-      expect(isOnBridge(world, 0, 0)).toBe(true);
-    });
-
-    it("should return false for non-bridge cells", () => {
-      const world = createMockWorld([[{ type: "ground" }]]);
-      expect(isOnBridge(world, 0, 0)).toBe(false);
     });
   });
 });

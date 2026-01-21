@@ -30,13 +30,15 @@ import { buildParamsV2, ARCHETYPES, type ResolvedWorldParams } from '@/world';
 //   Object:   R=255, G>200
 // ============================================
 
+// NOTE: BRIDGE has been REMOVED from the system
+// Paths skip water, no bridge tiles
 export enum TileType {
   WATER = 0,
   GROUND = 1,
   FOREST = 2,
   MOUNTAIN = 3,
   PATH = 4,
-  BRIDGE = 5,
+  // BRIDGE = 5, // REMOVED - no longer used
   RIVER = 6,
   OBJECT = 7,
   VOID = 8
@@ -55,7 +57,7 @@ export interface GridCell {
   g: number;                // Raw G value  
   b: number;                // Raw B value
   isPath: boolean;
-  isBridge: boolean;
+  // isBridge removed - no bridge tiles in V2
   isRiver: boolean;
   isObject: boolean;
 }
@@ -328,7 +330,7 @@ function parseRGBAPixels(
       
       const isObject = tileType === TileType.OBJECT;
       const isPath = tileType === TileType.PATH;
-      const isBridge = tileType === TileType.BRIDGE;
+      // Bridge removed from system
       const isRiver = tileType === TileType.RIVER;
       
       if (isObject) {
@@ -345,7 +347,7 @@ function parseRGBAPixels(
         g,
         b,
         isPath,
-        isBridge,
+        // isBridge removed
         isRiver,
         isObject
       };
@@ -382,12 +384,12 @@ function parseRGBAPixels(
 }
 
 // Classify tile type from RGB values using Euclidean Color Distance
-// This is robust against P5.js anti-aliasing shifts
+// Uses shared colorClassification module for consistency with 2D map
+// NOTE: Bridge removed from classification
 function classifyTileFromRGB(r: number, g: number, b: number): TileType {
-  // Define Canonical Target Colors from the P5.js Source
+  // NOTE: Bridge targets removed - paths skip water
   const targets = [
     { type: TileType.OBJECT,   r: 255, g: 220, b: 60  },
-    { type: TileType.BRIDGE,   r: 120, g: 80,  b: 50  },
     { type: TileType.PATH,     r: 180, g: 150, b: 100 },
     { type: TileType.RIVER,    r: 70,  g: 160, b: 180 },
     { type: TileType.WATER,    r: 30,  g: 80,  b: 140 },

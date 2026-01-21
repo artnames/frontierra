@@ -112,7 +112,8 @@ function getTileColor(
     return { r: rc.r * brightness, g: rc.g * brightness, b: rc.b * brightness };
   }
 
-  if (isPath && type !== "bridge") {
+  // Bridge removed - just check for path
+  if (isPath) {
     return {
       r: (0.62 + microVar) * brightness * ao,
       g: (0.52 + microVar) * brightness * ao,
@@ -132,7 +133,8 @@ function getTileColor(
 
 function getCellMaterialKind(cell: TerrainCell): MaterialKind {
   if (cell.hasRiver) return "riverbed";
-  if (cell.isPath || cell.isBridge || cell.type === "path" || cell.type === "bridge") return "path";
+  // Bridge removed - just check for path
+  if (cell.isPath || cell.type === "path") return "path";
   return getMaterialKind(cell.type, cell.elevation, cell.moisture);
 }
 
@@ -179,8 +181,8 @@ export function TexturedTerrainMesh({
         let h = cell.elevation * heightScale;
         // RELATIVE CARVING: Physically drops ground into a trench relative to local height
         if (cell.hasRiver) h -= 0.3;
-        // V2 FIX: Paths use terrain height + small lift, not a capped max
-        if (cell.isPath && !cell.isBridge) h += PATH_HEIGHT_LIFT;
+        // V2 FIX: Paths use terrain height + small lift (bridge removed)
+        if (cell.isPath) h += PATH_HEIGHT_LIFT;
         heights[y][x] = h;
       }
     }
@@ -365,8 +367,8 @@ export function SimpleTerrainMesh({ world, worldX = 0, worldY = 0 }: SimpleTerra
         let h = cell.elevation * heightScale;
         // RELATIVE CARVING
         if (cell.hasRiver) h -= 0.3;
-        // V2 FIX: Paths use terrain height + small lift
-        if (cell.isPath && !cell.isBridge) h += PATH_HEIGHT_LIFT;
+        // V2 FIX: Paths use terrain height + small lift (bridge removed)
+        if (cell.isPath) h += PATH_HEIGHT_LIFT;
         heights[y][x] = h;
       }
     }
