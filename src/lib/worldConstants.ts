@@ -55,15 +55,7 @@ export const PATH_HEIGHT_LIFT = 0.05;
 // V2 removes the cap behavior that caused z=2 bug
 export const PATH_HEIGHT_OFFSET = 0.8;
 
-// Bridge deck clearance above local terrain/water (in world units)
-// The bridge deck sits this far above the HIGHER of terrain or water level
-export const BRIDGE_DECK_CLEARANCE = 0.4;
-
-// Minimum bridge height to prevent clipping into water
-export const BRIDGE_MIN_HEIGHT = 1.5;
-
-// Legacy constant - prefer using getBridgeDeckHeight() instead
-export const BRIDGE_FIXED_HEIGHT = 2.5;
+// NOTE: Bridge constants removed - bridges no longer exist in V2
 
 // ============================================
 // RIVER CARVING CONSTANTS - SINGLE SOURCE OF TRUTH
@@ -203,68 +195,20 @@ export function getRiverWaterSurfaceHeight(
 }
 
 // ============================================
-// BRIDGE HEIGHT CALCULATION
-// Surface height = max(terrain, bridge deck) - bridges always above terrain/water
+// SURFACE HEIGHT (No bridges - V2)
 // ============================================
 
 /**
- * Get bridge deck height at a position.
- * Bridge deck sits above the local terrain/water level with clearance.
- * Uses adjacent cells to determine appropriate height for spanning rivers.
- */
-export function getBridgeDeckHeight(
-  terrain: { hasRiver?: boolean; elevation?: number; isBridge?: boolean; type?: string }[][],
-  x: number,
-  flippedY: number,
-  cellElevation: number,
-  vars: number[],
-  seed: number
-): number {
-  // Get water surface height
-  const waterHeight = getWaterHeight(vars);
-  
-  // Get terrain height at this cell (with river carving if applicable)
-  const baseTerrainH = getTerrainHeightAtCell(cellElevation);
-  
-  // Sample nearby cells to find the appropriate deck height for the span
-  // This ensures bridges crossing rivers sit above the water
-  let maxLocalHeight = Math.max(baseTerrainH, waterHeight);
-  
-  for (let dy = -1; dy <= 1; dy++) {
-    const row = terrain[flippedY + dy];
-    if (!row) continue;
-    
-    for (let dx = -1; dx <= 1; dx++) {
-      const neighbor = row[x + dx];
-      if (!neighbor) continue;
-      
-      // If neighbor is water/river, use water height
-      if (neighbor.type === 'water' || neighbor.hasRiver) {
-        maxLocalHeight = Math.max(maxLocalHeight, waterHeight);
-      } else if (!neighbor.isBridge) {
-        // Use terrain height for non-bridge land cells
-        const neighborH = getTerrainHeightAtCell(neighbor.elevation ?? 0);
-        maxLocalHeight = Math.max(maxLocalHeight, neighborH);
-      }
-    }
-  }
-  
-  // Bridge deck = local maximum height + clearance, but at least minimum height
-  const deckHeight = maxLocalHeight + BRIDGE_DECK_CLEARANCE;
-  return Math.max(deckHeight, BRIDGE_MIN_HEIGHT);
-}
-
-/**
  * Get surface height at a position - THE canonical function for collision/movement
- * Returns: terrain height (with river carving) OR bridge deck height (whichever is higher)
- * Water is render-only unless swimming is implemented.
+ * Returns terrain height (with river carving) + path lift if applicable.
+ * NOTE: Bridges removed - paths simply stop at water.
  */
 export function getSurfaceHeightAt(
-  terrain: { hasRiver?: boolean; elevation?: number; isBridge?: boolean; type?: string }[][],
+  terrain: { hasRiver?: boolean; elevation?: number; type?: string }[][],
   x: number,
   y: number,
   flippedY: number,
-  cell: { elevation?: number; hasRiver?: boolean; isBridge?: boolean; type?: string },
+  cell: { elevation?: number; hasRiver?: boolean; type?: string },
   vars: number[],
   seed: number
 ): number {
@@ -278,17 +222,9 @@ export function getSurfaceHeightAt(
   const carve = computeRiverCarveDepth(terrain, x, y, flippedY, isRiver, seed);
   let terrainHeight = baseH - carve;
   
-  // V2 FIX: Paths use terrain height + small lift, NOT a capped max
-  // This fixes the z=2 bug where paths rendered below ground
-  if (cell.type === 'path' && !cell.isBridge) {
-    // Simply add a small lift to terrain height for visual layering
+  // Paths use terrain height + small lift for visual layering
+  if (cell.type === 'path') {
     terrainHeight = terrainHeight + PATH_HEIGHT_LIFT;
-  }
-  
-  // If on a bridge, return max of terrain and bridge deck
-  if (cell.isBridge || cell.type === 'bridge') {
-    const bridgeDeck = getBridgeDeckHeight(terrain, x, flippedY, cellElevation, vars, seed);
-    return Math.max(terrainHeight, bridgeDeck);
   }
   
   return terrainHeight;

@@ -687,7 +687,15 @@ const Index = () => {
           ) : (
             <div className="w-full h-full flex bg-background">
               <div className="flex-1 flex items-center justify-center p-4">
-                <WorldMap2D params={activeParams} getShareUrl={getShareUrl} />
+                <WorldMap2D 
+                  params={activeParams} 
+                  getShareUrl={getShareUrl}
+                  mappingVersion={activeMappingVersion}
+                  isMultiplayer={worldMode === 'multiplayer'}
+                  worldX={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_x : undefined}
+                  worldY={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_y : undefined}
+                  microOverrides={activeMicroOverrides}
+                />
               </div>
             </div>
           )}
