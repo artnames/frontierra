@@ -3,6 +3,7 @@
 // With all vars at 0, V2 should produce the same world as V1
 // 
 // This module provides the refinement source that wraps V1 behavior
+// UNIFIED: Solo and Multiplayer use the same generator entry point
 
 // ============================================
 // V2 REFINEMENT LAYOUT SOURCE
@@ -13,6 +14,8 @@
 // 3. Biome Richness (VAR[4]) affects vegetation variety, NOT water level
 // 4. Visual Style (VAR[9]) does NOT affect mountains
 // 5. No bridges - paths skip water
+// 6. Explicit water level control via waterLevelOffset
+// 7. Explicit river control via riverStrength and riverWidth
 // ============================================
 
 export const WORLD_V2_REFINEMENT_SOURCE = `
@@ -34,6 +37,39 @@ function setup() {
   var GRID_SIZE = 64;
   
   // ============================================
+  // V2 WATER LEVEL CONTROL
+  // Base water level from V1 + configurable offset
+  // At vars=0, baseWater=0.10 (matches V1)
+  // waterLevelOffset allows ±0.08 adjustment
+  // ============================================
+  var baseWaterLevel = 0.10;  // V1 baseline at vars=0
+  
+  // MV[0] = Water Level Offset (-8 to +8 in normalized terms)
+  // Maps micro var 0 (0-100) to offset (-0.08 to +0.08)
+  var waterLevelOffset = 0;
+  if (typeof MV !== 'undefined' && MV.length > 0) {
+    waterLevelOffset = map(MV[0], 0, 100, -0.08, 0.08);
+  }
+  var waterLevel = baseWaterLevel + waterLevelOffset;
+  waterLevel = constrain(waterLevel, 0.02, 0.55);
+  
+  // ============================================
+  // V2 RIVER CONTROLS
+  // riverStrength: 0-1, controls river presence (threshold)
+  // riverWidth: 1-4 tiles
+  // Rivers are VALLEY-CONSTRAINED: only below waterLevel + valleyCap
+  // ============================================
+  var riverStrength = 0.5;  // Default moderate rivers
+  var riverWidthFactor = 1.0;  // Default 1 tile core
+  
+  if (typeof MV !== 'undefined' && MV.length > 1) {
+    riverStrength = map(MV[1], 0, 100, 0, 1.0);
+    riverWidthFactor = map(MV[2], 0, 100, 0.5, 2.0);
+  }
+  
+  var valleyCap = 0.25;  // Rivers only in low areas
+  
+  // ============================================
   // VAR MAPPINGS - V2 uses SAME base mappings as V1
   // V1 behavior is preserved at vars=0
   // ============================================
@@ -41,11 +77,7 @@ function setup() {
   // VAR[3] = Terrain Detail (continent frequency)
   var continentScale = map(VAR[3], 0, 100, 0.02, 0.10);
   
-  // VAR[4] = Biome Richness - V2 CHANGE: Does NOT affect water level
-  // Water level is FIXED at V1 default (vars=0 gives waterLevel=0.10)
-  var waterLevel = 0.10;  // Fixed baseline like V1 at vars=0
-  
-  // Biome richness controls vegetation variety instead
+  // VAR[4] = Biome Richness - controls vegetation variety
   var biomeRichness = VAR[4] / 100.0;
   
   // VAR[5] = Forest Density
@@ -60,10 +92,9 @@ function setup() {
   // VAR[8] = Surface Roughness
   var terrainRoughness = map(VAR[8], 0, 100, 0.05, 1.50);
   
-  // VAR[9] = Visual Style - V2 CHANGE: Does NOT affect mountains
-  // Mountain density uses a fixed baseline, NOT influenced by VAR[9]
-  var mountainDensity = map(VAR[6], 0, 100, 0.02, 0.80);  // Tied to mountain height, not visual style
-  var visualStyle = VAR[9] / 100.0;  // Captured but only for future visual use
+  // VAR[9] = Visual Style - Does NOT affect mountains
+  var mountainDensity = map(VAR[6], 0, 100, 0.02, 0.80);
+  var visualStyle = VAR[9] / 100.0;
   
   var objX = floor(map(VAR[1], 0, 100, 4, GRID_SIZE - 4));
   var objY = floor(map(VAR[2], 0, 100, 4, GRID_SIZE - 4));
@@ -72,7 +103,6 @@ function setup() {
   
   // ============================================
   // PATH GENERATION - V2: THINNER + MORE BRANCHING
-  // Core path is 1 tile, shoulder is subtle wear zone
   // ============================================
   var pathGrid = [];
   for (var py = 0; py < GRID_SIZE; py++) {
@@ -82,8 +112,7 @@ function setup() {
     }
   }
   
-  // Fewer main paths, more organic
-  var numPaths = floor(1 + pathWearVal * 4);  // 1-5 paths
+  var numPaths = floor(1 + pathWearVal * 4);
   numPaths = min(numPaths, 5);
   var flowScale = 0.03 + pathWearVal * 0.04;
   
@@ -119,13 +148,10 @@ function setup() {
       var gxp = floor(cx);
       var gyp = floor(cy);
       if (gxp >= 0 && gxp < GRID_SIZE && gyp >= 0 && gyp < GRID_SIZE) {
-        // V2: THIN PATHS - Only mark center tile at 1.0
         pathGrid[gyp][gxp] = max(pathGrid[gyp][gxp], 1.0);
         
-        // V2: Soft shoulder (wear zone) - very subtle values
-        // Only add shoulder if pathWear is high
         if (pathWearVal > 0.3) {
-          var shoulderStrength = 0.15 + pathWearVal * 0.15;  // 0.15-0.30
+          var shoulderStrength = 0.15 + pathWearVal * 0.15;
           if (gxp > 0) pathGrid[gyp][gxp - 1] = max(pathGrid[gyp][gxp - 1], shoulderStrength);
           if (gxp < GRID_SIZE - 1) pathGrid[gyp][gxp + 1] = max(pathGrid[gyp][gxp + 1], shoulderStrength);
           if (gyp > 0) pathGrid[gyp - 1][gxp] = max(pathGrid[gyp - 1][gxp], shoulderStrength);
@@ -148,7 +174,6 @@ function setup() {
       cx = cx + cos(angle) * stepLen;
       cy = cy + sin(angle) * stepLen;
       
-      // V2: MORE BRANCHING at higher path wear
       if (pathWearVal > 0.2 && step > 6 && step % 8 === 0) {
         if (noise(cx * 0.3 + p * 50 + seedOffsetA, cy * 0.3) < 0.25 + pathWearVal * 0.2) {
           var bx = cx;
@@ -161,7 +186,6 @@ function setup() {
             var bgx = floor(bx);
             var bgy = floor(by);
             if (bgx >= 0 && bgx < GRID_SIZE && bgy >= 0 && bgy < GRID_SIZE) {
-              // Branch paths are thin too
               pathGrid[bgy][bgx] = max(pathGrid[bgy][bgx], 0.9);
             }
             
@@ -184,8 +208,7 @@ function setup() {
   }
   
   // ============================================
-  // MOUNTAIN GENERATION - V2: Not affected by VAR[9]
-  // Uses V1 logic but mountainDensity is tied to VAR[6]
+  // MOUNTAIN GENERATION - Not affected by VAR[9]
   // ============================================
   var mountainMask = [];
   for (var my = 0; my < GRID_SIZE; my++) {
@@ -296,34 +319,117 @@ function setup() {
   }
   
   // ============================================
-  // MAIN TERRAIN LOOP
+  // PRE-COMPUTE ELEVATION FIELD
+  // Needed for valley-constrained rivers
   // ============================================
-  for (var gy = 0; gy < GRID_SIZE; gy++) {
-    for (var gx = 0; gx < GRID_SIZE; gx++) {
-      
-      var continental = noise(gx * continentScale + seedOffsetA, gy * continentScale + seedOffsetB);
+  var elevationField = [];
+  for (var ey = 0; ey < GRID_SIZE; ey++) {
+    elevationField[ey] = [];
+    for (var ex = 0; ex < GRID_SIZE; ex++) {
+      var continental = noise(ex * continentScale + seedOffsetA, ey * continentScale + seedOffsetB);
       
       var roughFreq = 0.08 + terrainRoughness * 0.12;
       var roughAmp = 0.02 + terrainRoughness * 0.10;
       
-      var hills = noise(gx * continentScale * 2 + seedOffsetC, gy * continentScale * 2);
-      var detail = noise(gx * roughFreq + seedOffsetD, gy * roughFreq);
-      var microDetail = noise(gx * roughFreq * 2.5 + seedOffsetA, gy * roughFreq * 2.5);
+      var hills = noise(ex * continentScale * 2 + seedOffsetC, ey * continentScale * 2);
+      var detail = noise(ex * roughFreq + seedOffsetD, ey * roughFreq);
+      var microDetail = noise(ex * roughFreq * 2.5 + seedOffsetA, ey * roughFreq * 2.5);
       
       var hillContrib = hills * 0.08 * (0.5 + terrainRoughness * 0.5);
       var detailContrib = detail * roughAmp + microDetail * roughAmp * 0.5;
       var baseElevation = BASE_FLOOR + continental * 0.12 + hillContrib + detailContrib;
       
-      var mMask = mountainMask[gy][gx];
-      var mountainNoise = noise(gx * 0.10 + seedOffsetB, gy * 0.10 + seedOffsetC);
-      var mountainDetail = noise(gx * 0.22 + seedOffsetD, gy * 0.22 + seedOffsetA);
+      var mMask = mountainMask[ey][ex];
+      var mountainNoise = noise(ex * 0.10 + seedOffsetB, ey * 0.10 + seedOffsetC);
+      var mountainDetail = noise(ex * 0.22 + seedOffsetD, ey * 0.22 + seedOffsetA);
       var mountainShape = mountainNoise * 0.65 + mountainDetail * 0.35;
       
       var peakFactor = pow(mMask, 0.65) * pow(mountainShape, 0.45);
       var mountainElevation = peakFactor * mountainPeakHeight * 0.70;
       
-      var shaped = baseElevation + mountainElevation;
-      shaped = constrain(shaped, 0, 1);
+      elevationField[ey][ex] = constrain(baseElevation + mountainElevation, 0, 1);
+    }
+  }
+  
+  // ============================================
+  // RIVER MASK GENERATION - VALLEY-CONSTRAINED
+  // Rivers only appear in low elevation areas
+  // Uses wider threshold for better visibility
+  // ============================================
+  var riverMask = [];
+  for (var rmy = 0; rmy < GRID_SIZE; rmy++) {
+    riverMask[rmy] = [];
+    for (var rmx = 0; rmx < GRID_SIZE; rmx++) {
+      riverMask[rmy][rmx] = 0;
+    }
+  }
+  
+  // Generate river paths using noise with configurable threshold
+  // Wider threshold = more rivers
+  var riverThreshold = 0.025 + riverStrength * 0.035;  // 0.025 to 0.06
+  
+  for (var rgy = 0; rgy < GRID_SIZE; rgy++) {
+    for (var rgx = 0; rgx < GRID_SIZE; rgx++) {
+      // Multi-octave noise for river placement
+      var riverN1 = noise(rgx * 0.04 + seedOffsetD, rgy * 0.04 + seedOffsetA);
+      var riverN2 = noise(rgx * 0.08 + seedOffsetB, rgy * 0.08 + seedOffsetC);
+      var riverNoise = riverN1 * 0.7 + riverN2 * 0.3;
+      
+      // River appears where noise is close to 0.5 (contour line)
+      var distFromCenter = abs(riverNoise - 0.5);
+      
+      // Valley constraint: only in low areas
+      var elev = elevationField[rgy][rgx];
+      var inValley = elev < waterLevel + valleyCap;
+      var notOnMountain = mountainMask[rgy][rgx] < 0.25;
+      var notOnPath = pathGrid[rgy][rgx] < 0.5;
+      var notInOcean = elev >= waterLevel;
+      
+      if (distFromCenter < riverThreshold && inValley && notOnMountain && notOnPath && notInOcean) {
+        // Core river strength based on distance from contour line
+        var riverCore = 1.0 - (distFromCenter / riverThreshold);
+        riverMask[rgy][rgx] = riverCore;
+      }
+    }
+  }
+  
+  // Dilate river mask for width control
+  if (riverWidthFactor > 0.8) {
+    var dilatedRiver = [];
+    for (var ddy = 0; ddy < GRID_SIZE; ddy++) {
+      dilatedRiver[ddy] = [];
+      for (var ddx = 0; ddx < GRID_SIZE; ddx++) {
+        var maxVal = riverMask[ddy][ddx];
+        var radius = floor(riverWidthFactor);
+        
+        for (var ndy = -radius; ndy <= radius; ndy++) {
+          for (var ndx = -radius; ndx <= radius; ndx++) {
+            var ny = ddy + ndy;
+            var nx = ddx + ndx;
+            if (ny >= 0 && ny < GRID_SIZE && nx >= 0 && nx < GRID_SIZE) {
+              var dist = sqrt(ndx * ndx + ndy * ndy);
+              if (dist <= riverWidthFactor) {
+                var falloff = 1.0 - (dist / (riverWidthFactor + 0.5));
+                var neighbor = riverMask[ny][nx] * falloff;
+                maxVal = max(maxVal, neighbor);
+              }
+            }
+          }
+        }
+        dilatedRiver[ddy][ddx] = maxVal;
+      }
+    }
+    riverMask = dilatedRiver;
+  }
+  
+  // ============================================
+  // MAIN TERRAIN LOOP
+  // ============================================
+  for (var gy = 0; gy < GRID_SIZE; gy++) {
+    for (var gx = 0; gx < GRID_SIZE; gx++) {
+      
+      var shaped = elevationField[gy][gx];
+      var mMask = mountainMask[gy][gx];
       
       var isWater = shaped < waterLevel;
       
@@ -343,26 +449,28 @@ function setup() {
       }
       moisture = constrain(moisture, 0, 1);
       
-      // V2: Biome Richness affects forest threshold and variation
+      // Forest
       var forestThreshold = forestDensity * (0.85 + biomeRichness * 0.30);
       var forestNoise = noise(gx * 0.08 + seedOffsetB, gy * 0.08 + seedOffsetC);
       var forestNoise2 = noise(gx * 0.16 + seedOffsetD, gy * 0.16);
       var forestVal = forestNoise * 0.55 + forestNoise2 * 0.45;
       var isForest = forestVal < forestThreshold && !isWater && mMask < 0.35 && moisture > 0.20;
       
+      var mountainNoise = noise(gx * 0.10 + seedOffsetB, gy * 0.10 + seedOffsetC);
+      var mountainDetail = noise(gx * 0.22 + seedOffsetD, gy * 0.22 + seedOffsetA);
+      var mountainShape = mountainNoise * 0.65 + mountainDetail * 0.35;
+      
       var isMountain = mMask > 0.20 && !isWater;
       var isSnowCap = mMask > 0.55 && mountainPeakHeight > 0.40 && mountainShape > 0.45;
       
-      // V2: Path threshold is higher (0.55) for thinner paths
-      // Paths SKIP water tiles (no bridges)
+      // Path - skip water
       var onPath = pathGrid[gy][gx] > 0.55 && !isWater;
       var isPathTile = onPath;
       
       var isObject = gx === objX && gy === objY;
       
-      // Rivers
-      var riverN = noise(gx * 0.04 + seedOffsetD, gy * 0.04 + seedOffsetA);
-      var isRiver = abs(riverN - 0.5) < 0.018 && !isWater && displayElevation < waterLevel + 0.18 && !onPath;
+      // River from mask
+      var isRiver = riverMask[gy][gx] > 0.3 && !isWater && !onPath;
       
       // Elevation output
       var elevation = floor(displayElevation * 255);
@@ -378,7 +486,6 @@ function setup() {
         tileG = 220;
         tileB = 60;
       } else if (isPathTile) {
-        // V2: Path colors with biome richness variation
         var pathVar = biomeRichness * 15;
         tileR = floor(175 + pathVar);
         tileG = floor(145 + pathVar * 0.5);
@@ -402,7 +509,6 @@ function setup() {
         tileG = floor(95 + mBlend * 50);
         tileB = floor(90 + mBlend * 60);
       } else if (isForest) {
-        // V2: Biome richness adds color variation to forests
         var fMoist = moisture * 0.3;
         var richVar = biomeRichness * 20;
         tileR = floor(constrain(45 + fMoist * 25 + richVar * 0.3, 30, 80));

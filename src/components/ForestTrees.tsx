@@ -89,12 +89,17 @@ function seededRandom(x: number, y: number, seedOffset: number): number {
 // Helper to create color strings from palette with variation
 // VEGETATION FIX: Safe color helper that NEVER returns white/undefined
 // Always returns a valid green-family color from the palette
+
+// DEV counter for tracking sanitizer triggers
+let vegColorSanitizerCount = 0;
+
 function getVegColor(baseColor: { r: number; g: number; b: number } | undefined | null, variation: number, shift: number = 20): string {
   // VEGETATION FIX: Fallback to meadow green if baseColor is invalid or missing
   // This is the ONLY way vegetation can get a color - so it must never fail
   const fallbackColor = { r: 0.537, g: 0.612, b: 0.435 }; // #899C6F meadow green
   
   let safeColor = fallbackColor;
+  let usedFallback = false;
   
   if (baseColor && 
       typeof baseColor.r === 'number' && Number.isFinite(baseColor.r) &&
@@ -105,11 +110,20 @@ function getVegColor(baseColor: { r: number; g: number; b: number } | undefined 
         baseColor.g >= 0 && baseColor.g <= 1 && 
         baseColor.b >= 0 && baseColor.b <= 1) {
       safeColor = baseColor;
-    } else if (import.meta.env.DEV) {
-      console.warn('[ForestTrees] baseColor out of 0-1 range, using fallback');
+    } else {
+      usedFallback = true;
     }
-  } else if (import.meta.env.DEV) {
-    console.warn('[ForestTrees] Invalid baseColor, using fallback meadow green');
+  } else {
+    usedFallback = true;
+  }
+  
+  // DEV: Track and log sanitizer usage
+  if (usedFallback && import.meta.env.DEV) {
+    vegColorSanitizerCount++;
+    // Log periodically to avoid spam
+    if (vegColorSanitizerCount % 100 === 1) {
+      console.warn(`[ForestTrees] Color sanitizer triggered ${vegColorSanitizerCount} times (baseColor was invalid/undefined)`);
+    }
   }
   
   // Apply deterministic variation

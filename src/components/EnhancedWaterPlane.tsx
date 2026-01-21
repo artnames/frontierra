@@ -215,7 +215,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   }, [world, worldX, worldY, waterHeight]);
 
   const material = useMemo(() => {
-    // RIVER VISIBILITY FIX: Use bright, clearly visible water colors
+    // WATER/RIVER VISIBILITY FIX: Use palette-aligned colors
     // Deep: Rich teal-blue that's visible against terrain
     // Shallow: Lighter cyan-teal for depth variation
     const deepColor = new THREE.Color(0.0, 0.11, 0.14);    // #001C24 from palette (abyss)
@@ -233,10 +233,11 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     const m = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uOpacity: { value: 0.88 }, // Slightly transparent to show depth
+        uOpacity: { value: 0.92 }, // High opacity for visibility
         uDeep: { value: deepColor },
         uShallow: { value: shallowColor },
         uFoam: { value: foamColor },
+        uSeed: { value: world?.seed ?? 0 }, // For deterministic noise
       },
       vertexShader: `
         attribute float aEdge;
@@ -258,46 +259,68 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
         uniform vec3 uDeep;
         uniform vec3 uShallow;
         uniform vec3 uFoam;
+        uniform float uSeed;
 
         varying float vEdge;
         varying vec3 vWPos;
         varying vec3 vNormal;
 
-        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+        // Deterministic hash using world position + seed (no grid repetition)
+        float hash(vec2 p) { 
+          return fract(sin(dot(p + uSeed * 0.001, vec2(127.1, 311.7))) * 43758.5453123); 
+        }
+        
+        // Smooth world-space noise (no tiling at 64x64)
         float noise(vec2 p) {
-          vec2 i = floor(p); vec2 f = fract(p);
+          vec2 i = floor(p); 
+          vec2 f = fract(p);
           f = f * f * (3.0 - 2.0 * f);
           return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
                      mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
         }
+        
+        // Multi-octave noise for natural waves
+        float fbm(vec2 p) {
+          float v = 0.0;
+          float a = 0.5;
+          for (int i = 0; i < 3; i++) {
+            v += a * noise(p);
+            p *= 2.0;
+            a *= 0.5;
+          }
+          return v;
+        }
 
         void main() {
-          float t = uTime * 0.4;
+          float t = uTime * 0.3;
           
-          // Animated water waves
-          float w1 = noise(vWPos.xz * 0.8 + t);
-          float w2 = noise(vWPos.xz * 1.5 - t * 0.3);
-          float w3 = noise(vWPos.xz * 3.0 + t * 0.7) * 0.3;
-          float w = (w1 + w2 + w3) * 0.4;
+          // WORLD-SPACE waves - no grid repetition
+          // Use world position directly with low frequency
+          vec2 worldUV = vWPos.xz * 0.08;
+          
+          // Animated water waves using world coordinates
+          float w1 = fbm(worldUV + vec2(t * 0.5, t * 0.3));
+          float w2 = fbm(worldUV * 1.5 - vec2(t * 0.2, t * 0.4));
+          float w = w1 * 0.6 + w2 * 0.4;
 
-          // Blend between deep and shallow - more variation for visual interest
-          vec3 col = mix(uDeep, uShallow, w * 0.6 + 0.3);
+          // Blend between deep and shallow - natural variation
+          vec3 col = mix(uDeep, uShallow, w * 0.5 + 0.25);
 
           // Edge handling: high minimum opacity even at edges
-          float edgeFade = smoothstep(0.0, 0.5, vEdge);
-          float a = uOpacity * mix(0.75, 1.0, edgeFade);
+          float edgeFade = smoothstep(0.0, 0.4, vEdge);
+          float a = uOpacity * mix(0.8, 1.0, edgeFade);
 
           // Foam/highlight at edges and wave peaks
-          float foamAmount = (1.0 - edgeFade) * 0.25 + w3 * 0.15;
+          float foamAmount = (1.0 - edgeFade) * 0.2 + w * 0.1;
           col = mix(col, uFoam, foamAmount);
 
           // Fresnel-like rim highlight
           vec3 viewDir = normalize(-vWPos);
-          float fresnel = pow(1.0 - max(0.0, dot(normalize(vNormal), viewDir)), 2.0);
-          col += vec3(fresnel * 0.08);
+          float fresnel = pow(1.0 - max(0.0, dot(normalize(vNormal), viewDir)), 2.5);
+          col += vec3(fresnel * 0.06);
 
-          // Specular highlights on waves
-          float spec = pow(max(0.0, w * 0.5 + 0.5), 6.0) * 0.12;
+          // Subtle specular on waves
+          float spec = pow(max(0.0, w * 0.5 + 0.5), 8.0) * 0.1;
           col += vec3(spec);
 
           gl_FragColor = vec4(col, a);
@@ -308,13 +331,13 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       depthWrite: false,
       depthTest: true,
       polygonOffset: true,
-      polygonOffsetFactor: -4, // Strong offset to render above terrain
-      polygonOffsetUnits: -4,
+      polygonOffsetFactor: -6, // Strong offset to render above terrain
+      polygonOffsetUnits: -6,
     });
 
     matRef.current = m;
     return m;
-  }, []);
+  }, [world?.seed]);
 
   useFrame((_, dt) => {
     if (animated && matRef.current) matRef.current.uniforms.uTime.value += dt;
