@@ -4,7 +4,7 @@
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { WorldData, TerrainCell } from "@/lib/worldData";
-import { WORLD_HEIGHT_SCALE, getWaterLevel, PATH_HEIGHT_OFFSET } from "@/lib/worldConstants";
+import { WORLD_HEIGHT_SCALE, getWaterLevel, PATH_HEIGHT_LIFT } from "@/lib/worldConstants";
 import { MaterialKind, getMaterialKind } from "@/lib/materialRegistry";
 import { createTerrainPbrDetailMaterial } from "@/lib/terrainPbrMaterial";
 
@@ -148,7 +148,6 @@ export function TexturedTerrainMesh({
   }
 
   const heightScale = WORLD_HEIGHT_SCALE;
-  const pathMaxHeight = getWaterLevel(world.vars) * heightScale + PATH_HEIGHT_OFFSET;
 
   const geometriesPerKind = useMemo(() => {
     const size = world.gridSize;
@@ -180,7 +179,8 @@ export function TexturedTerrainMesh({
         let h = cell.elevation * heightScale;
         // RELATIVE CARVING: Physically drops ground into a trench relative to local height
         if (cell.hasRiver) h -= 0.3;
-        if (cell.isPath && !cell.isBridge) h = Math.min(h, pathMaxHeight);
+        // V2 FIX: Paths use terrain height + small lift, not a capped max
+        if (cell.isPath && !cell.isBridge) h += PATH_HEIGHT_LIFT;
         heights[y][x] = h;
       }
     }
@@ -287,7 +287,7 @@ export function TexturedTerrainMesh({
       geos.set(kind, geo);
     }
     return geos;
-  }, [world, heightScale, pathMaxHeight, worldX, worldY]);
+  }, [world, heightScale, worldX, worldY]);
 
   const materialsPerKind = useMemo(() => {
     const mats: Map<MaterialKind, THREE.MeshStandardMaterial> = new Map();
@@ -348,7 +348,6 @@ export function SimpleTerrainMesh({ world, worldX = 0, worldY = 0 }: SimpleTerra
   }
 
   const heightScale = WORLD_HEIGHT_SCALE;
-  const pathMaxHeight = getWaterLevel(world.vars) * heightScale + PATH_HEIGHT_OFFSET;
 
   const geometry = useMemo(() => {
     const size = world.gridSize;
@@ -366,7 +365,8 @@ export function SimpleTerrainMesh({ world, worldX = 0, worldY = 0 }: SimpleTerra
         let h = cell.elevation * heightScale;
         // RELATIVE CARVING
         if (cell.hasRiver) h -= 0.3;
-        if (cell.isPath && !cell.isBridge) h = Math.min(h, pathMaxHeight);
+        // V2 FIX: Paths use terrain height + small lift
+        if (cell.isPath && !cell.isBridge) h += PATH_HEIGHT_LIFT;
         heights[y][x] = h;
       }
     }
@@ -421,7 +421,7 @@ export function SimpleTerrainMesh({ world, worldX = 0, worldY = 0 }: SimpleTerra
     geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
     return geo;
-  }, [world, heightScale, pathMaxHeight]);
+  }, [world, heightScale]);
 
   return (
     <mesh geometry={geometry} receiveShadow>

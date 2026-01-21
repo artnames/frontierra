@@ -47,7 +47,12 @@ export function getWaterHeight(vars: number[]): number {
   return getWaterLevel(vars) * WORLD_HEIGHT_SCALE;
 }
 
-// Path max height above water (in world units)
+// Path lift above terrain (in world units) - small offset for visual layering
+// V2 FIX: Paths use terrain height + small lift, NOT a capped max
+export const PATH_HEIGHT_LIFT = 0.05;
+
+// Legacy constant for backwards compatibility - DEPRECATED
+// V2 removes the cap behavior that caused z=2 bug
 export const PATH_HEIGHT_OFFSET = 0.8;
 
 // Bridge deck clearance above local terrain/water (in world units)
@@ -273,11 +278,11 @@ export function getSurfaceHeightAt(
   const carve = computeRiverCarveDepth(terrain, x, y, flippedY, isRiver, seed);
   let terrainHeight = baseH - carve;
   
-  // Path height capping
+  // V2 FIX: Paths use terrain height + small lift, NOT a capped max
+  // This fixes the z=2 bug where paths rendered below ground
   if (cell.type === 'path' && !cell.isBridge) {
-    const waterHeight = getWaterHeight(vars);
-    const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
-    terrainHeight = Math.min(terrainHeight, pathMaxHeight);
+    // Simply add a small lift to terrain height for visual layering
+    terrainHeight = terrainHeight + PATH_HEIGHT_LIFT;
   }
   
   // If on a bridge, return max of terrain and bridge deck
