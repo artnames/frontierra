@@ -4,6 +4,7 @@
 
 import { WORLD_LAYOUT_SOURCE, WORLD_A_LAYOUT_SOURCE, WorldParams } from './worldGenerator';
 import { WORLD_LAYOUT_SOURCE_V2 } from './worldGeneratorV2';
+import { WORLD_UNIFIED_LAYOUT_SOURCE_V2, deriveSoloWorldContext } from './worldGeneratorUnified';
 import { 
   WorldContext, 
   getWorldSeed, 
