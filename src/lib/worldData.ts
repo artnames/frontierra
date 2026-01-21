@@ -12,9 +12,7 @@ import {
   getWaterHeight,
   PATH_HEIGHT_OFFSET,
   BRIDGE_FIXED_HEIGHT,
-  computeRiverCarveDepth,
-  getRiverMicroVariation,
-  computeRiverMask,
+  getSurfaceHeightAt,
 } from "./worldConstants";
 
 // ============================================
@@ -276,14 +274,8 @@ export function cacheWorldData(world: WorldData): void {
 
 // ============================================
 // WORLD QUERY FUNCTIONS - Derived from NexArt
+// Height calculation uses unified getSurfaceHeightAt from worldConstants.ts
 // ============================================
-
-// Legacy local river carve function - now uses shared implementation from worldConstants
-function computeRiverCarve(world: WorldData, x: number, y: number, flippedY: number, cell: TerrainCell): number {
-  const isRiver = !!cell?.hasRiver;
-  // Use the shared computeRiverCarveDepth function from worldConstants
-  return computeRiverCarveDepth(world.terrain, x, y, flippedY, isRiver, world.seed);
-}
 
 export function getElevationAt(world: WorldData, worldX: number, worldY: number): number {
   // Guard against incomplete world data
@@ -294,16 +286,6 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
   if (!world.isNexArtVerified) {
     return 0;
   }
-
-  // Use shared height scale constant
-  const heightScale = WORLD_HEIGHT_SCALE;
-
-  // Match renderer modifiers so movement/collision lines up with what you see.
-  const waterLevel = getWaterLevel(world.vars);
-  const waterHeight = waterLevel * heightScale;
-  const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
-  // Bridge uses fixed height - just above water surface
-  const bridgeHeight = BRIDGE_FIXED_HEIGHT;
 
   const gridX = Math.floor(worldX);
   const gridY = Math.floor(worldY);
@@ -317,43 +299,19 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
   const flippedY = world.gridSize - 1 - gridY;
 
   const cell = world.terrain[flippedY]?.[gridX];
-  if (cell?.isBridge || cell?.type === "bridge") {
-    return bridgeHeight;
-  }
+  if (!cell) return 0;
 
-  // Bilinear interpolation of ALREADY CURVED elevation
-  // (terrain cells store the shaped elevation from nexartGridToWorldData)
-  const fx = worldX - gridX;
-  const fy = worldY - gridY;
-
-  // Since Y is flipped, the interpolation direction needs to be inverted
-  // flippedY corresponds to gridY=0, flippedY-1 corresponds to gridY=1
-  // So when fy increases (moving +Y in world), we move toward flippedY-1
-  const flippedY1 = Math.max(0, flippedY - 1);
-
-  const e00 = world.terrain[flippedY]?.[gridX]?.elevation ?? 0;
-  const e10 = world.terrain[flippedY]?.[gridX + 1]?.elevation ?? 0;
-  const e01 = world.terrain[flippedY1]?.[gridX]?.elevation ?? 0;
-  const e11 = world.terrain[flippedY1]?.[gridX + 1]?.elevation ?? 0;
-
-  // Interpolate in X direction first
-  const e0 = e00 * (1 - fx) + e10 * fx;
-  const e1 = e01 * (1 - fx) + e11 * fx;
-
-  // Interpolate in Y direction - fy=0 uses flippedY (e0), fy=1 uses flippedY-1 (e1)
-  let height = (e0 * (1 - fy) + e1 * fy) * heightScale;
-
-  // Apply river carving to match visual terrain (SmoothTerrainMesh)
-  if (cell) {
-    const riverCarve = computeRiverCarve(world, gridX, gridY, flippedY, cell);
-    if (riverCarve > 0) {
-      height -= riverCarve;
-    }
-  }
-
-  if (cell?.isPath && !cell?.isBridge) {
-    height = Math.min(height, pathMaxHeight);
-  }
+  // Use the unified getSurfaceHeightAt function from worldConstants
+  // This handles terrain, river carving, path capping, AND bridge deck height
+  const height = getSurfaceHeightAt(
+    world.terrain,
+    gridX,
+    gridY,
+    flippedY,
+    cell,
+    world.vars,
+    world.seed
+  );
 
   return height;
 }

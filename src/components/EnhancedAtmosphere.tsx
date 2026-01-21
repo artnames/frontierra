@@ -114,7 +114,7 @@ export function EnhancedAtmosphere({
       )}
       
       {/* Ambient light - provides base illumination */}
-      <ambientLight color={ambientColor} intensity={lighting.ambientIntensity * 0.8} />
+      <ambientLight color={ambientColor} intensity={lighting.ambientIntensity * 1.0} />
       
       {/* Main directional light (sun/moon) with shadows */}
       <directionalLight
@@ -132,7 +132,7 @@ export function EnhancedAtmosphere({
       
       {/* Hemisphere light for soft sky/ground fill - adds depth without harsh shadows */}
       <hemisphereLight 
-        args={[skyColor, groundColor, night ? 0.25 : (twilight ? 0.35 : 0.45)]} 
+        args={[skyColor, groundColor, night ? 0.3 : (twilight ? 0.45 : 0.55)]} 
       />
       
       {/* Secondary fill light from opposite direction - reduces harsh shadows */}
