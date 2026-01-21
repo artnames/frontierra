@@ -255,6 +255,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     if (animated && matRef.current) matRef.current.uniforms.uTime.value += dt;
   });
 
+  // FIX #6: Dispose geometry and material on unmount/regeneration
   useEffect(() => {
     return () => {
       riverGeo.dispose();
