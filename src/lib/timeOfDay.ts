@@ -1,8 +1,10 @@
 // Time of Day System - Deterministic Day/Night Cycle
 // CRITICAL: No simulation, no ticking, no persistence
 // All values are derived from world position
+// Uses canonical palette from src/theme/palette.ts
 
 import { WORLD_A_ID } from "./worldContext";
+import { PALETTE, SKY_COLORS, FOG_COLORS, hexToRgb01 } from "@/theme/palette";
 
 // ============================================
 // TYPES
@@ -164,35 +166,36 @@ function colorToHex(c: { r: number; g: number; b: number }): string {
 }
 
 // Sky color presets - MOONLIT NIGHT (Zelda BOTW-style)
+// Uses canonical palette colors
 // Night should feel dark but still allow comfortable exploration
-const SKY_COLORS = {
+const SKY_PRESETS = {
   midnight: {
-    zenith: { r: 0.08, g: 0.1, b: 0.22 }, // Deep blue, not black
-    horizon: { r: 0.12, g: 0.15, b: 0.28 }, // Lighter blue at horizon
+    zenith: SKY_COLORS.nightZenith, // From palette abyss
+    horizon: SKY_COLORS.nightHorizon, // From palette deep
   },
   dawn: {
-    zenith: { r: 0.15, g: 0.12, b: 0.25 },
-    horizon: { r: 0.95, g: 0.55, b: 0.35 },
+    zenith: SKY_COLORS.twilightZenith, // From palette rust
+    horizon: hexToRgb01(PALETTE.flame), // Warm dawn horizon
   },
   morning: {
-    zenith: { r: 0.4, g: 0.55, b: 0.85 },
-    horizon: { r: 0.75, g: 0.85, b: 0.95 },
+    zenith: { r: 0.4, g: 0.55, b: 0.75 }, // Blended toward mist
+    horizon: SKY_COLORS.dayHorizon, // From palette meadow
   },
   noon: {
-    zenith: { r: 0.35, g: 0.55, b: 0.9 },
-    horizon: { r: 0.65, g: 0.8, b: 0.95 },
+    zenith: SKY_COLORS.dayZenith, // From palette mist
+    horizon: SKY_COLORS.dayHorizon, // From palette meadow
   },
   afternoon: {
-    zenith: { r: 0.4, g: 0.55, b: 0.85 },
-    horizon: { r: 0.75, g: 0.85, b: 0.95 },
+    zenith: { r: 0.4, g: 0.55, b: 0.75 },
+    horizon: SKY_COLORS.dayHorizon,
   },
   dusk: {
-    zenith: { r: 0.25, g: 0.15, b: 0.35 },
-    horizon: { r: 0.95, g: 0.45, b: 0.25 },
+    zenith: SKY_COLORS.twilightZenith, // From palette rust
+    horizon: hexToRgb01(PALETTE.amber), // Warm dusk horizon
   },
   night: {
-    zenith: { r: 0.1, g: 0.12, b: 0.25 }, // Rich midnight blue
-    horizon: { r: 0.15, g: 0.18, b: 0.32 }, // Moonlit horizon glow
+    zenith: SKY_COLORS.nightZenith,
+    horizon: SKY_COLORS.nightHorizon,
   },
 };
 
@@ -205,62 +208,71 @@ export function skyGradient(timeOfDay: number): SkyColors {
   let sunMoonColor: { r: number; g: number; b: number };
   let ambientColor: { r: number; g: number; b: number };
 
+  // Palette-derived ambient colors
+  const nightAmbient = FOG_COLORS.night;
+  const dayAmbient = { r: 0.55, g: 0.55, b: 0.6 };
+  const twilightAmbient = FOG_COLORS.twilight;
+  
+  // Sun color from palette warm tones
+  const sunWarm = hexToRgb01(PALETTE.amber);
+  const sunHot = hexToRgb01(PALETTE.flame);
+
   if (timeOfDay < 0.1) {
     // Deep night - bright moonlight
     const t = timeOfDay / 0.1;
-    zenith = lerpColor(SKY_COLORS.midnight.zenith, SKY_COLORS.night.zenith, t);
-    horizon = lerpColor(SKY_COLORS.midnight.horizon, SKY_COLORS.night.horizon, t);
+    zenith = lerpColor(SKY_PRESETS.midnight.zenith, SKY_PRESETS.night.zenith, t);
+    horizon = lerpColor(SKY_PRESETS.midnight.horizon, SKY_PRESETS.night.horizon, t);
     sunMoonColor = { r: 0.95, g: 0.95, b: 1.0 }; // Bright moon
-    ambientColor = { r: 0.35, g: 0.38, b: 0.55 }; // Brighter moonlit ambient
+    ambientColor = { r: nightAmbient.r * 2.5, g: nightAmbient.g * 2.5, b: nightAmbient.b * 2 }; // Boost moonlit ambient
   } else if (timeOfDay < 0.2) {
     // Pre-dawn
     const t = (timeOfDay - 0.1) / 0.1;
-    zenith = lerpColor(SKY_COLORS.night.zenith, SKY_COLORS.dawn.zenith, t);
-    horizon = lerpColor(SKY_COLORS.night.horizon, SKY_COLORS.dawn.horizon, t);
-    sunMoonColor = { r: 1.0, g: 0.7, b: 0.4 };
-    ambientColor = lerpColor({ r: 0.35, g: 0.38, b: 0.55 }, { r: 0.4, g: 0.35, b: 0.35 }, t);
+    zenith = lerpColor(SKY_PRESETS.night.zenith, SKY_PRESETS.dawn.zenith, t);
+    horizon = lerpColor(SKY_PRESETS.night.horizon, SKY_PRESETS.dawn.horizon, t);
+    sunMoonColor = sunWarm;
+    ambientColor = lerpColor({ r: nightAmbient.r * 2.5, g: nightAmbient.g * 2.5, b: nightAmbient.b * 2 }, twilightAmbient, t);
   } else if (timeOfDay < 0.35) {
     // Dawn to morning
     const t = (timeOfDay - 0.2) / 0.15;
-    zenith = lerpColor(SKY_COLORS.dawn.zenith, SKY_COLORS.morning.zenith, t);
-    horizon = lerpColor(SKY_COLORS.dawn.horizon, SKY_COLORS.morning.horizon, t);
-    sunMoonColor = lerpColor({ r: 1.0, g: 0.7, b: 0.4 }, { r: 1.0, g: 0.95, b: 0.85 }, t);
-    ambientColor = lerpColor({ r: 0.4, g: 0.35, b: 0.35 }, { r: 0.5, g: 0.5, b: 0.55 }, t);
+    zenith = lerpColor(SKY_PRESETS.dawn.zenith, SKY_PRESETS.morning.zenith, t);
+    horizon = lerpColor(SKY_PRESETS.dawn.horizon, SKY_PRESETS.morning.horizon, t);
+    sunMoonColor = lerpColor(sunWarm, { r: 1.0, g: 0.95, b: 0.85 }, t);
+    ambientColor = lerpColor(twilightAmbient, dayAmbient, t);
   } else if (timeOfDay < 0.5) {
     // Morning to noon
     const t = (timeOfDay - 0.35) / 0.15;
-    zenith = lerpColor(SKY_COLORS.morning.zenith, SKY_COLORS.noon.zenith, t);
-    horizon = lerpColor(SKY_COLORS.morning.horizon, SKY_COLORS.noon.horizon, t);
+    zenith = lerpColor(SKY_PRESETS.morning.zenith, SKY_PRESETS.noon.zenith, t);
+    horizon = lerpColor(SKY_PRESETS.morning.horizon, SKY_PRESETS.noon.horizon, t);
     sunMoonColor = { r: 1.0, g: 0.98, b: 0.9 };
-    ambientColor = { r: 0.55, g: 0.55, b: 0.6 };
+    ambientColor = dayAmbient;
   } else if (timeOfDay < 0.65) {
     // Noon to afternoon
     const t = (timeOfDay - 0.5) / 0.15;
-    zenith = lerpColor(SKY_COLORS.noon.zenith, SKY_COLORS.afternoon.zenith, t);
-    horizon = lerpColor(SKY_COLORS.noon.horizon, SKY_COLORS.afternoon.horizon, t);
+    zenith = lerpColor(SKY_PRESETS.noon.zenith, SKY_PRESETS.afternoon.zenith, t);
+    horizon = lerpColor(SKY_PRESETS.noon.horizon, SKY_PRESETS.afternoon.horizon, t);
     sunMoonColor = { r: 1.0, g: 0.95, b: 0.85 };
-    ambientColor = { r: 0.55, g: 0.55, b: 0.6 };
+    ambientColor = dayAmbient;
   } else if (timeOfDay < 0.8) {
     // Afternoon to dusk
     const t = (timeOfDay - 0.65) / 0.15;
-    zenith = lerpColor(SKY_COLORS.afternoon.zenith, SKY_COLORS.dusk.zenith, t);
-    horizon = lerpColor(SKY_COLORS.afternoon.horizon, SKY_COLORS.dusk.horizon, t);
-    sunMoonColor = lerpColor({ r: 1.0, g: 0.95, b: 0.85 }, { r: 1.0, g: 0.5, b: 0.25 }, t);
-    ambientColor = lerpColor({ r: 0.55, g: 0.55, b: 0.6 }, { r: 0.4, g: 0.3, b: 0.35 }, t);
+    zenith = lerpColor(SKY_PRESETS.afternoon.zenith, SKY_PRESETS.dusk.zenith, t);
+    horizon = lerpColor(SKY_PRESETS.afternoon.horizon, SKY_PRESETS.dusk.horizon, t);
+    sunMoonColor = lerpColor({ r: 1.0, g: 0.95, b: 0.85 }, sunHot, t);
+    ambientColor = lerpColor(dayAmbient, twilightAmbient, t);
   } else if (timeOfDay < 0.9) {
     // Dusk to night
     const t = (timeOfDay - 0.8) / 0.1;
-    zenith = lerpColor(SKY_COLORS.dusk.zenith, SKY_COLORS.night.zenith, t);
-    horizon = lerpColor(SKY_COLORS.dusk.horizon, SKY_COLORS.night.horizon, t);
+    zenith = lerpColor(SKY_PRESETS.dusk.zenith, SKY_PRESETS.night.zenith, t);
+    horizon = lerpColor(SKY_PRESETS.dusk.horizon, SKY_PRESETS.night.horizon, t);
     sunMoonColor = { r: 0.95, g: 0.95, b: 1.0 }; // Moon rising
-    ambientColor = lerpColor({ r: 0.4, g: 0.3, b: 0.35 }, { r: 0.35, g: 0.38, b: 0.55 }, t);
+    ambientColor = lerpColor(twilightAmbient, { r: nightAmbient.r * 2.5, g: nightAmbient.g * 2.5, b: nightAmbient.b * 2 }, t);
   } else {
     // Night to midnight
     const t = (timeOfDay - 0.9) / 0.1;
-    zenith = lerpColor(SKY_COLORS.night.zenith, SKY_COLORS.midnight.zenith, t);
-    horizon = lerpColor(SKY_COLORS.night.horizon, SKY_COLORS.midnight.horizon, t);
+    zenith = lerpColor(SKY_PRESETS.night.zenith, SKY_PRESETS.midnight.zenith, t);
+    horizon = lerpColor(SKY_PRESETS.night.horizon, SKY_PRESETS.midnight.horizon, t);
     sunMoonColor = { r: 0.95, g: 0.95, b: 1.0 }; // Bright moon
-    ambientColor = { r: 0.35, g: 0.38, b: 0.55 }; // Bright moonlit ambient
+    ambientColor = { r: nightAmbient.r * 2.5, g: nightAmbient.g * 2.5, b: nightAmbient.b * 2 }; // Bright moonlit ambient
   }
 
   return {
@@ -290,46 +302,50 @@ export function getLightingParams(timeOfDay: number): LightingParams {
   const night = isNight(timeOfDay);
   const twilight = isTwilight(timeOfDay);
 
-  // Sun/Moon color based on time
+  // Sun/Moon color based on time - using palette
   let sunColor: { r: number; g: number; b: number };
+  const paletteSunWarm = hexToRgb01(PALETTE.amber);
+  
   if (night) {
     // Moonlight - bright silver-blue (full moon!)
     sunColor = { r: 0.85, g: 0.9, b: 1.0 };
   } else if (twilight) {
-    // Warm golden hour
-    sunColor = { r: 1.0, g: 0.75, b: 0.5 };
+    // Warm golden hour from palette
+    sunColor = { r: paletteSunWarm.r, g: paletteSunWarm.g * 0.9, b: paletteSunWarm.b * 0.6 };
   } else {
     // Daylight - warm white
     sunColor = { r: 1.0, g: 0.98, b: 0.92 };
   }
 
-  // Ambient color - MUCH brighter at night for Zelda-style moonlit exploration
+  // Ambient color - using palette fog colors, MUCH brighter at night for Zelda-style moonlit exploration
   let ambientColor: { r: number; g: number; b: number };
   if (night) {
-    // Cool blue moonlight ambient - bright enough to see terrain details
-    ambientColor = { r: 0.45, g: 0.5, b: 0.7 };
+    // Cool blue moonlight ambient - boosted for visibility
+    const nightFog = FOG_COLORS.night;
+    ambientColor = { r: nightFog.r + 0.35, g: nightFog.g + 0.38, b: nightFog.b + 0.55 };
   } else if (twilight) {
-    ambientColor = { r: 0.5, g: 0.45, b: 0.5 };
+    const twilightFog = FOG_COLORS.twilight;
+    ambientColor = { r: twilightFog.r + 0.1, g: twilightFog.g + 0.05, b: twilightFog.b + 0.1 };
   } else {
     ambientColor = { r: 0.55, g: 0.55, b: 0.6 };
   }
 
-  // Fog color and density based on time - lighter fog at night for visibility
+  // Fog color and density based on time - using palette colors
   let fogColor: { r: number; g: number; b: number };
   let fogNear: number;
   let fogFar: number;
 
   if (night) {
-    // Moonlit fog - blue tinted, less dense for better visibility
-    fogColor = { r: 0.12, g: 0.14, b: 0.25 };
+    // Moonlit fog from palette - less dense for better visibility
+    fogColor = FOG_COLORS.night;
     fogNear = 60; // Fog starts further away
     fogFar = 180; // Can see much further at night
   } else if (twilight) {
-    fogColor = { r: 0.35, g: 0.25, b: 0.3 };
+    fogColor = FOG_COLORS.twilight;
     fogNear = 35;
     fogFar = 120;
   } else {
-    fogColor = { r: 0.6, g: 0.7, b: 0.8 };
+    fogColor = FOG_COLORS.day;
     fogNear = 50;
     fogFar = 150;
   }

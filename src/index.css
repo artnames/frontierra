@@ -38,14 +38,27 @@
 
     --radius: 0.25rem;
 
-    /* Custom tokens */
+    /* Custom tokens - derived from canonical palette */
     --grid-line: 180 20% 15%;
     --terminal-glow: 170 80% 50%;
     --data-highlight: 50 90% 55%;
-    --world-ground: 30 40% 25%;
-    --world-water: 200 70% 40%;
-    --world-forest: 120 50% 30%;
-    --world-mountain: 220 10% 45%;
+    
+    /* World colors from palette (HSL conversions) */
+    /* meadow #899C6F → hsl(88, 19%, 52%) */
+    --world-ground: 88 19% 52%;
+    /* abyss #001C24 → hsl(193, 100%, 7%) */
+    --world-water: 193 100% 7%;
+    /* forest #576E45 → hsl(94, 22%, 35%) */
+    --world-forest: 94 22% 35%;
+    /* sage #6B746B → hsl(120, 4%, 44%) */
+    --world-mountain: 120 4% 44%;
+    /* accent colors from palette */
+    /* amber #FE9402 → hsl(35, 99%, 50%) */
+    --accent-primary: 35 99% 50%;
+    /* lime #AAC64B → hsl(75, 51%, 54%) */
+    --accent-secondary: 75 51% 54%;
+    /* crimson #ED0106 → hsl(0, 98%, 47%) */
+    --accent-danger: 0 98% 47%;
 
     --sidebar-background: 220 18% 8%;
     --sidebar-foreground: 180 60% 80%;

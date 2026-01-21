@@ -66,6 +66,12 @@ export default {
           forest: "hsl(var(--world-forest))",
           mountain: "hsl(var(--world-mountain))",
         },
+        // Palette accent colors for UI
+        palette: {
+          primary: "hsl(var(--accent-primary))",
+          secondary: "hsl(var(--accent-secondary))",
+          danger: "hsl(var(--accent-danger))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

@@ -1,6 +1,7 @@
 // Sky Dome - 3D Celestial Sphere in World Space
 // Renders sun, moon, and stars as world-space objects
 // Camera independent - only follows position, not rotation
+// Uses canonical palette from src/theme/palette.ts
 
 import { useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -15,6 +16,7 @@ import {
   TimeOfDayContext 
 } from '@/lib/timeOfDay';
 import { WORLD_A_ID } from '@/lib/worldContext';
+import { PALETTE, SKY_COLORS, hexToRgb01 } from '@/theme/palette';
 
 interface SkyDomeProps {
   worldX?: number;
@@ -267,9 +269,11 @@ function StarField({
       siz[i] = star.size * 2;
       
       // Slight color variation (bluish white to warm white)
+      // Star colors from palette - warm mist tones
+      const baseStar = SKY_COLORS.dayZenith;
       const warmth = star.brightness * 0.3;
-      col[i * 3] = 0.9 + warmth * 0.1;
-      col[i * 3 + 1] = 0.9 + warmth * 0.05;
+      col[i * 3] = Math.min(1.0, baseStar.r + warmth * 0.1);
+      col[i * 3 + 1] = Math.min(1.0, baseStar.g + warmth * 0.05);
       col[i * 3 + 2] = 1.0;
     });
     
