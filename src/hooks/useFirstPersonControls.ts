@@ -252,6 +252,25 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
     };
   }, [gl]);
 
+  // Track last input mode: 'keyboard' | 'touch' | null
+  const lastInputMode = useRef<'keyboard' | 'touch' | null>(null);
+  const mobileActiveRef = useRef(false);
+  
+  // Detect if mobile joystick is actively being used
+  useEffect(() => {
+    const checkMobileActive = () => {
+      const wasActive = mobileActiveRef.current;
+      mobileActiveRef.current = mobileMovement.forward || mobileMovement.backward || 
+                                 mobileMovement.left || mobileMovement.right;
+      if (mobileActiveRef.current && !wasActive) {
+        lastInputMode.current = 'touch';
+      }
+    };
+    
+    const interval = setInterval(checkMobileActive, 50);
+    return () => clearInterval(interval);
+  }, []);
+
   useFrame((_, delta) => {
     if (!enabled) return;
 
@@ -271,11 +290,32 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
     }
     
     const speed = 3 * delta; // Slower walking speed for realistic scale
-    // Merge keyboard and mobile joystick input
-    const forward = moveState.current.forward || mobileMovement.forward;
-    const backward = moveState.current.backward || mobileMovement.backward;
-    const left = moveState.current.left || mobileMovement.left;
-    const right = moveState.current.right || mobileMovement.right;
+    
+    // FIX #7: Determine input mode and prioritize one source
+    // If mobile joystick is active, ignore keyboard. Otherwise use keyboard.
+    const keyboardActive = moveState.current.forward || moveState.current.backward || 
+                           moveState.current.left || moveState.current.right;
+    const mobileActive = mobileMovement.forward || mobileMovement.backward || 
+                         mobileMovement.left || mobileMovement.right;
+    
+    // Update last input mode
+    if (mobileActive) lastInputMode.current = 'touch';
+    else if (keyboardActive) lastInputMode.current = 'keyboard';
+    
+    // Prioritize: if touch is active, use touch. Otherwise use keyboard.
+    let forward: boolean, backward: boolean, left: boolean, right: boolean;
+    if (mobileActive) {
+      forward = mobileMovement.forward;
+      backward = mobileMovement.backward;
+      left = mobileMovement.left;
+      right = mobileMovement.right;
+    } else {
+      forward = moveState.current.forward;
+      backward = moveState.current.backward;
+      left = moveState.current.left;
+      right = moveState.current.right;
+    }
+    
     const { up, down } = moveState.current;
     const { yaw, pitch } = rotationState.current;
 
@@ -315,23 +355,41 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
         position.current.z = newZ;
 
         // Update height based on terrain + manual offset
-        // Calculate slope-aware eye height to prevent clipping on steep terrain
+        // FIX #1: Calculate slope-aware eye height with safe guards
         const terrainHeight = getElevationAt(world, newX, newZ);
         const prevTerrainHeight = getElevationAt(world, position.current.x, position.current.z);
-        const slopeGradient = Math.abs(terrainHeight - prevTerrainHeight) / (speed || 0.1);
+        
+        // Use safe minimum speed to prevent division by zero/near-zero
+        const safeSpeed = Math.max(speed, 0.05);
+        let slopeGradient = Math.abs(terrainHeight - prevTerrainHeight) / safeSpeed;
+        
+        // Clamp slope gradient to reasonable range (0..10)
+        slopeGradient = Math.min(Math.max(slopeGradient, 0), 10);
+        
+        // Guard against NaN/Infinity
+        if (!Number.isFinite(slopeGradient)) slopeGradient = 0;
+        
         const slopeBoost = Math.min(slopeGradient * 0.3, 0.5); // Up to 0.5 extra height on steep slopes
         const baseEyeHeight = 0.7;
-        position.current.y = terrainHeight + baseEyeHeight + slopeBoost + manualHeightOffset.current;
+        let newY = terrainHeight + baseEyeHeight + slopeBoost + manualHeightOffset.current;
+        
+        // Final NaN guard
+        if (!Number.isFinite(newY)) newY = terrainHeight + baseEyeHeight;
+        position.current.y = newY;
       } else if (inBounds) {
         // Explore mode: try sliding along obstacles (water edges)
         if (isWalkable(world, newX, position.current.z)) {
           position.current.x = newX;
           const terrainHeight = getElevationAt(world, newX, position.current.z);
-          position.current.y = terrainHeight + 0.7 + manualHeightOffset.current;
+          let newY = terrainHeight + 0.7 + manualHeightOffset.current;
+          if (!Number.isFinite(newY)) newY = terrainHeight + 0.7;
+          position.current.y = newY;
         } else if (isWalkable(world, position.current.x, newZ)) {
           position.current.z = newZ;
           const terrainHeight = getElevationAt(world, position.current.x, newZ);
-          position.current.y = terrainHeight + 0.7 + manualHeightOffset.current;
+          let newY = terrainHeight + 0.7 + manualHeightOffset.current;
+          if (!Number.isFinite(newY)) newY = terrainHeight + 0.7;
+          position.current.y = newY;
         }
       }
     }
@@ -344,13 +402,17 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
       if (down) {
         manualHeightOffset.current = Math.max(-1, manualHeightOffset.current - speed);
         const terrainHeight = getElevationAt(world, position.current.x, position.current.z);
-        position.current.y = Math.max(terrainHeight + 0.3, terrainHeight + 0.7 + manualHeightOffset.current);
+        let newY = Math.max(terrainHeight + 0.3, terrainHeight + 0.7 + manualHeightOffset.current);
+        if (!Number.isFinite(newY)) newY = terrainHeight + 0.7;
+        position.current.y = newY;
       }
       
       // Apply current height with offset
       if (up || down) {
         const terrainHeight = getElevationAt(world, position.current.x, position.current.z);
-        position.current.y = terrainHeight + 0.7 + manualHeightOffset.current;
+        let newY = terrainHeight + 0.7 + manualHeightOffset.current;
+        if (!Number.isFinite(newY)) newY = terrainHeight + 0.7;
+        position.current.y = newY;
       }
     } else {
       // Ground-locked mode - always snap to terrain every frame
@@ -365,17 +427,27 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
       const heightE = getElevationAt(world, position.current.x + sampleDist, position.current.z);
       const heightW = getElevationAt(world, position.current.x - sampleDist, position.current.z);
       
+      // Guard against NaN in slope samples
+      const safeHeightN = Number.isFinite(heightN) ? heightN : terrainHeight;
+      const safeHeightS = Number.isFinite(heightS) ? heightS : terrainHeight;
+      const safeHeightE = Number.isFinite(heightE) ? heightE : terrainHeight;
+      const safeHeightW = Number.isFinite(heightW) ? heightW : terrainHeight;
+      
       const maxSlope = Math.max(
-        Math.abs(heightN - terrainHeight),
-        Math.abs(heightS - terrainHeight),
-        Math.abs(heightE - terrainHeight),
-        Math.abs(heightW - terrainHeight)
+        Math.abs(safeHeightN - terrainHeight),
+        Math.abs(safeHeightS - terrainHeight),
+        Math.abs(safeHeightE - terrainHeight),
+        Math.abs(safeHeightW - terrainHeight)
       );
       
       // Boost eye height on steep slopes (up to 0.6 extra at maximum steepness)
-      const slopeBoost = Math.min(maxSlope * 0.4, 0.6);
+      let slopeBoost = Math.min(maxSlope * 0.4, 0.6);
+      if (!Number.isFinite(slopeBoost)) slopeBoost = 0;
+      
       const baseEyeHeight = 0.7;
-      position.current.y = terrainHeight + baseEyeHeight + slopeBoost;
+      let newY = terrainHeight + baseEyeHeight + slopeBoost;
+      if (!Number.isFinite(newY)) newY = baseEyeHeight;
+      position.current.y = newY;
     }
 
     // Apply position and rotation to camera

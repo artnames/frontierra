@@ -2,7 +2,7 @@
 // Detects when player crosses land boundaries and triggers world swap
 // Records trails for social presence
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { 
   PlayerLand, 
   EdgeDirection, 
@@ -13,6 +13,7 @@ import {
 } from '@/lib/multiplayer/types';
 import { getLandAtPosition } from '@/lib/multiplayer/landRegistry';
 import { recordTrail } from '@/lib/multiplayer/socialRegistry';
+
 interface EdgeTransitionState {
   isTransitioning: boolean;
   currentLand: PlayerLand | null;
@@ -30,6 +31,12 @@ interface UseEdgeTransitionOptions {
   onTransitionFailed?: (error: string) => void;
 }
 
+// FIX #8: Debounce interval for edge detection (100ms = 10fps max)
+const EDGE_CHECK_DEBOUNCE_MS = 100;
+
+// FIX #4: Emergency unlock timeout (5 seconds)
+const EMERGENCY_UNLOCK_TIMEOUT_MS = 5000;
+
 export function useEdgeTransition(options: UseEdgeTransitionOptions = {}) {
   const [state, setState] = useState<EdgeTransitionState>({
     isTransitioning: false,
@@ -38,6 +45,17 @@ export function useEdgeTransition(options: UseEdgeTransitionOptions = {}) {
   });
   
   const transitionLockRef = useRef(false);
+  const lastEdgeCheckRef = useRef(0); // FIX #8: Debounce tracking
+  const emergencyUnlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // FIX #4: Cleanup emergency unlock timer on unmount
+  useEffect(() => {
+    return () => {
+      if (emergencyUnlockTimerRef.current) {
+        clearTimeout(emergencyUnlockTimerRef.current);
+      }
+    };
+  }, []);
   
   // Set the current land context
   const setCurrentLand = useCallback((land: PlayerLand | null) => {
@@ -67,6 +85,13 @@ export function useEdgeTransition(options: UseEdgeTransitionOptions = {}) {
     playerX: number,
     playerZ: number
   ) => {
+    // FIX #8: Debounce edge checks to max 10fps
+    const now = Date.now();
+    if (now - lastEdgeCheckRef.current < EDGE_CHECK_DEBOUNCE_MS) {
+      return;
+    }
+    lastEdgeCheckRef.current = now;
+    
     // Skip if already transitioning or no current land
     if (transitionLockRef.current || !state.currentLand) {
       return;
@@ -80,6 +105,18 @@ export function useEdgeTransition(options: UseEdgeTransitionOptions = {}) {
     // Lock to prevent multiple transitions
     transitionLockRef.current = true;
     setState(prev => ({ ...prev, isTransitioning: true }));
+    
+    // FIX #4: Set emergency unlock timer
+    if (emergencyUnlockTimerRef.current) {
+      clearTimeout(emergencyUnlockTimerRef.current);
+    }
+    emergencyUnlockTimerRef.current = setTimeout(() => {
+      if (transitionLockRef.current) {
+        console.warn('[EdgeTransition] Emergency unlock triggered after timeout');
+        transitionLockRef.current = false;
+        setState(prev => ({ ...prev, isTransitioning: false, pendingCrossing: null }));
+      }
+    }, EMERGENCY_UNLOCK_TIMEOUT_MS);
     
     try {
       // Get neighbor grid position
@@ -143,6 +180,13 @@ export function useEdgeTransition(options: UseEdgeTransitionOptions = {}) {
       options.onTransitionFailed?.(message);
       setState(prev => ({ ...prev, isTransitioning: false, pendingCrossing: null }));
     } finally {
+      // FIX #4: Release lock in finally block (always runs)
+      // Clear emergency timer since we're done
+      if (emergencyUnlockTimerRef.current) {
+        clearTimeout(emergencyUnlockTimerRef.current);
+        emergencyUnlockTimerRef.current = null;
+      }
+      
       // Short delay before allowing another transition
       setTimeout(() => {
         transitionLockRef.current = false;
