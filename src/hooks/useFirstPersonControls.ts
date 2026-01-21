@@ -37,6 +37,9 @@ export function setMobileMovement(forward: boolean, backward: boolean, left: boo
   mobileMovement.right = right;
 }
 
+// FIX E: Input mode lock cooldown (500ms) to prevent jitter between input modes
+const INPUT_MODE_LOCK_MS = 500;
+
 export function useFirstPersonControls({ world, onPositionChange, preservePosition = true, enabled = true, allowVerticalMovement = true }: FirstPersonControlsProps) {
   const { camera, gl } = useThree();
   const moveState = useRef({
@@ -53,6 +56,12 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
   const position = useRef(new THREE.Vector3());
   const manualHeightOffset = useRef(0); // Store manual height offset from terrain
   const isInitialized = useRef(false);
+
+  // FIX E: Input mode lock state
+  const inputModeRef = useRef<'keyboard' | 'touch' | null>(null);
+  const inputModeLockUntilRef = useRef<number>(0);
+  const lastTouchActivityRef = useRef<number>(0);
+  const lastKeyboardActivityRef = useRef<number>(0);
 
   // Initialize camera position only once (preserve across seed changes in editor mode)
   // OR apply pending transition position when world regenerates after land crossing
@@ -104,12 +113,15 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
     }
   }, [world, preservePosition]);
 
-  // Keyboard controls
+  // Keyboard controls - track activity timestamp
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
+      
+      // FIX E: Track keyboard activity
+      lastKeyboardActivityRef.current = Date.now();
       
       switch (e.code) {
         case 'KeyW':
@@ -209,11 +221,13 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
       canvas.style.cursor = 'grab';
     };
 
-    // Touch controls
+    // Touch controls - track activity timestamp
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 1) {
         isDragging.current = true;
         lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        // FIX E: Track touch activity
+        lastTouchActivityRef.current = Date.now();
       }
     };
 
@@ -228,6 +242,8 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
       rotationState.current.pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, rotationState.current.pitch));
 
       lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      // FIX E: Track touch activity
+      lastTouchActivityRef.current = Date.now();
     };
 
     const handleTouchEnd = () => {
@@ -252,18 +268,13 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
     };
   }, [gl]);
 
-  // Track last input mode: 'keyboard' | 'touch' | null
-  const lastInputMode = useRef<'keyboard' | 'touch' | null>(null);
-  const mobileActiveRef = useRef(false);
-  
-  // Detect if mobile joystick is actively being used
+  // FIX E: Track mobile joystick activity
   useEffect(() => {
     const checkMobileActive = () => {
-      const wasActive = mobileActiveRef.current;
-      mobileActiveRef.current = mobileMovement.forward || mobileMovement.backward || 
-                                 mobileMovement.left || mobileMovement.right;
-      if (mobileActiveRef.current && !wasActive) {
-        lastInputMode.current = 'touch';
+      const isActive = mobileMovement.forward || mobileMovement.backward || 
+                       mobileMovement.left || mobileMovement.right;
+      if (isActive) {
+        lastTouchActivityRef.current = Date.now();
       }
     };
     
@@ -290,21 +301,47 @@ export function useFirstPersonControls({ world, onPositionChange, preservePositi
     }
     
     const speed = 3 * delta; // Slower walking speed for realistic scale
+    const now = Date.now();
     
-    // FIX #7: Determine input mode and prioritize one source
-    // If mobile joystick is active, ignore keyboard. Otherwise use keyboard.
+    // FIX E: Determine input mode with lock cooldown
     const keyboardActive = moveState.current.forward || moveState.current.backward || 
                            moveState.current.left || moveState.current.right;
     const mobileActive = mobileMovement.forward || mobileMovement.backward || 
                          mobileMovement.left || mobileMovement.right;
     
-    // Update last input mode
-    if (mobileActive) lastInputMode.current = 'touch';
-    else if (keyboardActive) lastInputMode.current = 'keyboard';
+    // Check if current mode lock has expired
+    const lockExpired = now >= inputModeLockUntilRef.current;
     
-    // Prioritize: if touch is active, use touch. Otherwise use keyboard.
+    // Determine which mode to use based on activity and lock
+    let activeMode: 'keyboard' | 'touch' | null = null;
+    
+    if (mobileActive && keyboardActive) {
+      // Both active - use the most recent one, but respect lock
+      if (!lockExpired && inputModeRef.current) {
+        activeMode = inputModeRef.current;
+      } else {
+        // Use most recent activity
+        if (lastTouchActivityRef.current > lastKeyboardActivityRef.current) {
+          activeMode = 'touch';
+        } else {
+          activeMode = 'keyboard';
+        }
+      }
+    } else if (mobileActive) {
+      activeMode = 'touch';
+    } else if (keyboardActive) {
+      activeMode = 'keyboard';
+    }
+    
+    // Update lock if mode changed
+    if (activeMode && activeMode !== inputModeRef.current) {
+      inputModeRef.current = activeMode;
+      inputModeLockUntilRef.current = now + INPUT_MODE_LOCK_MS;
+    }
+    
+    // Select input based on active mode
     let forward: boolean, backward: boolean, left: boolean, right: boolean;
-    if (mobileActive) {
+    if (activeMode === 'touch') {
       forward = mobileMovement.forward;
       backward = mobileMovement.backward;
       left = mobileMovement.left;
