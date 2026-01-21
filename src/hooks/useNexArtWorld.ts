@@ -1,5 +1,6 @@
 // Debounced NexArt World Generation Hook
 // Handles async execution, debouncing during slider changes, and atomic world swap
+// BUG-002: Implements proper AbortController cancellation for race-proof generation
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { WorldData, generateWorldDataAsync, cacheWorldData, isWorldValid } from '@/lib/worldData';
@@ -49,6 +50,9 @@ export function useNexArtWorld({
   const lastGeneratedKeyRef = useRef<string>('');
   const isGeneratingRef = useRef(false);
   
+  // BUG-002: AbortController for cancellation
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
   // Normalize inputs once
   const input = useMemo(() => normalizeNexArtInput({
     seed,
@@ -82,10 +86,19 @@ export function useNexArtWorld({
     version: 'v1' | 'v2',
     overrides: Map<number, number> | undefined
   ) => {
-    // Prevent duplicate generations
+    // Prevent duplicate generations for same key
     if (isGeneratingRef.current && lastGeneratedKeyRef.current === key) {
       return;
     }
+    
+    // BUG-002: Cancel any in-flight generation
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Create new AbortController for this generation
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     
     const currentGenId = ++generationIdRef.current;
     isGeneratingRef.current = true;
@@ -94,12 +107,20 @@ export function useNexArtWorld({
     setError(null);
     
     try {
-      console.log(`[NexArt] Generating world with version=${version}, overrides=${overrides?.size ?? 0}`);
+      console.log(`[NexArt] Generating world with version=${version}, overrides=${overrides?.size ?? 0}, genId=${currentGenId}`);
       const worldData = await generateWorldDataAsync(targetSeed, targetVars, fullWorldContext, version, overrides);
       
-      // Check if this generation is still current
+      // BUG-002: Check AFTER async work if this generation is still current
+      // This is the key fix - check happens after await, not before
       if (currentGenId !== generationIdRef.current) {
+        console.log(`[NexArt] Generation ${currentGenId} superseded by ${generationIdRef.current}, discarding`);
         return; // Superseded by newer generation
+      }
+      
+      // BUG-002: Also check if aborted
+      if (controller.signal.aborted) {
+        console.log(`[NexArt] Generation ${currentGenId} was aborted, discarding`);
+        return;
       }
       
       if (!isWorldValid(worldData)) {
@@ -114,12 +135,16 @@ export function useNexArtWorld({
         lastGeneratedKeyRef.current = key;
       }
     } catch (err) {
-      if (currentGenId !== generationIdRef.current) return;
+      // BUG-002: Don't set error state if aborted or superseded
+      if (currentGenId !== generationIdRef.current || controller.signal.aborted) {
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       setError(`World cannot be verified — ${message}`);
       setWorld(null);
     } finally {
-      if (currentGenId === generationIdRef.current) {
+      // BUG-002: Only update loading state if this is still the current generation
+      if (currentGenId === generationIdRef.current && !controller.signal.aborted) {
         setIsLoading(false);
         setIsVerifying(false);
         isGeneratingRef.current = false;
@@ -159,6 +184,18 @@ export function useNexArtWorld({
       }
     };
   }, [paramsKey, debounceMs, generateWorld, input.seed, input.vars, mappingVersion, microOverrides]);
+  
+  // BUG-002: Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
   
   const forceRegenerate = useCallback(() => {
     // Clear the last key to force regeneration
