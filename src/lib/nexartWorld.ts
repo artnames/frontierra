@@ -4,7 +4,7 @@
 
 import { WORLD_LAYOUT_SOURCE, WORLD_A_LAYOUT_SOURCE, WorldParams } from './worldGenerator';
 import { WORLD_LAYOUT_SOURCE_V2 } from './worldGeneratorV2';
-import { WORLD_UNIFIED_LAYOUT_SOURCE_V2, deriveSoloWorldContext } from './worldGeneratorUnified';
+import { WORLD_V2_REFINEMENT_SOURCE, deriveSoloWorldContextV2 } from './worldGeneratorV2Refinement';
 import { 
   WorldContext, 
   getWorldSeed, 
@@ -141,17 +141,17 @@ export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<
   let effectiveWorldContext = input.worldContext;
   
   if (isV2Mode) {
-    // V2 uses unified generator for BOTH Solo and Multiplayer
-    source = WORLD_UNIFIED_LAYOUT_SOURCE_V2;
+    // V2 is a REFINEMENT of V1, not a replacement
+    // Uses the same base logic but with micro-refinements
+    source = WORLD_V2_REFINEMENT_SOURCE;
     
-    // For Solo V2, derive world context from seed
-    if (!isWorldA) {
-      const soloContext = deriveSoloWorldContext(input.seed);
-      effectiveWorldContext = {
-        worldId: WORLD_A_ID,
-        worldX: soloContext.worldX,
-        worldY: soloContext.worldY
-      };
+    // V2 Solo doesn't need world context - it uses refined V1 logic
+    // Only World A mode uses world context
+    if (isWorldA) {
+      // Keep the existing world context for multiplayer
+    } else {
+      // Solo V2 uses the refinement source without world context injection
+      effectiveWorldContext = undefined;
     }
   } else if (isWorldA) {
     // V1 World A mode (legacy multiplayer)
