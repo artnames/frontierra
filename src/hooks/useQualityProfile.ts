@@ -1,7 +1,14 @@
 // Quality Profile Hook - Adapts rendering settings based on device capabilities
 // Mobile devices get reduced quality for stable performance
+// Integrates with user performance level setting from visualSettings
 
 import { useMemo, useEffect, useState } from 'react';
+import { 
+  loadVisualSettings, 
+  getEffectivePerformancePreset,
+  type PerformanceLevel,
+  type PerformancePreset,
+} from '@/lib/visualSettings';
 
 export interface QualityProfile {
   isMobile: boolean;
@@ -18,6 +25,8 @@ export interface QualityProfile {
   fogEnabled: boolean;
   microDetailEnabled: boolean;
   antialiasEnabled: boolean;
+  // User preference
+  performanceLevel: PerformanceLevel;
 }
 
 // Detect if device is likely mobile based on touch + screen size
@@ -43,19 +52,6 @@ function detectLowEnd(): boolean {
   return cores <= 2 || memory <= 2;
 }
 
-// Get safe device pixel ratio (capped for performance)
-function getDevicePixelRatioCap(isMobile: boolean, isLowEnd: boolean): number {
-  const native = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
-  
-  if (isLowEnd) {
-    return Math.min(native, 1.0);
-  }
-  if (isMobile) {
-    return Math.min(native, 1.25);
-  }
-  return Math.min(native, 2.0);
-}
-
 export function useQualityProfile(): QualityProfile {
   const [profile, setProfile] = useState<QualityProfile>(() => createProfile());
   
@@ -65,8 +61,20 @@ export function useQualityProfile(): QualityProfile {
       setProfile(createProfile());
     };
     
+    // Also re-evaluate when localStorage changes (settings updated)
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'nexart-visual-settings') {
+        setProfile(createProfile());
+      }
+    };
+    
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('storage', handleStorage);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
   
   return profile;
@@ -76,62 +84,33 @@ function createProfile(): QualityProfile {
   const isMobile = detectMobile();
   const isLowEnd = detectLowEnd();
   const devicePixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
-  const devicePixelRatioCap = getDevicePixelRatioCap(isMobile, isLowEnd);
   
-  if (isLowEnd) {
-    return {
-      isMobile,
-      isLowEnd,
-      devicePixelRatio,
-      devicePixelRatioCap,
-      terrainResolutionScale: 0.5,
-      shadowsEnabled: false,
-      shadowMapSize: 512,
-      postFxEnabled: false,
-      waterAnimationEnabled: false,
-      vegetationDensity: 0.3,
-      maxTreeInstances: 100,
-      fogEnabled: true,
-      microDetailEnabled: false,
-      antialiasEnabled: false,
-    };
-  }
+  // Get user performance preference
+  const settings = loadVisualSettings();
+  const performanceLevel = settings.performanceLevel;
   
-  if (isMobile) {
-    return {
-      isMobile,
-      isLowEnd,
-      devicePixelRatio,
-      devicePixelRatioCap,
-      terrainResolutionScale: 0.75,
-      shadowsEnabled: false,
-      shadowMapSize: 1024,
-      postFxEnabled: false,
-      waterAnimationEnabled: true,
-      vegetationDensity: 0.6,
-      maxTreeInstances: 300,
-      fogEnabled: true,
-      microDetailEnabled: false,
-      antialiasEnabled: false,
-    };
-  }
+  // Get effective preset based on user preference and device detection
+  const preset = getEffectivePerformancePreset(performanceLevel, isMobile, isLowEnd);
   
-  // Desktop - full quality
+  // Cap DPR based on preset
+  const devicePixelRatioCap = Math.min(devicePixelRatio, preset.dprCap);
+  
   return {
     isMobile,
     isLowEnd,
     devicePixelRatio,
     devicePixelRatioCap,
-    terrainResolutionScale: 1.0,
-    shadowsEnabled: true,
-    shadowMapSize: 2048,
-    postFxEnabled: true,
-    waterAnimationEnabled: true,
-    vegetationDensity: 1.0,
-    maxTreeInstances: 1000,
-    fogEnabled: true,
-    microDetailEnabled: true,
-    antialiasEnabled: true,
+    terrainResolutionScale: isLowEnd ? 0.5 : isMobile ? 0.75 : 1.0,
+    shadowsEnabled: preset.shadowsEnabled,
+    shadowMapSize: isLowEnd ? 512 : isMobile ? 1024 : 2048,
+    postFxEnabled: preset.postFxEnabled,
+    waterAnimationEnabled: preset.waterAnimationEnabled,
+    vegetationDensity: preset.vegetationDensity,
+    maxTreeInstances: preset.maxTreeInstances,
+    fogEnabled: preset.fogEnabled,
+    microDetailEnabled: preset.microDetailEnabled,
+    antialiasEnabled: !isLowEnd && !isMobile,
+    performanceLevel,
   };
 }
 

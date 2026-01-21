@@ -1,6 +1,7 @@
 // Frontierra Canonical Palette
 // All visual colors in the game derive from these 12 base hues.
 // CRITICAL: No other hex values should appear outside this file.
+// Updated with new sprint palette: ccd4c9, 6b746b, 232D26, 576E45, 899C6F, AAC64b, FE9402, fd5602, ed0106, 7A3427, 001c24, d17A74
 
 import * as THREE from 'three';
 
@@ -240,3 +241,53 @@ export const FOG_COLORS = {
   night: hexToRgb01(ROLES.fogNight),
   twilight: hexToRgb01(ROLES.fogTwilight),
 } as const;
+
+// ============================================
+// CSS CUSTOM PROPERTY HELPERS
+// ============================================
+
+/**
+ * Convert hex to CSS HSL string for Tailwind/CSS custom properties
+ */
+export function hexToHsl(hex: string): { h: number; s: number; l: number } {
+  const rgb = hexToRgb01(hex);
+  const r = rgb.r;
+  const g = rgb.g;
+  const b = rgb.b;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r:
+        h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+        break;
+      case g:
+        h = ((b - r) / d + 2) / 6;
+        break;
+      case b:
+        h = ((r - g) / d + 4) / 6;
+        break;
+    }
+  }
+
+  return {
+    h: Math.round(h * 360),
+    s: Math.round(s * 100),
+    l: Math.round(l * 100),
+  };
+}
+
+/**
+ * Get HSL string for CSS custom property
+ */
+export function paletteToHslString(key: keyof typeof PALETTE): string {
+  const hsl = hexToHsl(PALETTE[key]);
+  return `${hsl.h} ${hsl.s}% ${hsl.l}%`;
+}
