@@ -18,11 +18,12 @@ export interface PostFXZeldaProps {
 }
 
 // Strength presets - tuned for BRIGHT Zelda/Genshin look
+// VIGNETTE FIX: Reduced darkness and pushed to edges for more transparency
 const STRENGTH_PRESETS = {
   subtle: {
     bloom: 0.15,
-    vignette: 0.06, // Very light vignette
-    vignetteOffset: 0.96, // Pushed to edges
+    vignette: 0.03, // Very light vignette (reduced from 0.06)
+    vignetteOffset: 0.98, // Pushed further to edges (was 0.96)
     saturation: 1.12,
     contrast: 1.02,
     brightness: 1.08, // Slight brightness boost
@@ -31,8 +32,8 @@ const STRENGTH_PRESETS = {
   },
   strong: {
     bloom: 0.28,
-    vignette: 0.12,
-    vignetteOffset: 0.93,
+    vignette: 0.06, // Reduced from 0.12
+    vignetteOffset: 0.96, // Pushed to edges (was 0.93)
     saturation: 1.22,
     contrast: 1.05,
     brightness: 1.12,
@@ -40,10 +41,11 @@ const STRENGTH_PRESETS = {
     noise: 0.01,
   },
   // "popping" preset - vivid colors with more saturation
+  // VIGNETTE FIX: Made edges more transparent while keeping cinematic feel
   zelda: {
     bloom: 0.22,
-    vignette: 0.08, // Light vignette
-    vignetteOffset: 0.95, // Very edge-focused
+    vignette: 0.04, // Reduced from 0.08 for more transparent edges
+    vignetteOffset: 0.97, // Pushed further to edges (was 0.95)
     saturation: 1.18, // Vibrant colors
     contrast: 1.04, // Slight punch
     brightness: 1.1, // Brighter
@@ -103,12 +105,13 @@ class ScreenPostFXMaterial extends THREE.ShaderMaterial {
           return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
         }
         
-        // Very soft vignette - barely darkens, mostly for focus
+        // Very soft vignette - barely darkens, mostly for subtle focus
+        // VIGNETTE FIX: Reduced darkening multiplier for more transparent edges
         float vignette(vec2 uv, float strength, float offset) {
           vec2 coord = (uv - 0.5) * 2.0;
           float dist = length(coord);
-          // Softer falloff curve
-          float vig = 1.0 - smoothstep(offset, offset + strength * 2.0, dist) * 0.5;
+          // Softer falloff curve with reduced darkening (0.3 instead of 0.5)
+          float vig = 1.0 - smoothstep(offset, offset + strength * 2.5, dist) * 0.3;
           return vig;
         }
         

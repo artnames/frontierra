@@ -3,6 +3,7 @@
 // CRITICAL: Uses canonical palette from src/theme/palette.ts
 // Rivers use Marching Squares + Chaikin smoothing for smooth silhouettes
 // FIX A: Proper geometry/material disposal with refs to avoid race conditions
+// RIVER FIX: Ensure rivers are always visible with proper colors and depth settings
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
@@ -15,7 +16,9 @@ import {
   computeRiverCarveDepth,
 } from "@/lib/worldConstants";
 import { buildSmoothRiverGeometry, hasRiverCells } from "@/lib/riverContourMesh";
-import { toThreeColor, ROLES } from "@/theme/palette";
+import { toThreeColor, ROLES, PALETTE } from "@/theme/palette";
+
+const DEV = import.meta.env.DEV;
 
 interface EnhancedWaterPlaneProps {
   world: WorldData;
@@ -128,6 +131,15 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     return getWaterHeight(world.vars);
   }, [world?.vars]);
 
+  // RIVER FIX: Check if world has river cells and log in DEV mode
+  const hasRivers = useMemo(() => {
+    const result = world ? hasRiverCells(world) : false;
+    if (DEV) {
+      console.debug(`[EnhancedWaterPlane] hasRivers=${result}, waterHeight=${waterHeight.toFixed(2)}`);
+    }
+    return result;
+  }, [world, waterHeight]);
+
   // River geometry - smooth contour-based mesh using Marching Squares
   const riverGeo = useMemo(() => {
     if (!world || !world.terrain || world.terrain.length === 0) {
@@ -135,19 +147,26 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     }
 
     // Try smooth contour-based mesh first
-    if (hasRiverCells(world)) {
+    if (hasRivers) {
       const smoothGeo = buildSmoothRiverGeometry(world, worldX, worldY);
       
       // Check if we got valid geometry
       const posAttr = smoothGeo.getAttribute('position');
       if (posAttr && posAttr.count >= 3) {
+        if (DEV) {
+          console.debug(`[EnhancedWaterPlane] River contour mesh: ${posAttr.count} vertices`);
+        }
         return smoothGeo;
       }
       smoothGeo.dispose();
+      
+      if (DEV) {
+        console.warn('[EnhancedWaterPlane] Contour mesh failed, using cell-based fallback');
+      }
     }
 
     // Fallback: cell-based geometry (old method)
-    const SURFACE_LIFT = 0.02;
+    const SURFACE_LIFT = 0.05; // RIVER FIX: Increased lift to prevent z-fighting
     const bankClearance = 0.02;
 
     return buildWaterGeometry(
@@ -170,9 +189,9 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
         const surface = Math.min(waterSurface, baseH - bankClearance);
         return surface + SURFACE_LIFT;
       },
-      0.55,
+      0.75, // RIVER FIX: Increased edge floor from 0.55 for more visible edges
     );
-  }, [world, worldX, worldY, heightScale]);
+  }, [world, worldX, worldY, heightScale, hasRivers]);
 
   // Lake/ocean geometry - flat plane at water level
   const lakeGeo = useMemo(() => {
@@ -192,15 +211,24 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   }, [world, worldX, worldY, waterHeight]);
 
   const material = useMemo(() => {
-    // Use palette colors for water
-    const deepColor = toThreeColor(ROLES.waterDeep, { linear: true });
-    const shallowColor = toThreeColor(ROLES.waterShallow, { linear: true });
-    const foamColor = toThreeColor(ROLES.foam, { linear: true });
+    // RIVER FIX: Use palette colors for water with proper fallbacks
+    // Use abyss (#001C24) for deep water as specified in the palette
+    const deepColor = toThreeColor(PALETTE.abyss, { linear: true });
+    const shallowColor = toThreeColor(PALETTE.forest, { linear: true });
+    const foamColor = toThreeColor(PALETTE.mist, { linear: true });
+    
+    if (DEV) {
+      console.debug('[EnhancedWaterPlane] Water colors:', {
+        deep: PALETTE.abyss,
+        shallow: PALETTE.forest,
+        foam: PALETTE.mist
+      });
+    }
     
     const m = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uOpacity: { value: 0.75 },
+        uOpacity: { value: 0.85 }, // RIVER FIX: Increased base opacity from 0.75
         uDeep: { value: deepColor },
         uShallow: { value: shallowColor },
         uFoam: { value: foamColor },
@@ -241,24 +269,27 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
           float w2 = noise(vWPos.xz * 2.0 - t * 0.4);
           float w = (w1 + w2) * 0.5;
 
-          vec3 col = mix(uDeep, uShallow, w);
+          // RIVER FIX: Base color blend between deep and shallow
+          vec3 col = mix(uDeep, uShallow, w * 0.6 + 0.2);
 
+          // RIVER FIX: Improved edge fade - minimum opacity of 0.5 at edges
           float edgeFade = smoothstep(0.0, 1.0, vEdge);
-          float a = uOpacity * mix(0.35, 1.0, edgeFade);
+          float a = uOpacity * mix(0.5, 1.0, edgeFade);
 
           // Add foam at edges using palette color
-          float foamAmount = (1.0 - edgeFade) * 0.25;
+          float foamAmount = (1.0 - edgeFade) * 0.3;
           col = mix(col, uFoam, foamAmount);
 
           gl_FragColor = vec4(col, a);
         }
       `,
       transparent: true,
-      side: THREE.FrontSide,
+      side: THREE.DoubleSide, // RIVER FIX: Render both sides to ensure visibility
       depthWrite: false,
+      depthTest: true, // RIVER FIX: Enable depth test
       polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
+      polygonOffsetFactor: -2, // RIVER FIX: Stronger offset to prevent z-fighting
+      polygonOffsetUnits: -2,
     });
 
     matRef.current = m;
