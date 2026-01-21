@@ -87,9 +87,24 @@ function seededRandom(x: number, y: number, seedOffset: number): number {
 }
 
 // Helper to create color strings from palette with variation
-function getVegColor(baseColor: { r: number; g: number; b: number }, variation: number, shift: number = 20): string {
+// VEGETATION FIX: Safe color helper that never returns white/undefined
+function getVegColor(baseColor: { r: number; g: number; b: number } | undefined | null, variation: number, shift: number = 20): string {
+  // VEGETATION FIX: Fallback to meadow green if baseColor is invalid
+  if (!baseColor || typeof baseColor.r !== 'number' || typeof baseColor.g !== 'number' || typeof baseColor.b !== 'number') {
+    if (import.meta.env.DEV) {
+      console.warn('[ForestTrees] Invalid baseColor, using fallback meadow green');
+    }
+    // Fallback to meadow green (from palette)
+    baseColor = { r: 0.537, g: 0.612, b: 0.435 }; // #899C6F
+  }
+  
+  // Ensure values are valid numbers
+  const r = Number.isFinite(baseColor.r) ? baseColor.r : 0.5;
+  const g = Number.isFinite(baseColor.g) ? baseColor.g : 0.5;
+  const b = Number.isFinite(baseColor.b) ? baseColor.b : 0.5;
+  
   const vShift = Math.floor(variation * shift) - shift / 2;
-  return `rgb(${Math.max(0, Math.min(255, Math.round(baseColor.r * 255) + vShift))}, ${Math.max(0, Math.min(255, Math.round(baseColor.g * 255) + vShift))}, ${Math.max(0, Math.min(255, Math.round(baseColor.b * 255) + vShift * 0.5))})`;
+  return `rgb(${Math.max(0, Math.min(255, Math.round(r * 255) + vShift))}, ${Math.max(0, Math.min(255, Math.round(g * 255) + vShift))}, ${Math.max(0, Math.min(255, Math.round(b * 255) + vShift * 0.5))})`;
 }
 
 // Palette-based flower colors using accent hues

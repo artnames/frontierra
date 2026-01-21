@@ -127,12 +127,15 @@ function sampleWaterHeightBilinear(
 
 /**
  * Build smooth river geometry from contours
+ * RIVER FIX: Added DEV logging and fallback handling
  */
 export function buildSmoothRiverGeometry(
   world: WorldData,
   worldX: number,
   worldY: number
 ): THREE.BufferGeometry {
+  const DEV = import.meta.env.DEV;
+  
   if (!world?.terrain || world.terrain.length === 0 || !world.gridSize) {
     return new THREE.BufferGeometry();
   }
@@ -141,6 +144,21 @@ export function buildSmoothRiverGeometry(
 
   // Step 1: Build river mask
   let mask = buildRiverMaskField(world.terrain, size);
+  
+  // RIVER FIX: Log mask stats in DEV mode
+  if (DEV) {
+    let min = Infinity, max = -Infinity, sum = 0, count = 0;
+    for (let i = 0; i < mask.length; i++) {
+      const v = mask[i];
+      if (v > 0) {
+        min = Math.min(min, v);
+        max = Math.max(max, v);
+        sum += v;
+        count++;
+      }
+    }
+    console.debug(`[riverContourMesh] Mask stats: min=${min.toFixed(2)}, max=${max.toFixed(2)}, avg=${count > 0 ? (sum/count).toFixed(2) : 'N/A'}, nonzero=${count}`);
+  }
   
   // Step 2: Dilate slightly to prevent gaps at cell boundaries
   mask = dilateRiverMask(mask, size, size, 1);
@@ -151,6 +169,10 @@ export function buildSmoothRiverGeometry(
 
   // Step 4: Extract contours at iso=0.3 (lower threshold due to blur)
   const contours = marchingSquares(mask, size, size, 0.3);
+  
+  if (DEV) {
+    console.debug(`[riverContourMesh] Contours extracted: ${contours.length} polylines`);
+  }
   
   if (contours.length === 0) {
     // Fallback: return empty geometry (caller can use old method)
@@ -183,9 +205,9 @@ export function buildSmoothRiverGeometry(
         (py + worldY * (size - 1)) * 0.12
       );
       
+      // RIVER FIX: Higher edge value for better visibility
       // Edge attribute: 1 for interior, lower for edges
-      // Simple heuristic: all contour vertices are somewhat edge-like
-      edges.push(0.7);
+      edges.push(0.85); // Increased from 0.7 for more visible interior
     }
 
     // Triangulate the contour
@@ -200,6 +222,10 @@ export function buildSmoothRiverGeometry(
 
   if (positions.length === 0) {
     return new THREE.BufferGeometry();
+  }
+
+  if (DEV) {
+    console.debug(`[riverContourMesh] Final geometry: ${positions.length / 3} vertices, ${indices.length / 3} triangles`);
   }
 
   const geo = new THREE.BufferGeometry();
