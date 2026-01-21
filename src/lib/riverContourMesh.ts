@@ -62,34 +62,39 @@ function triangulatePolygon(points: Point[]): number[] {
 
 /**
  * Compute water height at a grid position using existing river carve logic
+ * COORDINATE FIX: maskY is the y-coordinate from the mask/contour (0..size)
+ * This corresponds to terrain array index: terrainRowIndex = size - 1 - maskY
+ * This matches how terrain mesh samples: for render Z=y, it uses terrain[size-1-y]
  */
 function computeWaterHeightAt(
   world: WorldData,
-  gridX: number,
-  gridY: number // In grid space (not flipped)
+  maskX: number,  // X coordinate from mask/contour (same as grid X)
+  maskY: number   // Y coordinate from mask/contour (0=top of mask = terrain row size-1)
 ): number {
   const size = world.gridSize;
-  const fy = size - 1 - gridY; // Flip to terrain array indexing
   
-  // Clamp to valid range
-  const clampedX = Math.max(0, Math.min(size - 1, Math.floor(gridX)));
-  const clampedFY = Math.max(0, Math.min(size - 1, fy));
+  // Convert mask Y to terrain array row index
+  // Mask y=0 corresponds to terrain row (size-1)
+  // Mask y=(size-1) corresponds to terrain row 0
+  const terrainRowIndex = size - 1 - Math.floor(maskY);
+  const clampedX = Math.max(0, Math.min(size - 1, Math.floor(maskX)));
+  const clampedRowIndex = Math.max(0, Math.min(size - 1, terrainRowIndex));
   
-  const row = world.terrain[clampedFY];
+  const row = world.terrain[clampedRowIndex];
   if (!row) return 0;
   
   const cell = row[clampedX];
   if (!cell) return 0;
 
-  const SURFACE_LIFT = 0.02;
+  const SURFACE_LIFT = 0.15; // Match the lift in EnhancedWaterPlane
   const bankClearance = 0.02;
   
   const baseH = cell.elevation * WORLD_HEIGHT_SCALE;
   const carve = computeRiverCarveDepth(
     world.terrain,
     clampedX,
-    Math.floor(gridY),
-    clampedFY,
+    Math.floor(maskY),  // renderY for the carve function
+    clampedRowIndex,    // flipped terrain array index
     true,
     world.seed
   );
@@ -127,7 +132,9 @@ function sampleWaterHeightBilinear(
 
 /**
  * Build smooth river geometry from contours
- * RIVER FIX: Added DEV logging and fallback handling
+ * COORDINATE FIX: Ensure river mesh uses same XYZ as terrain
+ * - Terrain: iterates y=0..size, places vertex at Z=y, samples terrain[size-1-y]
+ * - We must output contour points in the same coordinate space
  */
 export function buildSmoothRiverGeometry(
   world: WorldData,
@@ -143,9 +150,10 @@ export function buildSmoothRiverGeometry(
   const size = world.gridSize;
 
   // Step 1: Build river mask
+  // The mask is built with y=0..size where mask[y*size+x] corresponds to terrain[size-1-y][x]
+  // So mask y=0 is terrain row (size-1), mask y=(size-1) is terrain row 0
   let mask = buildRiverMaskField(world.terrain, size);
   
-  // RIVER FIX: Log mask stats in DEV mode
   if (DEV) {
     let min = Infinity, max = -Infinity, sum = 0, count = 0;
     for (let i = 0; i < mask.length; i++) {
@@ -160,23 +168,21 @@ export function buildSmoothRiverGeometry(
     console.debug(`[riverContourMesh] Mask stats: min=${min.toFixed(2)}, max=${max.toFixed(2)}, avg=${count > 0 ? (sum/count).toFixed(2) : 'N/A'}, nonzero=${count}`);
   }
   
-  // Step 2: Dilate more to fill gaps and make rivers wider/more visible
-  mask = dilateRiverMask(mask, size, size, 2); // Increased from 1 to 2
+  // Step 2: Dilate to fill gaps
+  mask = dilateRiverMask(mask, size, size, 2);
   
-  // Step 3: Triple blur for very smooth contours (removes blocky look)
+  // Step 3: Triple blur for smooth contours
   mask = blurRiverMask(mask, size, size);
   mask = blurRiverMask(mask, size, size);
-  mask = blurRiverMask(mask, size, size); // Third blur pass
+  mask = blurRiverMask(mask, size, size);
 
-  // Step 4: Extract contours at lower iso threshold for better river capture
-  // Lower threshold = more area captured = wider rivers
-  const contours = marchingSquares(mask, size, size, 0.15); // Lowered from 0.2
+  // Step 4: Extract contours - these are in MASK space (y goes 0 to size)
+  const contours = marchingSquares(mask, size, size, 0.15);
   
   if (DEV) {
     console.debug(`[riverContourMesh] Contours extracted: ${contours.length} polylines`);
   }
   
-  // RIVER FIX: Don't return empty - this causes invisible rivers
   if (contours.length === 0) {
     if (DEV) {
       console.warn('[riverContourMesh] No contours extracted - river may be invisible');
@@ -184,25 +190,27 @@ export function buildSmoothRiverGeometry(
     return new THREE.BufferGeometry();
   }
 
-  // Step 5: Smooth contours with MORE Chaikin iterations for natural curves
-  // 4 iterations gives very smooth, non-blocky shorelines
-  const smoothContours = contours.map(c => smoothPolylineChaikin(c, 4, true)); // Increased from 3
+  // Step 5: Smooth contours
+  const smoothContours = contours.map(c => smoothPolylineChaikin(c, 4, true));
 
-  // Step 6: Build geometry from all contours
+  // Step 6: Build geometry
+  // CRITICAL: Contour points [px, py] are in mask space
+  // To match terrain render: X stays the same, Z = py (mask y directly maps to render Z)
+  // Because terrain uses: positions[z] = y (where y is the loop variable, 0..size)
+  // And mask is built with: y loop 0..size, accessing terrain[size-1-y]
+  // This means mask y=0 corresponds to render Z=0 (both start at the same corner)
+  
   const positions: number[] = [];
   const uvs: number[] = [];
   const edges: number[] = [];
   const indices: number[] = [];
 
-  let vertexOffset = 0;
-
   for (const contour of smoothContours) {
     if (contour.length < 3) continue;
 
-    // Add vertices for this contour
     const contourVertexStart = positions.length / 3;
     
-    // Pre-compute center of contour for edge distance calculation
+    // Compute center for edge distance
     let cx = 0, cy = 0;
     for (const [px, py] of contour) {
       cx += px;
@@ -211,27 +219,31 @@ export function buildSmoothRiverGeometry(
     cx /= contour.length;
     cy /= contour.length;
     
-    // Find max distance from center for normalization
     let maxDist = 0;
     for (const [px, py] of contour) {
       const d = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
       if (d > maxDist) maxDist = d;
     }
-    maxDist = Math.max(maxDist, 0.5); // Prevent division by zero
+    maxDist = Math.max(maxDist, 0.5);
     
     for (const [px, py] of contour) {
+      // px = X coordinate (same for both systems)
+      // py = mask Y coordinate = render Z coordinate (both 0..size from same corner)
+      const renderX = px;
+      const renderZ = py;
+      
+      // Sample water height - need to convert to terrain array indexing
       const waterY = sampleWaterHeightBilinear(world, px, py);
       
-      positions.push(px, waterY, py);
+      positions.push(renderX, waterY, renderZ);
       uvs.push(
-        (px + worldX * (size - 1)) * 0.12,
-        (py + worldY * (size - 1)) * 0.12
+        (renderX + worldX * (size - 1)) * 0.12,
+        (renderZ + worldY * (size - 1)) * 0.12
       );
       
-      // Edge attribute based on distance from center
-      // Interior vertices (near center) get 1.0, edge vertices get lower values
+      // Edge attribute
       const dist = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
-      const edgeVal = 0.6 + 0.4 * (1.0 - dist / maxDist); // 0.6 at edge, 1.0 at center
+      const edgeVal = 0.6 + 0.4 * (1.0 - dist / maxDist);
       edges.push(edgeVal);
     }
 
@@ -241,8 +253,6 @@ export function buildSmoothRiverGeometry(
     for (const idx of triIndices) {
       indices.push(contourVertexStart + idx);
     }
-
-    vertexOffset = positions.length / 3;
   }
 
   if (positions.length === 0) {
