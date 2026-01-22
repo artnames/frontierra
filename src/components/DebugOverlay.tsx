@@ -1,7 +1,7 @@
 // Debug Overlay - Shows BUILD_ID, pixelHash, tile counts
 // Enable with ?debug=1 URL parameter
 
-import { BUILD_ID, TileCounts } from '@/lib/worldPipeline';
+import { BUILD_ID, TileCounts } from '@/lib/generateCanonicalWorld';
 import { GeneratorMode } from '@/lib/generatorCanonical';
 
 interface DebugOverlayProps {

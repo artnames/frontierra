@@ -173,6 +173,12 @@ interface PreloadJob {
 
 const activePreloads: Map<CacheKey, PreloadJob> = new Map();
 
+// Check if debug mode is enabled (disables preloading to avoid log confusion)
+function isDebugMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('debug') === '1';
+}
+
 // Preload a single world in the background
 export async function preloadWorld(
   worldX: number,
@@ -180,6 +186,11 @@ export async function preloadWorld(
   seed: number,
   vars: number[]
 ): Promise<WorldData | null> {
+  // Disable preloading in debug mode to avoid confusing logs
+  if (isDebugMode()) {
+    return null;
+  }
+  
   const key = getCacheKey(worldX, worldY);
   
   // Already cached with matching params
@@ -196,6 +207,9 @@ export async function preloadWorld(
   // Start new preload
   const promise = (async () => {
     try {
+      // Use distinct log tag for preload generations
+      console.log('PRELOAD_GEN', { worldX, worldY, seed });
+      
       const worldData = await generateWorldDataAsync(seed, vars, { worldX, worldY });
       
       if (isWorldValid(worldData)) {

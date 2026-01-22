@@ -274,15 +274,6 @@ export async function generateCanonicalWorld(params: {
     mappingVersion: 'v1',
   };
 
-  // Log canonical generation for debugging
-  console.log('CANONICAL_GEN', {
-    pixelHash: '(pending)',
-    seed,
-    worldX,
-    worldY,
-    vars: vars.slice(0, 3).join(',') + '...',
-  });
-
   try {
     // Generate via NexArt - this is the SINGLE execution per refresh
     const worldContext = isMultiplayer ? { worldX, worldY } : undefined;
@@ -328,12 +319,13 @@ export async function generateCanonicalWorld(params: {
       rgbaBuffer,
     };
     
-    // Log successful generation
-    console.log('CANONICAL_GEN', {
+    // Log canonical generation - SINGLE log per refresh
+    console.log('CANONICAL_ACTIVE', {
       pixelHash: grid.pixelHash,
       seed,
       worldX,
       worldY,
+      counts: { water: counts.water, river: counts.river, path: counts.path }
     });
     
     return artifact;
