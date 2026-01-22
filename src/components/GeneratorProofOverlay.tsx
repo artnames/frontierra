@@ -42,16 +42,14 @@ export function GeneratorProofOverlay({
   
   const getModeLabel = () => {
     switch (mode) {
-      case 'v1_solo': return 'V1 Solo';
-      case 'v1_worldA': return 'V1 World-A';
+      case 'v1_unified': return 'V1 Unified';
       default: return mode;
     }
   };
   
   const getModeColor = () => {
     switch (mode) {
-      case 'v1_solo': return 'hsl(var(--chart-4))';
-      case 'v1_worldA': return 'hsl(var(--chart-2))';
+      case 'v1_unified': return 'hsl(var(--chart-2))';
       default: return 'hsl(var(--foreground))';
     }
   };
