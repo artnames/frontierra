@@ -34,10 +34,14 @@ export default defineConfig(({ mode }) => ({
           // Three.js ecosystem - largest, loads on demand
           'vendor-three': ['three'],
           'vendor-r3f': ['@react-three/fiber', '@react-three/drei', '@react-three/postprocessing'],
-          // UI libraries
-          'vendor-ui': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-tabs', '@radix-ui/react-tooltip', '@radix-ui/react-popover'],
-          // Animation
+          // UI libraries - split into smaller chunks
+          'vendor-ui-dialog': ['@radix-ui/react-dialog', '@radix-ui/react-alert-dialog'],
+          'vendor-ui-menu': ['@radix-ui/react-dropdown-menu', '@radix-ui/react-menubar', '@radix-ui/react-context-menu'],
+          'vendor-ui-misc': ['@radix-ui/react-tabs', '@radix-ui/react-tooltip', '@radix-ui/react-popover', '@radix-ui/react-select'],
+          // Animation - load on demand
           'vendor-motion': ['framer-motion'],
+          // Data/Query libraries
+          'vendor-query': ['@tanstack/react-query'],
         },
       },
     },
