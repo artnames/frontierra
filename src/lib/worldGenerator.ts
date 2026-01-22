@@ -13,11 +13,11 @@
 //   Ground:   (160, 140, 100)
 //   Forest:   (60, 120, 50)
 //   Mountain: (130, 125, 120)
-//   Path:     (180, 150, 100)
-//   Bridge:   (120, 80, 50)
+//   Path:     (180, 150, 100) - skips water
 //   Landmark: (220, 80, 80)
 //   River:    (70, 160, 180)
 //   Object:   (255, 220, 60)
+// NOTE: Bridge removed - paths skip water
 // ============================================
 
 export const WORLD_LAYOUT_SOURCE = `
@@ -842,9 +842,8 @@ function setup() {
       var isMountain = mtnRegion > 0.15 && !isWater;
       var isSnowCap = mtnRegion > 0.45 && mountainShape > 0.5 && mountainSteepness > 0.6;
       
-      // Paths
+      // Paths - skip water (no bridges)
       var onPath = pathGrid[gy][gx] > 0.3;
-      var isBridge = onPath && isWater;
       var isPathTile = onPath && !isWater;
       
       var isObject = gx === objX && gy === objY;
@@ -866,11 +865,8 @@ function setup() {
         tileR = 255;
         tileG = 220;
         tileB = 60;
-      } else if (isBridge) {
-        tileR = floor(120 * styleR);
-        tileG = floor(80 * styleG);
-        tileB = floor(50 * styleB);
       } else if (isPathTile) {
+        // Paths skip water - no bridge case
         tileR = floor(180 * styleR);
         tileG = floor(150 * styleG);
         tileB = floor(100 * styleB);

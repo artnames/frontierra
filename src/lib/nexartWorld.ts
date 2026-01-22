@@ -23,11 +23,11 @@ import { buildParamsV2, ARCHETYPES, type ResolvedWorldParams } from '@/world';
 //   Ground:   R>130, G>110, B<110
 //   Forest:   R<80, G>80, B<70
 //   Mountain: R>100, G>90, B>85 (and high alpha)
-//   Path:     R>160, G>130, B<120
-//   Bridge:   R~120, G~80, B~50
+//   Path:     R>160, G>130, B<120 (skips water - no bridges)
 //   Landmark: R>200, G<100
 //   River:    R<90, G>140, B>160
 //   Object:   R=255, G>200
+// NOTE: Bridge removed from system
 // ============================================
 
 // NOTE: BRIDGE has been REMOVED from the system
@@ -111,6 +111,31 @@ export function normalizeNexArtInput(params: {
 
 const NEXART_TIMEOUT_MS = 15000;
 
+// ============================================
+// GLOBAL IN-FLIGHT DEDUPLICATION
+// Prevents duplicate NexArt executions for same params
+// ============================================
+type InFlightKey = string;
+interface InFlightEntry {
+  promise: Promise<NexArtWorldGrid>;
+  timestamp: number;
+}
+const inFlightGenerations: Map<InFlightKey, InFlightEntry> = new Map();
+
+function buildInFlightKey(seed: number, vars: number[], worldX: number, worldY: number): InFlightKey {
+  return `${seed}:${vars.join(',')}:${worldX}:${worldY}`;
+}
+
+// Clean up stale entries (older than 30 seconds)
+function cleanupInFlight(): void {
+  const now = Date.now();
+  for (const [key, entry] of inFlightGenerations) {
+    if (now - entry.timestamp > 30000) {
+      inFlightGenerations.delete(key);
+    }
+  }
+}
+
 export async function generateNexArtWorld(params: WorldParams & { worldContext?: { worldX: number; worldY: number } }): Promise<NexArtWorldGrid> {
   const GRID_SIZE = 64;
   
@@ -127,6 +152,43 @@ export async function generateNexArtWorld(params: WorldParams & { worldContext?:
     mode: 'static',
   });
   
+  // ============================================
+  // DEDUPE: Return existing promise if same params in flight
+  // ============================================
+  const dedupeKey = buildInFlightKey(input.seed, input.vars, effectiveWorldX, effectiveWorldY);
+  const existing = inFlightGenerations.get(dedupeKey);
+  if (existing) {
+    console.debug(`[NexArt] DEDUPE: Returning existing promise for key=${dedupeKey}`);
+    return existing.promise;
+  }
+  
+  // Cleanup stale entries periodically
+  cleanupInFlight();
+  
+  // Create the actual generation promise
+  const generationPromise = executeNexArtGeneration(
+    input, isMultiplayer, effectiveWorldX, effectiveWorldY, GRID_SIZE
+  );
+  
+  // Store in dedupe map
+  inFlightGenerations.set(dedupeKey, { promise: generationPromise, timestamp: Date.now() });
+  
+  // Remove from map when done (success or failure)
+  generationPromise.finally(() => {
+    inFlightGenerations.delete(dedupeKey);
+  });
+  
+  return generationPromise;
+}
+
+// Actual NexArt execution (separated for dedupe wrapping)
+async function executeNexArtGeneration(
+  input: NormalizedNexArtInput,
+  isMultiplayer: boolean,
+  effectiveWorldX: number,
+  effectiveWorldY: number,
+  GRID_SIZE: number
+): Promise<NexArtWorldGrid> {
   // CANONICAL SOURCE SELECTION - Single entry point
   const { getCanonicalWorldLayoutSource } = await import('./generatorCanonical');
   
@@ -139,12 +201,6 @@ export async function generateNexArtWorld(params: WorldParams & { worldContext?:
   });
   
   const source = canonicalResult.source;
-  
-  // SEED SELECTION:
-  // - Solo mode: Use raw seed directly (the generator doesn't use WORLD_X/WORLD_Y)
-  // - Multiplayer: Use combined seed that includes world position
-  // NOTE: The current WORLD_LAYOUT_SOURCE doesn't use WORLD_X/WORLD_Y variables,
-  // so we use the raw seed for consistency with the original Solo behavior.
   const executionSeed = input.seed;
   
   try {
@@ -159,7 +215,6 @@ export async function generateNexArtWorld(params: WorldParams & { worldContext?:
       setTimeout(() => reject(new Error('NexArt execution timeout')), NEXART_TIMEOUT_MS);
     });
     
-    // Build execution options - use raw seed
     const execOptions: Parameters<typeof executeCodeMode>[0] = {
       source,
       width: GRID_SIZE,
@@ -169,10 +224,7 @@ export async function generateNexArtWorld(params: WorldParams & { worldContext?:
       mode: input.mode,
     };
     
-    // No coordinate injection needed - the Solo generator doesn't use WORLD_X/WORLD_Y
-    
     const executionPromise = executeCodeMode(execOptions);
-    
     const result = await Promise.race([executionPromise, timeoutPromise]);
     
     if (!result.image) {
@@ -193,7 +245,6 @@ export async function generateNexArtWorld(params: WorldParams & { worldContext?:
       }
     }
     
-    // Console instrumentation for parity verification
     console.debug(`[NexArt] Generated world: seed=${input.seed}, worldX=${effectiveWorldX}, worldY=${effectiveWorldY}, pixelHash=${pixelHash}, water=${waterCount}, river=${riverCount}, path=${pathCount}`);
     
     return {

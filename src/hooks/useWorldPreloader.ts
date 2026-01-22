@@ -1,18 +1,17 @@
 // World Preloader Hook - Deterministic Neighbor Preloading
-// Ensures seamless transitions by pre-generating adjacent lands
+// IMPORTANT: This hook ONLY preloads NEIGHBORS.
+// It never generates the current/active world - Index.tsx owns that via generateCanonicalWorld.
 
 import { useCallback, useEffect, useRef } from 'react';
-import { PlayerLand } from '@/lib/multiplayer/types';
 import {
   preloadNeighbors,
-  cacheWorld,
   getCachedWorld,
   ensureWorldReady,
   clearWorldCache,
   getCacheStats,
   getPreloadStatus
 } from '@/lib/worldCache';
-import { WorldData, generateWorldDataAsync, isWorldValid } from '@/lib/worldData';
+import { WorldData } from '@/lib/worldData';
 import { getLandAtPosition } from '@/lib/multiplayer/landRegistry';
 
 interface UseWorldPreloaderOptions {
@@ -81,7 +80,8 @@ export function useWorldPreloader({
     await Promise.all(neighbors.map(n => fetchNeighborParams(n.x, n.y)));
   }, [currentWorldX, currentWorldY, fetchNeighborParams]);
   
-  // Main preload effect - runs when current position changes
+  // Main preload effect - ONLY preloads NEIGHBORS, never generates current world
+  // Index.tsx owns generation of the active/current world via generateCanonicalWorld
   useEffect(() => {
     if (!enabled) return;
     
@@ -93,31 +93,19 @@ export function useWorldPreloader({
     neighborParamsCache.current.clear();
     
     const runPreload = async () => {
-      // First, ensure current world is cached
-      const currentCached = getCachedWorld(currentWorldX, currentWorldY, currentSeed, currentVars);
-      
-      if (!currentCached) {
-        // Generate and cache current world
-        const world = await generateWorldDataAsync(currentSeed, currentVars, { 
-          worldX: currentWorldX, 
-          worldY: currentWorldY 
-        });
-        
-        if (isWorldValid(world)) {
-          cacheWorld(currentWorldX, currentWorldY, world, currentSeed, currentVars);
-          onCurrentWorldReady?.(world);
-        }
-      }
+      // IMPORTANT: Do NOT generate current world here!
+      // Index.tsx is the single source of truth for active world generation.
+      // This hook ONLY preloads neighbors to enable seamless edge transitions.
       
       // Pre-fetch neighbor parameters from registry
       await prefetchNeighborParams();
       
-      // Start preloading neighbors (fire-and-forget)
+      // Start preloading NEIGHBORS ONLY (fire-and-forget)
       preloadNeighbors(currentWorldX, currentWorldY, getNeighborParamsSync);
     };
     
     runPreload();
-  }, [currentWorldX, currentWorldY, currentSeed, currentVars, enabled, prefetchNeighborParams, getNeighborParamsSync, onCurrentWorldReady]);
+  }, [currentWorldX, currentWorldY, currentSeed, currentVars, enabled, prefetchNeighborParams, getNeighborParamsSync]);
   
   // Get a cached neighbor world instantly (for seamless transitions)
   const getNeighborWorld = useCallback(async (
