@@ -1,11 +1,10 @@
 // World Explorer - 3D First-Person View of NexArt World
-// Uses debounced NexArt generation with atomic world swap
-// Performance: Uses quality profile for mobile optimization
+// CRITICAL: Renders from shared artifact passed down from Index.tsx
+// NO internal generation - uses same artifact as 2D view
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
 import { WorldData, distanceToObject } from "@/lib/worldData";
-import { useNexArtWorld } from "@/hooks/useNexArtWorld";
 import { WorldAction, ReplayFrame, DeterminismTest } from "@/lib/worldContract";
 import {
   useFirstPersonControls,
@@ -30,6 +29,7 @@ import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { useVisualSettings } from "@/hooks/useVisualSettings";
 import { useQualityProfile, mergeQualityWithUserSettings } from "@/hooks/useQualityProfile";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { CanonicalWorldArtifact } from "@/lib/generateCanonicalWorld";
 import * as THREE from "three";
 
 export type InteractionMode = "explore" | "editor";
@@ -161,8 +161,9 @@ function ReplayCamera({ frame }: { frame: ReplayFrame }) {
 }
 
 interface WorldExplorerProps {
-  seed: number;
-  vars: number[];
+  // Accept canonical artifact from Index.tsx - NO internal generation
+  artifact: CanonicalWorldArtifact | null;
+  isLoading?: boolean;
   initialActions?: WorldAction[];
   onActionsChange?: (actions: WorldAction[]) => void;
   onPositionUpdate?: (pos: { x: number; y: number; z: number }) => void;
@@ -178,8 +179,8 @@ interface WorldExplorerProps {
 }
 
 export function WorldExplorer({
-  seed,
-  vars,
+  artifact,
+  isLoading = false,
   initialActions = [],
   onActionsChange,
   onPositionUpdate,
@@ -193,8 +194,8 @@ export function WorldExplorer({
   showDebugHUD = false,
   isOwnLand = true,
 }: WorldExplorerProps) {
-  const worldX = worldContext?.worldX ?? 0;
-  const worldY = worldContext?.worldY ?? 0;
+  const worldX = worldContext?.worldX ?? artifact?.inputsUsed.worldX ?? 0;
+  const worldY = worldContext?.worldY ?? artifact?.inputsUsed.worldY ?? 0;
 
   const [position, setPosition] = useState({ x: 0, y: 0, z: 0 });
   const [isDiscovered, setIsDiscovered] = useState(false);
@@ -235,12 +236,9 @@ export function WorldExplorer({
       microDetailEnabled,
     }), [qualityProfile, shadowsEnabled, postfxBloomEnabled, waterAnimation, fogEnabled, microDetailEnabled]);
 
-  const { world, isLoading, isVerifying, error } = useNexArtWorld({
-    seed,
-    vars,
-    debounceMs: 300,
-    worldContext,
-  });
+  // Use world from artifact - NO internal generation
+  const world = artifact?.worldData ?? null;
+  const error = artifact?.error;
 
   const [prevMode, setPrevMode] = useState<InteractionMode>(interactionMode);
 
@@ -325,15 +323,6 @@ export function WorldExplorer({
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-black">
-      {isVerifying && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-          <div className="terminal-panel px-4 py-2 flex items-center gap-2 bg-background/90">
-            <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs text-muted-foreground">Verifying world...</span>
-          </div>
-        </div>
-      )}
-
       {isInvalid && !error && (
         <div className="absolute inset-0 z-20 pointer-events-none">
           <div className="absolute inset-0 bg-destructive/10 animate-pulse" />
