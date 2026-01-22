@@ -702,6 +702,33 @@ function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   );
 }
 
+// Wind gust system - shared across all falling leaves
+// Creates periodic gusts that intensify leaf movement
+function getWindGust(time: number): { strength: number; directionX: number; directionZ: number } {
+  // Gust cycle: ~8 seconds between gusts, each gust lasts ~2 seconds
+  const gustCycle = 8;
+  const gustDuration = 2;
+  const cyclePos = time % gustCycle;
+  
+  // Smooth gust envelope (ramps up, holds, ramps down)
+  let gustStrength = 0;
+  if (cyclePos < gustDuration) {
+    // Active gust phase
+    const gustPhase = cyclePos / gustDuration;
+    // Smooth attack/decay curve
+    gustStrength = Math.sin(gustPhase * Math.PI) * (0.8 + Math.sin(time * 5) * 0.2);
+  }
+  
+  // Wind direction slowly rotates over time
+  const windAngle = time * 0.1;
+  
+  return {
+    strength: gustStrength,
+    directionX: Math.cos(windAngle),
+    directionZ: Math.sin(windAngle),
+  };
+}
+
 // Falling leaves particle effect for autumn trees
 function FallingLeaves({ treeX, treeY, treeZ, scale, colorVariant }: { 
   treeX: number; treeY: number; treeZ: number; scale: number; colorVariant: number 
@@ -747,6 +774,8 @@ function FallingLeaves({ treeX, treeY, treeZ, scale, colorVariant }: {
         rotSpeed: (rand() - 0.5) * 2,
         // Scale variation
         leafScale: 0.6 + rand() * 0.4,
+        // Wind sensitivity (how much this leaf responds to gusts)
+        windSensitivity: 0.5 + rand() * 0.5,
       });
     }
     return leaves;
@@ -757,29 +786,40 @@ function FallingLeaves({ treeX, treeY, treeZ, scale, colorVariant }: {
     
     const time = clock.getElapsedTime();
     const dummy = new THREE.Object3D();
-    const color = new THREE.Color();
+    
+    // Get current wind gust state
+    const gust = getWindGust(time);
     
     leafData.forEach((leaf, i) => {
       // Looping fall animation (0-1 range, then reset)
       const fallCycle = ((time * leaf.fallSpeed + leaf.phase) % 3) / 3;
       
       // Y position: falls from startY to ground level
-      const fallY = leaf.startY * (1 - fallCycle * 1.2);
+      // Wind gusts make leaves fall faster
+      const gustFallBoost = gust.strength * leaf.windSensitivity * 0.3;
+      const fallY = leaf.startY * (1 - fallCycle * (1.2 + gustFallBoost));
       
-      // Horizontal sway as leaf falls
-      const swayX = Math.sin(time * 2 + leaf.phase) * leaf.swayAmount * (1 - fallCycle);
-      const swayZ = Math.cos(time * 1.5 + leaf.phase) * leaf.swayAmount * 0.5 * (1 - fallCycle);
+      // Base horizontal sway
+      const baseSway = 1 - fallCycle * 0.5;
+      const swayX = Math.sin(time * 2 + leaf.phase) * leaf.swayAmount * baseSway;
+      const swayZ = Math.cos(time * 1.5 + leaf.phase) * leaf.swayAmount * 0.5 * baseSway;
       
-      // Leaf rotation
-      const rotY = time * leaf.rotSpeed;
-      const rotZ = Math.sin(time * 3 + leaf.phase) * 0.5;
+      // Wind gust displacement - pushes leaves in wind direction
+      const gustDisplaceX = gust.strength * gust.directionX * leaf.windSensitivity * 0.8;
+      const gustDisplaceZ = gust.strength * gust.directionZ * leaf.windSensitivity * 0.8;
+      
+      // Leaf rotation - faster during gusts
+      const gustRotBoost = 1 + gust.strength * leaf.windSensitivity * 2;
+      const rotY = time * leaf.rotSpeed * gustRotBoost;
+      const rotZ = Math.sin(time * 3 * gustRotBoost + leaf.phase) * (0.5 + gust.strength * 0.5);
+      const rotX = gust.strength * Math.sin(time * 4 + leaf.phase) * 0.3; // Tumble during gusts
       
       dummy.position.set(
-        treeX + leaf.offsetX * scale + swayX * scale,
+        treeX + (leaf.offsetX + swayX + gustDisplaceX) * scale,
         treeY + Math.max(0, fallY) * scale,
-        treeZ + leaf.offsetZ * scale + swayZ * scale
+        treeZ + (leaf.offsetZ + swayZ + gustDisplaceZ) * scale
       );
-      dummy.rotation.set(0, rotY, rotZ);
+      dummy.rotation.set(rotX, rotY, rotZ);
       dummy.scale.setScalar(scale * 0.08 * leaf.leafScale);
       dummy.updateMatrix();
       
