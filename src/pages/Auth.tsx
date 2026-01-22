@@ -131,6 +131,9 @@ export default function Auth() {
           <img 
             src={frontierraLogo} 
             alt="Frontierra" 
+            width="453" 
+            height="180"
+            fetchPriority="high"
             className="h-32 sm:h-40 md:h-48 object-contain"
           />
         </div>

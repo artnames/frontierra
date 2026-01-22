@@ -42,6 +42,9 @@ export function WelcomeScreen({ onSelectMultiplayer, onSelectSolo, isAuthenticat
           <img 
             src={frontierraLogo} 
             alt="Frontierra" 
+            width="240" 
+            height="96"
+            fetchPriority="high"
             className="h-24 object-contain drop-shadow-[0_0_20px_hsl(var(--primary)/0.3)]"
           />
         </div>
