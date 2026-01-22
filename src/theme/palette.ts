@@ -200,7 +200,7 @@ export const TERRAIN_COLORS = {
   path: hexToRgb01(ROLES.dirtWood),
   rock: hexToRgb01(ROLES.rock),
   sand: hexToRgb01(ROLES.sand),
-  riverbed: hexToRgb01(ROLES.waterShallow),
+  riverbed: hexToRgb01(ROLES.waterDeep),
 } as const;
 
 export const VEGETATION_COLORS = {
