@@ -3,7 +3,6 @@
 // This ensures both the 2D map and 3D explorer use the exact same generator
 
 import { WORLD_LAYOUT_SOURCE } from './worldGenerator';
-import { WORLD_UNIFIED_LAYOUT_SOURCE_V2 } from './worldGeneratorUnified';
 
 // ============================================
 // GENERATOR MODES
@@ -53,21 +52,14 @@ function getSourceHash(source: string): string {
 // ============================================
 // CANONICAL SOURCE SELECTOR
 // This is the ONLY function that should select a generator source
+// V1-ONLY: Both Solo and Multiplayer use the same V1 generator
 // ============================================
 
 export function getCanonicalWorldLayoutSource(ctx: GeneratorContext): CanonicalGeneratorResult {
-  let source: string;
-  let mode: GeneratorMode;
-  
-  if (ctx.isMultiplayer) {
-    // Multiplayer: World A Unified source
-    source = WORLD_UNIFIED_LAYOUT_SOURCE_V2;
-    mode = 'v1_worldA';
-  } else {
-    // Solo: Legacy source
-    source = WORLD_LAYOUT_SOURCE;
-    mode = 'v1_solo';
-  }
+  // V1-ONLY: Use the same generator for both modes
+  // This ensures multiplayer worlds match solo worlds exactly
+  const source = WORLD_LAYOUT_SOURCE;
+  const mode: GeneratorMode = ctx.isMultiplayer ? 'v1_worldA' : 'v1_solo';
   
   return {
     source,
