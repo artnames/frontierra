@@ -1,17 +1,20 @@
 // Canonical Generator Source Selector
 // SINGLE ENTRY POINT for all world generation (Solo & Multiplayer, 2D & 3D)
 // This ensures both the 2D map and 3D explorer use the exact same generator
+// 
+// CRITICAL: Both Solo and Multiplayer use WORLD_LAYOUT_SOURCE (the original V1 generator)
+// The WORLD_A_LAYOUT_SOURCE has different VAR mappings and should NOT be used
 
-import { WORLD_A_LAYOUT_SOURCE } from './worldGenerator';
+import { WORLD_LAYOUT_SOURCE } from './worldGenerator';
 
 // ============================================
 // GENERATOR MODES
 // ============================================
 
-export type GeneratorMode = 'v1_solo' | 'v1_worldA';
+export type GeneratorMode = 'v1_unified';
 
 export interface GeneratorContext {
-  isMultiplayer: boolean; // has worldContext
+  isMultiplayer: boolean;
   seed: number;
   vars: number[];
   worldX?: number;
@@ -51,22 +54,18 @@ function getSourceHash(source: string): string {
 
 // ============================================
 // CANONICAL SOURCE SELECTOR
-// This is the ONLY function that should select a generator source
-// V1-ONLY: Both Solo and Multiplayer use the same V1 generator
+// UNIFIED: Both Solo and Multiplayer use the SAME V1 generator (WORLD_LAYOUT_SOURCE)
+// This is the original working generator with proper VAR mappings
 // ============================================
 
 export function getCanonicalWorldLayoutSource(ctx: GeneratorContext): CanonicalGeneratorResult {
-  // UNIFIED: Always use World-A layout source for both Solo and Multiplayer
-  // This source uses WORLD_X/WORLD_Y for shared macro geography
-  // Solo defaults to (0,0) if worldX/worldY not provided
-  const source = WORLD_A_LAYOUT_SOURCE;
-  
-  // Mode label for debugging - both use the same generator
-  const mode: GeneratorMode = ctx.isMultiplayer ? 'v1_worldA' : 'v1_solo';
+  // UNIFIED: Always use the original WORLD_LAYOUT_SOURCE for both modes
+  // This ensures Solo keeps working and Multiplayer uses the same engine
+  const source = WORLD_LAYOUT_SOURCE;
   
   return {
     source,
-    mode,
+    mode: 'v1_unified',
     sourceHash: getSourceHash(source)
   };
 }
@@ -110,5 +109,6 @@ export function assertSameGenerator(
   const result1 = getCanonicalWorldLayoutSource(ctx1);
   const result2 = getCanonicalWorldLayoutSource(ctx2);
   
-  return result1.sourceHash === result2.sourceHash && result1.mode === result2.mode;
+  // Both should always use the same unified generator
+  return result1.sourceHash === result2.sourceHash;
 }
