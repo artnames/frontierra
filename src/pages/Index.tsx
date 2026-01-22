@@ -440,7 +440,7 @@ const Index = () => {
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Logo - always visible */}
             <div className="min-w-0 flex items-center gap-2">
-              <img src={frontierraLogoHeader} alt="Frontierra" className="h-8 sm:h-10 object-contain" />
+              <img src={frontierraLogoHeader} alt="Frontierra" width="101" height="40" fetchPriority="high" className="h-8 sm:h-10 object-contain" />
               <p className="text-[10px] sm:text-xs text-muted-foreground truncate max-w-[100px] sm:max-w-none hidden sm:block">
                 {worldMode === "multiplayer" && multiplayer.currentLand ? (
                   <>
