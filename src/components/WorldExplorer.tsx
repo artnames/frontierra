@@ -289,7 +289,9 @@ export function WorldExplorer({
   // FIX #2: Only show "INVALID" overlay when user explicitly ran determinism test AND it failed
   // Don't treat determinism test state as fatal error - it's a dev tool
   const userRanDeterminismTest = deterministicTest && deterministicTest.breakType !== 'none';
-  const isInvalid = (userRanDeterminismTest && !deterministicTest.isValid) || error !== null;
+  // NOTE: artifact.error is optional (undefined when ok). Using `error !== null` would
+  // incorrectly mark the world invalid even when error is undefined.
+  const isInvalid = Boolean(userRanDeterminismTest && !deterministicTest.isValid);
 
   // Check if world data is fully loaded and valid
   const isWorldReady = world && world.terrain && world.terrain.length > 0 && world.gridSize > 0;
