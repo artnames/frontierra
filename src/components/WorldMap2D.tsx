@@ -1,11 +1,12 @@
 // 2D World Map - Direct visualization of NexArt RGBA channels
 // NEW ENCODING: RGB = Tile Type, Alpha = Elevation
-// CRITICAL: Uses SAME canonical generator as 3D to ensure parity
+// CRITICAL: Uses SAME canonical generator AND SAME seed as 3D to ensure parity
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { Check, Share2 } from 'lucide-react';
 import { WorldParams } from '@/lib/worldGenerator';
 import { normalizeNexArtInput } from '@/lib/nexartWorld';
+import { getWorldSeed, WORLD_A_ID } from '@/lib/worldContext';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
@@ -94,11 +95,20 @@ export function WorldMap2D({
           `function setup() { ${injection}`
         );
 
+        // CRITICAL: Use the SAME seed calculation as 3D pipeline (nexartWorld.ts line 154)
+        // This ensures 2D map and 3D explorer produce identical outputs
+        const worldContext = {
+          worldId: WORLD_A_ID,
+          worldX: effectiveWorldX,
+          worldY: effectiveWorldY
+        };
+        const executionSeed = getWorldSeed(worldContext, input.seed);
+
         const executionPromise = executeCodeMode({
           source: finalSource,
           width: 64,
           height: 64,
-          seed: input.seed,
+          seed: executionSeed,  // Use combined seed, not raw input.seed
           vars: input.vars,
           mode: input.mode,
         });
