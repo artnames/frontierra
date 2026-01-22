@@ -95,7 +95,6 @@ let vegColorSanitizerCount = 0;
 
 function getVegColor(baseColor: { r: number; g: number; b: number } | undefined | null, variation: number, shift: number = 20): string {
   // VEGETATION FIX: Fallback to meadow green if baseColor is invalid or missing
-  // This is the ONLY way vegetation can get a color - so it must never fail
   const fallbackColor = { r: 0.537, g: 0.612, b: 0.435 }; // #899C6F meadow green
   
   let safeColor = fallbackColor;
@@ -105,7 +104,6 @@ function getVegColor(baseColor: { r: number; g: number; b: number } | undefined 
       typeof baseColor.r === 'number' && Number.isFinite(baseColor.r) &&
       typeof baseColor.g === 'number' && Number.isFinite(baseColor.g) &&
       typeof baseColor.b === 'number' && Number.isFinite(baseColor.b)) {
-    // Validate that values are in expected 0-1 range
     if (baseColor.r >= 0 && baseColor.r <= 1 && 
         baseColor.g >= 0 && baseColor.g <= 1 && 
         baseColor.b >= 0 && baseColor.b <= 1) {
@@ -117,12 +115,10 @@ function getVegColor(baseColor: { r: number; g: number; b: number } | undefined 
     usedFallback = true;
   }
   
-  // DEV: Track and log sanitizer usage
   if (usedFallback && import.meta.env.DEV) {
     vegColorSanitizerCount++;
-    // Log periodically to avoid spam
     if (vegColorSanitizerCount % 100 === 1) {
-      console.warn(`[ForestTrees] Color sanitizer triggered ${vegColorSanitizerCount} times (baseColor was invalid/undefined)`);
+      console.warn(`[ForestTrees] Color sanitizer triggered ${vegColorSanitizerCount} times`);
     }
   }
   
@@ -135,7 +131,9 @@ function getVegColor(baseColor: { r: number; g: number; b: number } | undefined 
   const g = Math.max(0, Math.min(255, Math.round(safeColor.g * 255) + vShift));
   const b = Math.max(0, Math.min(255, Math.round(safeColor.b * 255) + Math.floor(vShift * 0.5)));
   
-  return `rgb(${r}, ${g}, ${b})`;
+  // FIX: Return HEX color instead of rgb() - Three.js parses rgb() incorrectly!
+  const toHex = (v: number) => v.toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 // Palette-based flower colors using accent hues
