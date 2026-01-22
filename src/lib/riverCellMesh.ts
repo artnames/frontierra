@@ -33,11 +33,9 @@ export function buildRiverCellMesh(world: WorldData, worldX: number, worldY: num
 
   const size = world.gridSize;
 
-  // PASS 1: Build binary river mask and find riverbed heights
+  // PASS 1: Build binary river mask and compute LOCAL riverbed heights at each cell
   const riverMask: boolean[][] = [];
   const bedHeights: number[][] = [];
-  let globalMinBedHeight = Infinity;
-  let globalMaxBedHeight = -Infinity;
   let riverCellCount = 0;
 
   for (let y = 0; y < size; y++) {
@@ -51,15 +49,15 @@ export function buildRiverCellMesh(world: WorldData, worldX: number, worldY: num
         riverMask[y][x] = true;
         riverCellCount++;
 
+        // Compute LOCAL riverbed height for this cell
         const baseH = cell.elevation * WORLD_HEIGHT_SCALE;
         const carve = computeRiverCarveDepth(world.terrain, x, y, flippedY, true, world.seed);
-        const bedHeight = baseH - carve;
-        bedHeights[y][x] = bedHeight;
-        globalMinBedHeight = Math.min(globalMinBedHeight, bedHeight);
-        globalMaxBedHeight = Math.max(globalMaxBedHeight, bedHeight);
+        bedHeights[y][x] = baseH - carve;
       } else {
         riverMask[y][x] = false;
-        bedHeights[y][x] = 0;
+        // For non-river cells, store terrain height for interpolation
+        const cell2 = world.terrain[flippedY]?.[x];
+        bedHeights[y][x] = cell2 ? cell2.elevation * WORLD_HEIGHT_SCALE : 0;
       }
     }
   }
@@ -69,17 +67,13 @@ export function buildRiverCellMesh(world: WorldData, worldX: number, worldY: num
   }
 
   // PASS 2: Expand river mask by extension amount
-  // This creates a dilated mask so water extends beyond riverbed edges
   const ext = RIVER_WIDTH_EXTENSION;
   const expandedMask: boolean[][] = [];
 
   for (let y = 0; y < size; y++) {
     expandedMask[y] = [];
     for (let x = 0; x < size; x++) {
-      // Check if this cell is within extension distance of any river cell
       let isNearRiver = false;
-
-      // Check nearby cells within extension radius (use ceiling for integer range)
       const range = Math.ceil(ext);
       for (let dy = -range; dy <= range && !isNearRiver; dy++) {
         for (let dx = -range; dx <= range && !isNearRiver; dx++) {
@@ -87,26 +81,51 @@ export function buildRiverCellMesh(world: WorldData, worldX: number, worldY: num
           const nx = x + dx;
           if (ny >= 0 && ny < size && nx >= 0 && nx < size) {
             if (riverMask[ny][nx]) {
-              // Check actual distance
               const dist = Math.sqrt(dx * dx + dy * dy);
               if (dist <= ext + 0.5) {
-                // +0.5 to include cell centers
                 isNearRiver = true;
               }
             }
           }
         }
       }
-
       expandedMask[y][x] = isNearRiver;
     }
   }
 
-  // Compute flat water height from riverbed average
-  const avgBedHeight = (globalMinBedHeight + globalMaxBedHeight) / 2;
-  const flatWaterHeight = avgBedHeight + RIVER_WATER_ABOVE_BED + RIVER_SURFACE_LIFT;
+  // Helper: Get water height at a vertex by sampling nearby riverbed heights
+  // Uses bilinear-style interpolation from nearest river cells
+  const getWaterHeightAt = (x: number, y: number): number => {
+    // Sample riverbed heights from nearby river cells and interpolate
+    let sumH = 0;
+    let sumW = 0;
+    const sampleRadius = 2;
+    
+    for (let dy = -sampleRadius; dy <= sampleRadius; dy++) {
+      for (let dx = -sampleRadius; dx <= sampleRadius; dx++) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && nx < size && ny >= 0 && ny < size && riverMask[ny][nx]) {
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const weight = 1 / (1 + dist * 0.5); // Distance-based weight
+          sumH += bedHeights[ny][nx] * weight;
+          sumW += weight;
+        }
+      }
+    }
+    
+    // If no river cells nearby, use local terrain height
+    if (sumW === 0) {
+      const clampX = Math.max(0, Math.min(size - 1, x));
+      const clampY = Math.max(0, Math.min(size - 1, y));
+      return bedHeights[clampY][clampX] + RIVER_WATER_ABOVE_BED + RIVER_SURFACE_LIFT;
+    }
+    
+    const avgBedHeight = sumH / sumW;
+    return avgBedHeight + RIVER_WATER_ABOVE_BED + RIVER_SURFACE_LIFT;
+  };
 
-  // PASS 3: Build UNIFIED mesh from expanded mask
+  // PASS 3: Build mesh with PER-VERTEX water heights
   const positions: number[] = [];
   const uvs: number[] = [];
   const edges: number[] = [];
@@ -119,7 +138,8 @@ export function buildRiverCellMesh(world: WorldData, worldX: number, worldY: num
     if (existing !== undefined) return existing;
 
     const idx = positions.length / 3;
-    positions.push(x, flatWaterHeight, y);
+    const waterH = getWaterHeightAt(x, y); // LOCAL water height
+    positions.push(x, waterH, y);
     uvs.push((x + worldX * (size - 1)) * 0.12, (y + worldY * (size - 1)) * 0.12);
     edges.push(isEdge ? 0.3 : 1.0);
 
