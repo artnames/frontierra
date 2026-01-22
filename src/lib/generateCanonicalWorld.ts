@@ -7,7 +7,7 @@ import { WorldData, TerrainCell } from './worldData';
 import { getCanonicalWorldLayoutSource, GeneratorMode } from './generatorCanonical';
 import {
   WORLD_HEIGHT_SCALE,
-  getWaterLevelRaw,
+  getSeaLevelThreshold,
   applyElevationCurve,
 } from './worldConstants';
 import { verifyNexArtWorld } from './nexartWorld';
@@ -115,7 +115,9 @@ function countTiles(grid: NexArtWorldGrid): TileCounts {
 // CONVERT NEXART GRID TO WORLD DATA
 // ============================================
 function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
-  const rawWaterLevel = getWaterLevelRaw(grid.vars);
+  // IMPORTANT: This must match the NexArt parameter mapping (mapping_v1 waterLevel 0.10–0.55)
+  // so that "water" classification is identical between the 2D source and 3D projection.
+  const seaLevelThreshold = getSeaLevelThreshold(grid.vars);
   const heightScale = WORLD_HEIGHT_SCALE;
 
   const terrain: TerrainCell[][] = grid.cells.map((row) =>
@@ -127,7 +129,7 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
 
       if (cell.isPath) {
         type = 'path';
-      } else if (cell.tileType === TileType.WATER || rawElevation < rawWaterLevel) {
+       } else if (cell.tileType === TileType.WATER || rawElevation < seaLevelThreshold) {
         type = 'water';
       } else {
         const tileType = cell.tileType;
