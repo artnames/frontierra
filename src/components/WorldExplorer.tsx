@@ -296,7 +296,9 @@ export function WorldExplorer({
   // Check if world data is fully loaded and valid
   const isWorldReady = world && world.terrain && world.terrain.length > 0 && world.gridSize > 0;
 
-  if (isLoading) {
+  // Show blocking overlay ONLY on initial load (no previous world to show)
+  // Once we have a world, keep it visible while regenerating
+  if (isLoading && !isWorldReady) {
     return (
       <div className="relative w-full h-full flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
@@ -328,6 +330,14 @@ export function WorldExplorer({
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-black">
+      {/* Subtle regenerating indicator - shows in corner while world updates */}
+      {isLoading && isWorldReady && (
+        <div className="absolute top-4 left-4 z-30 flex items-center gap-2 px-3 py-1.5 bg-background/80 backdrop-blur-sm rounded-full border border-border/50">
+          <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-muted-foreground">Regenerating...</span>
+        </div>
+      )}
+
       {isInvalid && !error && (
         <div className="absolute inset-0 z-20 pointer-events-none">
           <div className="absolute inset-0 bg-destructive/10 animate-pulse" />

@@ -1,4 +1,4 @@
-import { useCallback, useState, useMemo, useEffect, lazy, Suspense } from "react";
+import { useCallback, useState, useMemo, useEffect, lazy, Suspense, useRef } from "react";
 import {
   Eye,
   Map,
@@ -283,34 +283,57 @@ const Index = () => {
   // CANONICAL WORLD GENERATION - Single execution per refresh
   // Both 2D and 3D views consume this same artifact
   // regenKey triggers regeneration when multiplayer requests it
+  // 
+  // OPTIMIZATION: Debounce generation to prevent excessive calls during slider dragging
+  // Keep previous world visible while new one generates (no blocking overlay)
+  const generationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastGenerationParamsRef = useRef<string>('');
+  
   useEffect(() => {
-    let cancelled = false;
+    // Create a stable key for current params
+    const paramsKey = `${activeParams.seed}-${activeParams.vars.join(',')}-${worldMode}-${multiplayer.currentLand?.pos_x ?? 0}-${multiplayer.currentLand?.pos_y ?? 0}-${regenKey}`;
+    
+    // Skip if params haven't actually changed
+    if (paramsKey === lastGenerationParamsRef.current) {
+      return;
+    }
+    
+    // Clear any pending generation
+    if (generationTimeoutRef.current) {
+      clearTimeout(generationTimeoutRef.current);
+    }
+    
+    // Show generating state but DON'T block the view
     setIsGenerating(true);
     // Clear any previous determinism-test state whenever we regenerate the world.
-    // This prevents the "WORLD INVALID" overlay from persisting across normal regen events.
     setDeterministicTest(null);
+    
+    // Debounce: wait 150ms before actually generating (allows slider dragging to settle)
+    generationTimeoutRef.current = setTimeout(() => {
+      lastGenerationParamsRef.current = paramsKey;
+      
+      // FIX #1: ALWAYS pass explicit worldContext - never undefined
+      // Solo uses fixed (0,0), Multiplayer uses actual grid coordinates
+      const worldContext = worldMode === 'multiplayer' && multiplayer.currentLand
+        ? { worldX: multiplayer.currentLand.pos_x, worldY: multiplayer.currentLand.pos_y }
+        : { worldX: 0, worldY: 0 }; // Solo always uses canonical (0,0)
 
-    // FIX #1: ALWAYS pass explicit worldContext - never undefined
-    // Solo uses fixed (0,0), Multiplayer uses actual grid coordinates
-    const worldContext = worldMode === 'multiplayer' && multiplayer.currentLand
-      ? { worldX: multiplayer.currentLand.pos_x, worldY: multiplayer.currentLand.pos_y }
-      : { worldX: 0, worldY: 0 }; // Solo always uses canonical (0,0)
-
-    generateCanonicalWorld({
-      seed: activeParams.seed,
-      vars: activeParams.vars,
-      worldX: worldContext.worldX,
-      worldY: worldContext.worldY,
-      isMultiplayer: worldMode === 'multiplayer',
-    }).then((artifact) => {
-      if (!cancelled) {
+      generateCanonicalWorld({
+        seed: activeParams.seed,
+        vars: activeParams.vars,
+        worldX: worldContext.worldX,
+        worldY: worldContext.worldY,
+        isMultiplayer: worldMode === 'multiplayer',
+      }).then((artifact) => {
         setCanonicalArtifact(artifact);
         setIsGenerating(false);
-      }
-    });
+      });
+    }, 150);
 
     return () => {
-      cancelled = true;
+      if (generationTimeoutRef.current) {
+        clearTimeout(generationTimeoutRef.current);
+      }
     };
   }, [activeParams.seed, activeParams.vars, worldMode, multiplayer.currentLand, regenKey]);
 
