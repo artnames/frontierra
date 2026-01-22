@@ -39,12 +39,8 @@ import {
 import type { InteractionMode } from "@/components/WorldExplorer";
 import { deriveSoloWorldContext } from "@/lib/worldContext";
 import { setCameraForLandTransition } from "@/hooks/useFirstPersonControls";
-import { WorldContractPanel } from "@/components/WorldContractPanel";
 import { ReplayControls } from "@/components/ReplayControls";
-import { ActionSystem } from "@/components/ActionSystem";
 import { MultiplayerHUD } from "@/components/MultiplayerHUD";
-import { WorldAMap } from "@/components/WorldAMap";
-import { SocialPanel } from "@/components/social/SocialPanel";
 import { UnclaimedLandModal } from "@/components/UnclaimedLandModal";
 import { ClaimLandModal } from "@/components/ClaimLandModal";
 import { DiscoveryPointsHUD } from "@/components/DiscoveryPointsHUD";
@@ -56,6 +52,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useSearchParams } from "react-router-dom";
 import { GeneratorProofOverlay, BuildStamp } from "@/components/GeneratorProofOverlay";
 import { useGeneratorProof } from "@/hooks/useGeneratorProof";
+
+// Lazy load sidebar components to reduce main-thread work
+const WorldContractPanel = lazy(() => import("@/components/WorldContractPanel").then(m => ({ default: m.WorldContractPanel })));
+const ActionSystem = lazy(() => import("@/components/ActionSystem").then(m => ({ default: m.ActionSystem })));
+const WorldAMap = lazy(() => import("@/components/WorldAMap").then(m => ({ default: m.WorldAMap })));
+const SocialPanel = lazy(() => import("@/components/social/SocialPanel").then(m => ({ default: m.SocialPanel })));
 
 // Lazy load heavy 3D components to reduce TTI
 const WorldExplorer = lazy(() => import("@/components/WorldExplorer").then(m => ({ default: m.WorldExplorer })));
@@ -804,38 +806,40 @@ const Index = () => {
 
             {/* Tab Content */}
             <div className="flex-1 overflow-y-auto p-3">
-              {sidebarTab === "worldmap" && worldMode === "multiplayer" && (
-                <WorldAMap
-                  currentLand={multiplayer.currentLand}
-                  playerId={user?.id ?? null}
-                  onVisitLand={multiplayer.visitLand}
-                  onLandClaimed={() => multiplayer.initializePlayerLand(user?.id)}
-                />
-              )}
+              <Suspense fallback={<div className="flex items-center justify-center py-8"><div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
+                {sidebarTab === "worldmap" && worldMode === "multiplayer" && (
+                  <WorldAMap
+                    currentLand={multiplayer.currentLand}
+                    playerId={user?.id ?? null}
+                    onVisitLand={multiplayer.visitLand}
+                    onLandClaimed={() => multiplayer.initializePlayerLand(user?.id)}
+                  />
+                )}
 
-              {sidebarTab === "social" && worldMode === "multiplayer" && (
-                <SocialPanel playerId={user?.id ?? null} currentLand={multiplayer.currentLand} />
-              )}
+                {sidebarTab === "social" && worldMode === "multiplayer" && (
+                  <SocialPanel playerId={user?.id ?? null} currentLand={multiplayer.currentLand} />
+                )}
 
-              {sidebarTab === "contract" && world && (
-                <WorldContractPanel
-                  world={world}
-                  actions={actions}
-                  onDeterminismBreak={handleDeterminismBreak}
-                  deterministicTest={deterministicTest}
-                />
-              )}
+                {sidebarTab === "contract" && world && (
+                  <WorldContractPanel
+                    world={world}
+                    actions={actions}
+                    onDeterminismBreak={handleDeterminismBreak}
+                    deterministicTest={deterministicTest}
+                  />
+                )}
 
-              {sidebarTab === "actions" && viewMode === "firstperson" && world && (
-                <ActionSystem
-                  world={world}
-                  playerPosition={playerPosition}
-                  actions={actions}
-                  onActionExecute={handleActionExecute}
-                  onActionReset={handleActionReset}
-                  disabled={isReplaying}
-                />
-              )}
+                {sidebarTab === "actions" && viewMode === "firstperson" && world && (
+                  <ActionSystem
+                    world={world}
+                    playerPosition={playerPosition}
+                    actions={actions}
+                    onActionExecute={handleActionExecute}
+                    onActionReset={handleActionReset}
+                    disabled={isReplaying}
+                  />
+                )}
+              </Suspense>
 
               {sidebarTab === "actions" && viewMode === "map" && (
                 <div className="text-center text-muted-foreground text-sm py-8">
