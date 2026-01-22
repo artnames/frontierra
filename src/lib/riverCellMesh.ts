@@ -18,7 +18,7 @@ const RIVER_SURFACE_LIFT = 0.12;
 
 // Width extension beyond river cells (in grid units)
 // This makes water overlap riverbed edges for natural appearance
-const RIVER_WIDTH_EXTENSION = 0.35;
+const RIVER_WIDTH_EXTENSION = 0.5;
 
 /**
  * Build river mesh from exact terrain cells
