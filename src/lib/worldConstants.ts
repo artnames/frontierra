@@ -31,11 +31,15 @@ export function applyElevationCurve(rawElevation: number): number {
 // WATER LEVEL FUNCTIONS
 // ============================================
 
-// Water level height range in world units
-// At VAR[4]=0, water is at height 1.0 (very low)
-// At VAR[4]=100, water is at height 6.0 (moderate - prevents flooding)
-const WATER_HEIGHT_MIN = 1.0;  // World units at VAR[4]=0
-const WATER_HEIGHT_MAX = 6.0;  // World units at VAR[4]=100
+// NexArt uses VAR[4] (Sea Level) but internally maps it to a *raw elevation threshold*
+// in approximately the 0.10–0.55 range (see mapping_v1.ts). To keep 2D (pixels) and
+// 3D (projection) in lockstep, we derive water height from that same threshold and
+// the same elevation curve used for terrain.
+
+// Sea-level threshold in *raw elevation space* (0–1, before applyElevationCurve)
+// These values MUST match the generator parameter mapping.
+const SEA_LEVEL_MIN = 0.10;
+const SEA_LEVEL_MAX = 0.55;
 
 // Raw water level from VAR[4] (0-1 range, linear)
 export function getWaterLevelRaw(vars: number[]): number {
@@ -48,11 +52,18 @@ export function getWaterLevel(vars: number[]): number {
   return getWaterLevelRaw(vars);
 }
 
-// Water height in world units - LINEAR mapping to prevent exponential effects
-// This is the CANONICAL function for water surface height
-export function getWaterHeight(vars: number[]): number {
+// Sea-level threshold in *raw elevation space* (0.10–0.55)
+// This is what you compare against NexArt raw elevation (alpha 0–1) if needed.
+export function getSeaLevelThreshold(vars: number[]): number {
   const t = getWaterLevelRaw(vars);
-  return WATER_HEIGHT_MIN + t * (WATER_HEIGHT_MAX - WATER_HEIGHT_MIN);
+  return SEA_LEVEL_MIN + t * (SEA_LEVEL_MAX - SEA_LEVEL_MIN);
+}
+
+// Water height in world units.
+// Canonical: derived from the same sea-level threshold + elevation curve as terrain.
+export function getWaterHeight(vars: number[]): number {
+  const seaLevel = getSeaLevelThreshold(vars);
+  return applyElevationCurve(seaLevel) * WORLD_HEIGHT_SCALE;
 }
 
 // Path lift above terrain (in world units) - small offset for visual layering
