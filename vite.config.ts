@@ -25,6 +25,22 @@ export default defineConfig(({ mode }) => ({
     commonjsOptions: {
       transformMixedEsModules: true,
     },
+    // Manual chunk splitting to reduce main bundle size and improve JS execution time
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Core React - small, loads first
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          // Three.js ecosystem - largest, loads on demand
+          'vendor-three': ['three'],
+          'vendor-r3f': ['@react-three/fiber', '@react-three/drei', '@react-three/postprocessing'],
+          // UI libraries
+          'vendor-ui': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-tabs', '@radix-ui/react-tooltip', '@radix-ui/react-popover'],
+          // Animation
+          'vendor-motion': ['framer-motion'],
+        },
+      },
+    },
   },
 
   // Helps dev server prebundle these cleanly
