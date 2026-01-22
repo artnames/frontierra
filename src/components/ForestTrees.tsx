@@ -521,16 +521,36 @@ function ContactShadowBlob({ x, y, z, scale, seed }: { x: number; y: number; z: 
   );
 }
 
+// VEGETATION FIX: Parse color string to THREE.Color to ensure valid color rendering
+// This prevents white foliage when color parsing fails
+function parseColorSafe(colorStr: string): THREE.Color {
+  try {
+    const c = new THREE.Color(colorStr);
+    // Validate color is not white (which indicates parsing failure)
+    if (c.r > 0.95 && c.g > 0.95 && c.b > 0.95) {
+      // Likely a parsing error - return meadow green fallback
+      return new THREE.Color(PALETTE.meadow);
+    }
+    return c;
+  } catch {
+    // Fallback to meadow green if parsing fails
+    return new THREE.Color(PALETTE.meadow);
+  }
+}
+
 // Enhanced material component that uses MeshStandardMaterial when richness is enabled
 // When rich, we add deterministic surface detail via bump maps sourced from the procedural terrain textures.
 function VegMaterial({ color, isRich }: { color: string; isRich: boolean }) {
   const textures = useContext(VegetationTexturesContext);
   const bumpMap = isRich ? (textures?.get("forest") ?? undefined) : undefined;
+  
+  // VEGETATION FIX: Always parse color to THREE.Color to prevent white foliage
+  const safeColor = useMemo(() => parseColorSafe(color), [color]);
 
   if (isRich) {
     return (
       <meshStandardMaterial
-        color={color}
+        color={safeColor}
         roughness={0.7}
         metalness={0.05}
         bumpMap={bumpMap}
@@ -538,18 +558,27 @@ function VegMaterial({ color, isRich }: { color: string; isRich: boolean }) {
       />
     );
   }
-  return <meshLambertMaterial color={color} />;
+  return <meshLambertMaterial color={safeColor} />;
 }
 
 // Bark/wood/stone material with enhanced properties
 function BarkMaterial({ color, isRich }: { color: string; isRich: boolean }) {
   const textures = useContext(VegetationTexturesContext);
   const bumpMap = isRich ? (textures?.get("path") ?? textures?.get("rock") ?? undefined) : undefined;
+  
+  // VEGETATION FIX: Always parse color to THREE.Color to prevent white bark
+  const safeColor = useMemo(() => {
+    try {
+      return new THREE.Color(color);
+    } catch {
+      return new THREE.Color(PALETTE.rust);
+    }
+  }, [color]);
 
   if (isRich) {
     return (
       <meshStandardMaterial
-        color={color}
+        color={safeColor}
         roughness={0.95}
         metalness={0}
         bumpMap={bumpMap}
@@ -557,7 +586,7 @@ function BarkMaterial({ color, isRich }: { color: string; isRich: boolean }) {
       />
     );
   }
-  return <meshLambertMaterial color={color} />;
+  return <meshLambertMaterial color={safeColor} />;
 }
 
 // Pine tree - tall conifer using palette colors
