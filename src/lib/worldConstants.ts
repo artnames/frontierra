@@ -31,27 +31,28 @@ export function applyElevationCurve(rawElevation: number): number {
 // WATER LEVEL FUNCTIONS
 // ============================================
 
-// Maximum water level ratio (0-1) to prevent flooding entire terrain
-// At 100% VAR[4], water should cover ~55% of elevation range max
-const WATER_LEVEL_MAX_RATIO = 0.55;
+// Water level height range in world units
+// At VAR[4]=0, water is at height 1.0 (very low)
+// At VAR[4]=100, water is at height 6.0 (moderate - prevents flooding)
+const WATER_HEIGHT_MIN = 1.0;  // World units at VAR[4]=0
+const WATER_HEIGHT_MAX = 6.0;  // World units at VAR[4]=100
 
-// Raw water level from VAR[4] (uncurved, 0-1 range)
-// Clamped to prevent water flooding above reasonable terrain
+// Raw water level from VAR[4] (0-1 range, linear)
 export function getWaterLevelRaw(vars: number[]): number {
   const rawVar = Math.min(100, Math.max(0, vars[4] ?? 50)); // Clamp VAR to 0-100
-  // Map 0-100 to 0.1-0.55 range (was 0.1-0.55 but could exceed if miscalculated)
-  return (rawVar / 100) * (WATER_LEVEL_MAX_RATIO - 0.1) + 0.1;
+  return rawVar / 100;
 }
 
-// Water level in CURVED terrain space (0-1 range, curved)
+// Water level in normalized space (0-1 range) - for compatibility
 export function getWaterLevel(vars: number[]): number {
-  const raw = getWaterLevelRaw(vars);
-  return applyElevationCurve(raw);
+  return getWaterLevelRaw(vars);
 }
 
-// Water height in world units (curved and scaled)
+// Water height in world units - LINEAR mapping to prevent exponential effects
+// This is the CANONICAL function for water surface height
 export function getWaterHeight(vars: number[]): number {
-  return getWaterLevel(vars) * WORLD_HEIGHT_SCALE;
+  const t = getWaterLevelRaw(vars);
+  return WATER_HEIGHT_MIN + t * (WATER_HEIGHT_MAX - WATER_HEIGHT_MIN);
 }
 
 // Path lift above terrain (in world units) - small offset for visual layering
