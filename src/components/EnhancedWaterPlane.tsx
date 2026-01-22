@@ -199,26 +199,26 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   }, [world, worldX, worldY, waterHeight]);
 
   const material = useMemo(() => {
-    // RIVER VISUAL IMPROVEMENT: Light blue semi-transparent water
-    // This lets the dark riverbed (#001C24) show through for natural depth
-    // Deep: Light sky blue for transparent water
-    // Shallow: Even lighter blue for depth variation
-    const deepColor = new THREE.Color(0.4, 0.7, 0.9);      // Light blue
-    const shallowColor = new THREE.Color(0.55, 0.82, 1.0); // Lighter sky blue
-    const foamColor = new THREE.Color(0.85, 0.95, 1.0);    // White-blue foam
+    // RIVER VISUAL: Dark blue water over dark riverbed with flowing animation
+    // Opacity: 0.5 for visible but semi-transparent water
+    // Colors: Dark blue tones to match riverbed aesthetic
+    const deepColor = new THREE.Color(0.05, 0.25, 0.35);   // Dark teal-blue
+    const shallowColor = new THREE.Color(0.15, 0.40, 0.55); // Medium blue
+    const foamColor = new THREE.Color(0.6, 0.8, 0.9);       // Light blue-white foam
     
     if (DEV) {
-      console.debug('[EnhancedWaterPlane] Water colors (light blue transparent):', {
-        deep: '#66B3E6',
-        shallow: '#8CD1FF',
-        foam: '#D9F2FF'
+      console.debug('[EnhancedWaterPlane] Water colors (dark blue with flow):', {
+        deep: '#0D4059',
+        shallow: '#26668C',
+        foam: '#99CCE6',
+        opacity: 0.5
       });
     }
     
     const m = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uOpacity: { value: 0.35 }, // Low opacity for transparency - see dark riverbed through
+        uOpacity: { value: 0.5 }, // 50% opacity - visible but see-through
         uDeep: { value: deepColor },
         uShallow: { value: shallowColor },
         uFoam: { value: foamColor },
@@ -277,36 +277,50 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
         }
 
         void main() {
-          float t = uTime * 0.3;
+          float t = uTime;
           
-          // WORLD-SPACE waves - no grid repetition
-          // Use world position directly with low frequency
-          vec2 worldUV = vWPos.xz * 0.08;
+          // RIVER FLOW ANIMATION - directional movement along river
+          // Primary flow direction (downstream feel)
+          vec2 flowDir = normalize(vec2(0.7, 1.0)); // Diagonal downstream
+          vec2 flowOffset = flowDir * t * 0.4; // Flow speed
           
-          // Animated water waves using world coordinates
-          float w1 = fbm(worldUV + vec2(t * 0.5, t * 0.3));
-          float w2 = fbm(worldUV * 1.5 - vec2(t * 0.2, t * 0.4));
-          float w = w1 * 0.6 + w2 * 0.4;
+          // World-space UV with flow
+          vec2 worldUV = vWPos.xz * 0.12;
+          
+          // Flowing water pattern - multiple layers moving at different speeds
+          float flow1 = fbm(worldUV + flowOffset);
+          float flow2 = fbm(worldUV * 1.8 + flowOffset * 1.3 + vec2(100.0, 50.0));
+          float flow3 = fbm(worldUV * 0.5 + flowOffset * 0.6); // Slow background flow
+          
+          // Combine flow layers for natural water movement
+          float flowPattern = flow1 * 0.5 + flow2 * 0.3 + flow3 * 0.2;
+          
+          // Add perpendicular ripples for realism
+          vec2 rippleDir = vec2(-flowDir.y, flowDir.x);
+          float ripples = sin(dot(vWPos.xz, rippleDir) * 3.0 + t * 2.0) * 0.5 + 0.5;
+          ripples *= fbm(worldUV * 2.0) * 0.3;
+          
+          float w = flowPattern + ripples * 0.2;
 
-          // Blend between deep and shallow - natural variation
-          vec3 col = mix(uDeep, uShallow, w * 0.5 + 0.25);
+          // Blend between deep and shallow based on flow pattern
+          vec3 col = mix(uDeep, uShallow, w * 0.6 + 0.2);
 
-          // Edge handling: high minimum opacity even at edges
-          float edgeFade = smoothstep(0.0, 0.4, vEdge);
-          float a = uOpacity * mix(0.8, 1.0, edgeFade);
+          // Edge handling: maintain opacity at edges
+          float edgeFade = smoothstep(0.0, 0.3, vEdge);
+          float a = uOpacity * mix(0.85, 1.0, edgeFade);
 
-          // Foam/highlight at edges and wave peaks
-          float foamAmount = (1.0 - edgeFade) * 0.2 + w * 0.1;
+          // Foam at edges and flow peaks - more visible foam
+          float foamAmount = (1.0 - edgeFade) * 0.25 + pow(flowPattern, 2.0) * 0.15;
           col = mix(col, uFoam, foamAmount);
 
-          // Fresnel-like rim highlight
+          // Fresnel-like rim highlight - enhanced for dark water
           vec3 viewDir = normalize(-vWPos);
-          float fresnel = pow(1.0 - max(0.0, dot(normalize(vNormal), viewDir)), 2.5);
-          col += vec3(fresnel * 0.06);
+          float fresnel = pow(1.0 - max(0.0, dot(normalize(vNormal), viewDir)), 2.0);
+          col += vec3(fresnel * 0.12);
 
-          // Subtle specular on waves
-          float spec = pow(max(0.0, w * 0.5 + 0.5), 8.0) * 0.1;
-          col += vec3(spec);
+          // Flowing specular highlights
+          float flowSpec = pow(max(0.0, flow1 * 0.6 + 0.4), 6.0) * 0.15;
+          col += vec3(flowSpec);
 
           gl_FragColor = vec4(col, a);
         }
