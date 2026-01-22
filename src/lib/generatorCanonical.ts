@@ -4,22 +4,19 @@
 
 import { WORLD_LAYOUT_SOURCE } from './worldGenerator';
 import { WORLD_UNIFIED_LAYOUT_SOURCE_V2 } from './worldGeneratorUnified';
-import { WORLD_V2_REFINEMENT_SOURCE } from './worldGeneratorV2Refinement';
 
 // ============================================
 // GENERATOR MODES
 // ============================================
 
-export type GeneratorMode = 'v1_solo' | 'v1_worldA' | 'v2_refinement';
+export type GeneratorMode = 'v1_solo' | 'v1_worldA';
 
 export interface GeneratorContext {
-  mappingVersion: 'v1' | 'v2';
   isMultiplayer: boolean; // has worldContext
   seed: number;
   vars: number[];
   worldX?: number;
   worldY?: number;
-  microOverrides?: Map<number, number>;
 }
 
 export interface CanonicalGeneratorResult {
@@ -59,21 +56,15 @@ function getSourceHash(source: string): string {
 // ============================================
 
 export function getCanonicalWorldLayoutSource(ctx: GeneratorContext): CanonicalGeneratorResult {
-  const isV2 = ctx.mappingVersion === 'v2';
-  
   let source: string;
   let mode: GeneratorMode;
   
-  if (isV2) {
-    // V2 mode: ALWAYS use refinement source (Solo & Multiplayer unified)
-    source = WORLD_V2_REFINEMENT_SOURCE;
-    mode = 'v2_refinement';
-  } else if (ctx.isMultiplayer) {
-    // V1 Multiplayer: World A Unified source
+  if (ctx.isMultiplayer) {
+    // Multiplayer: World A Unified source
     source = WORLD_UNIFIED_LAYOUT_SOURCE_V2;
     mode = 'v1_worldA';
   } else {
-    // V1 Solo: Legacy source
+    // Solo: Legacy source
     source = WORLD_LAYOUT_SOURCE;
     mode = 'v1_solo';
   }
@@ -92,29 +83,24 @@ export function getCanonicalWorldLayoutSource(ctx: GeneratorContext): CanonicalG
 export interface GeneratorProofInfo {
   mode: GeneratorMode;
   sourceHash: string;
-  mappingVersion: 'v1' | 'v2';
   isMultiplayer: boolean;
   waterLevel: number;
   biomeRichness: number;
-  microVars: number[];
 }
 
 export function getGeneratorProofInfo(
   ctx: GeneratorContext,
   resolvedWaterLevel: number,
-  resolvedBiomeRichness: number,
-  microVars: number[]
+  resolvedBiomeRichness: number
 ): GeneratorProofInfo {
   const { mode, sourceHash } = getCanonicalWorldLayoutSource(ctx);
   
   return {
     mode,
     sourceHash,
-    mappingVersion: ctx.mappingVersion,
     isMultiplayer: ctx.isMultiplayer,
     waterLevel: resolvedWaterLevel,
-    biomeRichness: resolvedBiomeRichness,
-    microVars: microVars.slice(0, 3) // MV[0-2] for display
+    biomeRichness: resolvedBiomeRichness
   };
 }
 

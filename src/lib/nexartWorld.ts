@@ -111,12 +111,7 @@ export function normalizeNexArtInput(params: {
 
 const NEXART_TIMEOUT_MS = 15000;
 
-export interface ExtendedWorldParams extends WorldParams {
-  mappingVersion?: 'v1' | 'v2';
-  microOverrides?: Map<number, number>;
-}
-
-export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<NexArtWorldGrid> {
+export async function generateNexArtWorld(params: WorldParams & { worldContext?: { worldX: number; worldY: number } }): Promise<NexArtWorldGrid> {
   const GRID_SIZE = 64;
   
   // Build world context if provided
@@ -133,9 +128,6 @@ export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<
     worldContext
   });
   
-  // Check for V2 mapping mode
-  const isV2Mode = params.mappingVersion === 'v2';
-  
   // CANONICAL SOURCE SELECTION - Single entry point
   // Both Solo and Multiplayer use the same selector
   const isWorldA = !!input.worldContext;
@@ -144,27 +136,19 @@ export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<
   const { getCanonicalWorldLayoutSource } = await import('./generatorCanonical');
   
   const canonicalResult = getCanonicalWorldLayoutSource({
-    mappingVersion: params.mappingVersion ?? 'v1',
     isMultiplayer: isWorldA,
     seed: input.seed,
     vars: input.vars,
     worldX: input.worldContext?.worldX,
-    worldY: input.worldContext?.worldY,
-    microOverrides: params.microOverrides
+    worldY: input.worldContext?.worldY
   });
   
-  let source = canonicalResult.source;
-  let effectiveWorldContext = input.worldContext;
-  
-  // V2 Solo doesn't need world context injection
-  if (isV2Mode && !isWorldA) {
-    effectiveWorldContext = undefined;
-  }
+  const source = canonicalResult.source;
   
   // Compute the combined seed (includes world position for unified/World A modes)
   let executionSeed = input.seed;
-  if (effectiveWorldContext) {
-    executionSeed = getWorldSeed(effectiveWorldContext, input.seed);
+  if (input.worldContext) {
+    executionSeed = getWorldSeed(input.worldContext, input.seed);
   }
   
   try {
@@ -191,33 +175,9 @@ export async function generateNexArtWorld(params: ExtendedWorldParams): Promise<
     
     let finalSource = source;
     
-    // Inject V2-specific parameters (archetype and micro vars)
-    // V2 is now supported for both solo lands and World A multiplayer lands
-    if (isV2Mode) {
-      const v2Params = buildParamsV2(input.seed, input.vars, params.microOverrides);
-      const archetypeIndex = ARCHETYPES.indexOf(v2Params.archetype);
-      
-      // Build micro vars array from the derived values (indices 10-23 in full vars)
-      const microVars = v2Params.vars.slice(10, 24);
-      
-      // Inject ARCHETYPE_ID and MV array at the start of setup()
-      const v2Injection = `var ARCHETYPE_ID = ${archetypeIndex}; var MV = [${microVars.join(',')}];`;
-      finalSource = finalSource.replace(
-        'function setup() {',
-        `function setup() { ${v2Injection}`
-      );
-      execOptions.source = finalSource;
-      
-      if (import.meta.env.DEV) {
-        console.log(`[NexArt V2 Unified] Archetype: ${v2Params.archetype} (${archetypeIndex})`, 
-          params.microOverrides?.size ? `with ${params.microOverrides.size} overrides` : '',
-          effectiveWorldContext ? `[World ${effectiveWorldContext.worldX},${effectiveWorldContext.worldY}]` : '[Solo derived]');
-      }
-    }
-    
-    // Inject World coordinates (for V2 unified or V1 World A)
-    if (effectiveWorldContext) {
-      const injection = `var WORLD_X = ${effectiveWorldContext.worldX}; var WORLD_Y = ${effectiveWorldContext.worldY};`;
+    // Inject World coordinates for World A multiplayer
+    if (input.worldContext) {
+      const injection = `var WORLD_X = ${input.worldContext.worldX}; var WORLD_Y = ${input.worldContext.worldY};`;
       finalSource = finalSource.replace(
         'function setup() {',
         `function setup() { ${injection}`
