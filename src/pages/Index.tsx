@@ -91,6 +91,7 @@ const Index = () => {
   const [playerPosition, setPlayerPosition] = useState({ x: 32, y: 32, z: 0 });
   const [showClaimModal, setShowClaimModal] = useState(false);
   const [pendingMultiplayerSwitch, setPendingMultiplayerSwitch] = useState(false);
+  const [pixelHash2D, setPixelHash2D] = useState<string>('');
   const { toast } = useToast();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -435,6 +436,7 @@ const Index = () => {
           worldX={proofWorldCoords.worldX}
           worldY={proofWorldCoords.worldY}
           pixelHash={world?.nexartHash}
+          pixelHash2D={pixelHash2D}
         />
       )}
       
@@ -719,6 +721,7 @@ const Index = () => {
                     isMultiplayer={worldMode === 'multiplayer'}
                     worldX={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_x : deriveSoloWorldContext(activeParams.seed).worldX}
                     worldY={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_y : deriveSoloWorldContext(activeParams.seed).worldY}
+                    onHashChange={setPixelHash2D}
                   />
                 </div>
               </div>

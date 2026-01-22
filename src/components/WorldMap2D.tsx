@@ -15,6 +15,7 @@ interface WorldMap2DProps {
   isMultiplayer?: boolean;
   worldX?: number;
   worldY?: number;
+  onHashChange?: (hash: string) => void;
 }
 
 const NEXART_TIMEOUT_MS = 10000;
@@ -36,7 +37,8 @@ export function WorldMap2D({
   getShareUrl,
   isMultiplayer = false,
   worldX,
-  worldY
+  worldY,
+  onHashChange
 }: WorldMap2DProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -129,9 +131,10 @@ export function WorldMap2D({
             const coloredData = visualizePixelData(imageData);
             ctx.putImageData(coloredData, 0, 0);
             
-            // Compute hash
+            // Compute hash and notify parent
             const hash = computeHash(imageData.data);
             setPixelHash(hash);
+            onHashChange?.(hash);
             
             URL.revokeObjectURL(url);
             setLastGenerated(genKey);
@@ -167,7 +170,7 @@ export function WorldMap2D({
     runGeneration();
 
     return () => { cancelled = true; };
-  }, [genKey, input, lastGenerated]);
+  }, [genKey, input, lastGenerated, onHashChange]);
 
   // Visualization: RGB is already tile color, just apply elevation shading
   function visualizePixelData(imageData: ImageData): ImageData {
