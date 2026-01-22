@@ -292,7 +292,27 @@ const Index = () => {
       const newActions = [...actions, action];
       setActions(newActions);
 
-      const varsStr = params.vars.join(",");
+      // Sync beacon position to VAR[1] (Landmark X) and VAR[2] (Landmark Y)
+      // Grid mapping: gridCoord = map(VAR, 0, 100, 4, GRID_SIZE-4)
+      // Inverse: VAR = ((gridCoord - 4) / (GRID_SIZE - 8)) * 100
+      const GRID_SIZE = 64;
+      const newVar1 = Math.round(((action.gridX - 4) / (GRID_SIZE - 8)) * 100);
+      const newVar2 = Math.round(((action.gridY - 4) / (GRID_SIZE - 8)) * 100);
+      
+      // Clamp to valid range [0, 100]
+      const clampedVar1 = Math.max(0, Math.min(100, newVar1));
+      const clampedVar2 = Math.max(0, Math.min(100, newVar2));
+      
+      // Update VARs to sync landmark position with beacon
+      setVar(1, clampedVar1);
+      setVar(2, clampedVar2);
+      
+      // Use updated vars array
+      const updatedVars = [...params.vars];
+      updatedVars[1] = clampedVar1;
+      updatedVars[2] = clampedVar2;
+      
+      const varsStr = updatedVars.join(",");
       const actionsStr = serializeActions(newActions);
       setSearchParams({
         seed: params.seed.toString(),
@@ -300,7 +320,7 @@ const Index = () => {
         actions: actionsStr,
       });
     },
-    [actions, params, setSearchParams],
+    [actions, params, setSearchParams, setVar],
   );
 
   const handleActionReset = useCallback(() => {
