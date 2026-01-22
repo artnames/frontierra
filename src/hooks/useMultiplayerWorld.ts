@@ -186,9 +186,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
   } = useNexArtWorld({
     seed: worldParams.seed,
     vars: worldParams.vars,
-    worldContext,
-    mappingVersion: worldParams.mappingVersion,
-    microOverrides: worldParams.microOverrides
+    worldContext
   });
   
   // FIX B: Use cached world if available for instant transitions, otherwise use generated

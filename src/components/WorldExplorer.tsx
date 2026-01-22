@@ -175,8 +175,6 @@ interface WorldExplorerProps {
   worldContext?: { worldX: number; worldY: number };
   showDebugHUD?: boolean;
   isOwnLand?: boolean;
-  mappingVersion?: "v1" | "v2";
-  microOverrides?: Map<number, number>;
 }
 
 export function WorldExplorer({
@@ -194,8 +192,6 @@ export function WorldExplorer({
   worldContext,
   showDebugHUD = false,
   isOwnLand = true,
-  mappingVersion = "v1",
-  microOverrides,
 }: WorldExplorerProps) {
   const worldX = worldContext?.worldX ?? 0;
   const worldY = worldContext?.worldY ?? 0;
@@ -244,8 +240,6 @@ export function WorldExplorer({
     vars,
     debounceMs: 300,
     worldContext,
-    mappingVersion,
-    microOverrides,
   });
 
   const [prevMode, setPrevMode] = useState<InteractionMode>(interactionMode);

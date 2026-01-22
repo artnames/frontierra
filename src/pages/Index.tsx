@@ -37,7 +37,6 @@ import {
   ReplayFrame,
 } from "@/lib/worldContract";
 import { WorldExplorer, InteractionMode } from "@/components/WorldExplorer";
-import { WorldExplorer, InteractionMode } from "@/components/WorldExplorer";
 import { setCameraForLandTransition } from "@/hooks/useFirstPersonControls";
 import { WorldMap2D } from "@/components/WorldMap2D";
 import { WorldContractPanel } from "@/components/WorldContractPanel";
@@ -661,8 +660,6 @@ const Index = () => {
                   : undefined
               }
               isOwnLand={worldMode === "solo" || !isOtherPlayerLand}
-              mappingVersion={activeMappingVersion}
-              microOverrides={activeMicroOverrides}
             />
           ) : (
             <div className="w-full h-full flex bg-background">
@@ -670,11 +667,9 @@ const Index = () => {
                 <WorldMap2D 
                   params={activeParams} 
                   getShareUrl={getShareUrl}
-                  mappingVersion={activeMappingVersion}
                   isMultiplayer={worldMode === 'multiplayer'}
                   worldX={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_x : undefined}
                   worldY={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_y : undefined}
-                  microOverrides={activeMicroOverrides}
                 />
               </div>
             </div>
@@ -886,134 +881,6 @@ const Index = () => {
                       </div>
                     ))}
                   </div>
-
-                  {/* V2 Enhanced Generation Toggle - available in both solo and multiplayer (if owner) */}
-                  {(worldMode !== "multiplayer" || (multiplayer.currentLand && !isOtherPlayerLand)) && (
-                    <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-border">
-                      <div className="space-y-0.5 flex-1">
-                        <Label className="text-xs font-medium">Enhanced Generation (v2)</Label>
-                        <p className="text-[10px] text-muted-foreground leading-tight">
-                          Enables archetypes and structural variety
-                        </p>
-                      </div>
-                      <Switch
-                        checked={activeMappingVersion === "v2"}
-                        onCheckedChange={(checked) => {
-                          const newVersion = checked ? "v2" : "v1";
-                          if (worldMode === "multiplayer" && multiplayer.currentLand && !isOtherPlayerLand) {
-                            multiplayer.updateLandParams({ mapping_version: newVersion });
-                          } else {
-                            setMappingVersion(newVersion);
-                          }
-                        }}
-                        disabled={isReplaying || (worldMode === "multiplayer" && isOtherPlayerLand)}
-                      />
-                    </div>
-                  )}
-
-                  {/* V2 Archetype Info (when V2 enabled) - available in both solo and multiplayer */}
-                  {activeMappingVersion === "v2" &&
-                    (() => {
-                      const archetype = selectArchetype(activeParams.seed, activeParams.vars);
-                      const profile = ARCHETYPE_PROFILES[archetype];
-                      const v2Params = buildParamsV2(activeParams.seed, activeParams.vars, activeMicroOverrides);
-                      const microVars = v2Params.vars.slice(10, 24);
-                      const hasOverrides = activeMicroOverrides && activeMicroOverrides.size > 0;
-
-                      const MICRO_VAR_LABELS = [
-                        "River threshold",
-                        "River width",
-                        "Lake tendency",
-                        "Wetland spread",
-                        "Erosion strength",
-                        "Coastline complexity",
-                        "Cliff frequency",
-                        "Plateau size",
-                        "Valley depth",
-                        "Ridge sharpness",
-                        "Biome patchiness",
-                        "Tree variety",
-                        "Undergrowth density",
-                        "Meadow frequency",
-                      ];
-
-                      return (
-                        <div className="space-y-3 pt-3 mt-1 border-t border-border/50">
-                          {/* Archetype Badge */}
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-muted-foreground">World Archetype</span>
-                            <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">
-                              {profile.name}
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-muted-foreground/70 -mt-2">{profile.description}</p>
-
-                          {/* Micro Vars (editable) */}
-                          <details className="group" open>
-                            <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
-                              <ChevronLeft className="w-3 h-3 -rotate-90 group-open:rotate-0 transition-transform" />
-                              Advanced Parameters
-                              {hasOverrides && (
-                                <span className="text-[9px] text-accent ml-1">
-                                  ({params.microOverrides!.size} modified)
-                                </span>
-                              )}
-                            </summary>
-                            <div className="mt-2 space-y-2">
-                              {hasOverrides && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={resetAllMicroVars}
-                                  className="h-5 px-2 text-[9px] text-muted-foreground hover:text-foreground w-full justify-start"
-                                >
-                                  Reset all to derived values
-                                </Button>
-                              )}
-                              {microVars.map((value, idx) => {
-                                const varIndex = 10 + idx;
-                                const isOverridden = params.microOverrides?.has(varIndex);
-                                const derivedValue = derivedMicroVars[idx] ?? value;
-
-                                return (
-                                  <div key={idx} className="space-y-0.5">
-                                    <div className="flex justify-between items-center text-[9px]">
-                                      <span className={`${isOverridden ? "text-accent" : "text-muted-foreground/70"}`}>
-                                        [{varIndex}] {MICRO_VAR_LABELS[idx]}
-                                        {isOverridden && " *"}
-                                      </span>
-                                      <div className="flex items-center gap-1">
-                                        <span className="font-mono text-muted-foreground w-6 text-right">
-                                          {Math.round(value)}
-                                        </span>
-                                        {isOverridden && (
-                                          <button
-                                            onClick={() => resetMicroVar(varIndex)}
-                                            className="text-[8px] text-muted-foreground hover:text-foreground px-1"
-                                            title={`Reset to derived (${Math.round(derivedValue)})`}
-                                          >
-                                            ↺
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <Slider
-                                      value={[Math.round(value)]}
-                                      onValueChange={([v]) => setMicroVar(varIndex, v)}
-                                      min={0}
-                                      max={100}
-                                      step={1}
-                                      className="w-full"
-                                      disabled={isReplaying}
-                                    />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </details>
-                        </div>
-                      );
-                    })()}
 
                   {worldMode !== "multiplayer" && (
                     <Button
