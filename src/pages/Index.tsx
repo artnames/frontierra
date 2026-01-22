@@ -104,7 +104,35 @@ const Index = () => {
   const { user, isAuthenticated, isLoading: isAuthLoading, signOut } = useAuth();
 
   // Visual settings (localStorage only)
-  const { musicEnabled, toggleMusic, sfxEnabled, toggleSfx, masterVolume, setMasterVolume } = useVisualSettings();
+  const { 
+    // Graphics
+    materialRichness,
+    toggleMaterialRichness,
+    fogEnabled,
+    toggleFog,
+    microDetailEnabled,
+    toggleMicroDetail,
+    shadowsEnabled,
+    toggleShadows,
+    smoothShading,
+    toggleSmoothShading,
+    waterAnimation,
+    toggleWaterAnimation,
+    // PostFX
+    postfxBloomEnabled,
+    togglePostfxBloom,
+    postfxVignetteEnabled,
+    togglePostfxVignette,
+    postfxNoiseEnabled,
+    togglePostfxNoise,
+    // Audio
+    musicEnabled,
+    toggleMusic,
+    sfxEnabled,
+    toggleSfx,
+    masterVolume,
+    setMasterVolume,
+  } = useVisualSettings();
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -988,6 +1016,88 @@ const Index = () => {
                   {worldMode === "multiplayer" && isOtherPlayerLand && (
                     <p className="text-xs text-muted-foreground text-center py-2">You can only edit your own land</p>
                   )}
+
+                  {/* Graphics Settings */}
+                  <div className="pt-3 mt-3 border-t border-border space-y-3">
+                    <div className="data-label text-[10px]">Graphics</div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-0.5 flex-1">
+                        <Label className="text-xs font-medium">Smooth Shading</Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">Removes faceted look.</p>
+                      </div>
+                      <Switch checked={smoothShading} onCheckedChange={toggleSmoothShading} />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-0.5 flex-1">
+                        <Label className="text-xs font-medium">Micro Detail</Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">Subtle grain variation.</p>
+                      </div>
+                      <Switch checked={microDetailEnabled} onCheckedChange={toggleMicroDetail} />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-0.5 flex-1">
+                        <Label className="text-xs font-medium">Water Animation</Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">Subtle wave movement.</p>
+                      </div>
+                      <Switch checked={waterAnimation} onCheckedChange={toggleWaterAnimation} />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-0.5 flex-1">
+                        <Label className="text-xs font-medium">Fog</Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">Atmosphere + depth.</p>
+                      </div>
+                      <Switch checked={fogEnabled} onCheckedChange={toggleFog} />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-0.5 flex-1">
+                        <Label className="text-xs font-medium">Shadows</Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">May reduce FPS.</p>
+                      </div>
+                      <Switch checked={shadowsEnabled} onCheckedChange={toggleShadows} />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-0.5 flex-1">
+                        <Label className="text-xs font-medium">Rich Materials</Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">PBR textures.</p>
+                      </div>
+                      <Switch checked={materialRichness} onCheckedChange={toggleMaterialRichness} />
+                    </div>
+                  </div>
+
+                  {/* Post-Processing Settings */}
+                  <div className="pt-3 mt-3 border-t border-border space-y-3">
+                    <div className="data-label text-[10px]">Post-Processing</div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-0.5 flex-1">
+                        <Label className="text-xs font-medium">Bloom</Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">Soft glow on brights.</p>
+                      </div>
+                      <Switch checked={postfxBloomEnabled} onCheckedChange={togglePostfxBloom} />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-0.5 flex-1">
+                        <Label className="text-xs font-medium">Vignette</Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">Darkened edges.</p>
+                      </div>
+                      <Switch checked={postfxVignetteEnabled} onCheckedChange={togglePostfxVignette} />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-0.5 flex-1">
+                        <Label className="text-xs font-medium">Film Grain</Label>
+                        <p className="text-[10px] text-muted-foreground leading-tight">Subtle noise overlay.</p>
+                      </div>
+                      <Switch checked={postfxNoiseEnabled} onCheckedChange={togglePostfxNoise} />
+                    </div>
+                  </div>
 
                   {/* Audio Settings */}
                   <div className="pt-3 mt-3 border-t border-border space-y-3">
