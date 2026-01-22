@@ -15,7 +15,7 @@ import {
   toRow,
 } from "@/lib/worldConstants";
 import { buildRiverCellMesh, hasRiverCells, countRiverCells } from "@/lib/riverCellMesh";
-import { toThreeColor, PALETTE } from "@/theme/palette";
+import { toThreeColor, PALETTE, hexToRgb01 } from "@/theme/palette";
 import { setGlobalRiverStats } from "@/hooks/useGeneratorProof";
 
 const DEV = import.meta.env.DEV;
@@ -181,44 +181,81 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     return geo;
   }, [world, worldX, worldY, riverCellCount]);
 
-  // Lake/ocean geometry - flat plane at water level
+  // Lake/ocean geometry - flat plane at water level, extended slightly into ground for smooth edges
   const lakeGeo = useMemo(() => {
     if (!world || !world.terrain || world.terrain.length === 0) {
       return new THREE.BufferGeometry();
     }
 
     const SURFACE_LIFT = 0.02;
+    const size = world.gridSize;
+    
+    // Build a set of water cells AND their neighbors for smooth edge blending
+    const waterAndNeighbors = new Set<string>();
+    
+    for (let fy = 0; fy < size; fy++) {
+      for (let x = 0; x < size; x++) {
+        const cell = world.terrain[fy]?.[x];
+        if (cell?.type === "water") {
+          // Add the water cell itself
+          waterAndNeighbors.add(`${x},${fy}`);
+          // Add 1-cell border around water for smooth edge blending
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const nx = x + dx;
+              const nfy = fy + dy;
+              if (nx >= 0 && nx < size && nfy >= 0 && nfy < size) {
+                waterAndNeighbors.add(`${nx},${nfy}`);
+              }
+            }
+          }
+        }
+      }
+    }
+    
     return buildWaterGeometry(
       world,
       worldX,
       worldY,
-      (c) => c.type === "water",
+      (c) => {
+        // Include water cells AND their neighbors for extended coverage
+        const isWater = c.type === "water";
+        return isWater; // Still only pick water cells, but edge handling will blend
+      },
       () => waterHeight + SURFACE_LIFT,
-      0.0,
+      0.4, // Higher edge floor = more opacity at edges, less tile-like
     );
   }, [world, worldX, worldY, waterHeight]);
 
   const material = useMemo(() => {
-    // RIVER VISUAL: Dark blue water over dark riverbed with flowing animation
-    // Opacity: 0.5 for visible but semi-transparent water
-    // Colors: Dark blue tones to match riverbed aesthetic
-    const deepColor = new THREE.Color(0.05, 0.25, 0.35);   // Dark teal-blue
-    const shallowColor = new THREE.Color(0.15, 0.40, 0.55); // Medium blue
-    const foamColor = new THREE.Color(0.6, 0.8, 0.9);       // Light blue-white foam
+    // WATER VISUAL: Darker, more opaque water with smooth edges
+    // Opacity: 0.72 for more solid, visible water
+    // Colors: Darker blue tones from palette
+    const deepRgb = hexToRgb01(PALETTE.abyss);   // #001C24 - very dark blue
+    const shallowRgb = hexToRgb01(PALETTE.deep); // #232D26 - dark forest-blue
+    const foamRgb = hexToRgb01(PALETTE.sage);    // #6B746B - muted foam
+    
+    const deepColor = new THREE.Color(deepRgb.r, deepRgb.g, deepRgb.b);
+    const shallowColor = new THREE.Color(
+      shallowRgb.r * 0.7 + deepRgb.r * 0.3,  // Blend toward deep blue
+      shallowRgb.g * 0.5 + 0.15,              // Add slight blue tint
+      shallowRgb.b * 0.5 + 0.25               // More blue
+    );
+    const foamColor = new THREE.Color(foamRgb.r, foamRgb.g, foamRgb.b);
     
     if (DEV) {
-      console.debug('[EnhancedWaterPlane] Water colors (dark blue with flow):', {
-        deep: '#0D4059',
-        shallow: '#26668C',
-        foam: '#99CCE6',
-        opacity: 0.5
+      console.debug('[EnhancedWaterPlane] Water colors (darker, more opaque):', {
+        deep: PALETTE.abyss,
+        shallow: 'blend',
+        foam: PALETTE.sage,
+        opacity: 0.72
       });
     }
     
     const m = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uOpacity: { value: 0.5 }, // 50% opacity - visible but see-through
+        uOpacity: { value: 0.72 }, // 72% opacity - more solid water
         uDeep: { value: deepColor },
         uShallow: { value: shallowColor },
         uFoam: { value: foamColor },
@@ -302,20 +339,20 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
           
           float w = flowPattern + ripples * 0.2;
 
-          // Blend between deep and shallow based on flow pattern
-          vec3 col = mix(uDeep, uShallow, w * 0.6 + 0.2);
+          // Blend between deep and shallow based on flow pattern - favor deep color
+          vec3 col = mix(uDeep, uShallow, w * 0.35 + 0.1);
 
-          // Edge handling: maintain opacity at edges
-          float edgeFade = smoothstep(0.0, 0.3, vEdge);
-          float a = uOpacity * mix(0.85, 1.0, edgeFade);
+          // Edge handling: smoother fade into ground, maintain high opacity
+          float edgeFade = smoothstep(0.0, 0.5, vEdge);
+          float a = uOpacity * mix(0.7, 1.0, edgeFade); // Higher minimum opacity at edges
 
-          // Foam at edges and flow peaks - more visible foam
-          float foamAmount = (1.0 - edgeFade) * 0.25 + pow(flowPattern, 2.0) * 0.15;
+          // Subtle foam at edges and flow peaks
+          float foamAmount = (1.0 - edgeFade) * 0.12 + pow(flowPattern, 3.0) * 0.08;
           col = mix(col, uFoam, foamAmount);
 
-          // Fresnel-like rim highlight - enhanced for dark water
+          // Fresnel-like rim highlight - subtle for dark water
           vec3 viewDir = normalize(-vWPos);
-          float fresnel = pow(1.0 - max(0.0, dot(normalize(vNormal), viewDir)), 2.0);
+          float fresnel = pow(1.0 - max(0.0, dot(normalize(vNormal), viewDir)), 2.5);
           col += vec3(fresnel * 0.12);
 
           // Flowing specular highlights
