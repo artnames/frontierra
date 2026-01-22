@@ -150,3 +150,25 @@ export function createWorldContext(worldX: number, worldY: number): WorldContext
     worldY: clamped.y
   };
 }
+
+// ============================================
+// SOLO MODE WORLD CONTEXT
+// Derives deterministic world coordinates from seed
+// Ensures solo mode uses same generator path as multiplayer
+// ============================================
+
+/**
+ * Derive deterministic world coordinates from a seed.
+ * This ensures solo mode produces identical terrain to multiplayer
+ * when using the same seed/vars, by giving it a consistent worldContext.
+ */
+export function deriveSoloWorldContext(seed: number): { worldX: number; worldY: number } {
+  // Use deterministic hash to derive 0-9 coordinates from seed
+  const hashX = djb2Hash(`solo-x:${seed}`);
+  const hashY = djb2Hash(`solo-y:${seed}`);
+  
+  return {
+    worldX: hashX % WORLD_GRID_WIDTH,
+    worldY: hashY % WORLD_GRID_HEIGHT
+  };
+}

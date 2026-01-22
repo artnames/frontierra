@@ -37,6 +37,7 @@ import {
   ReplayFrame,
 } from "@/lib/worldContract";
 import { WorldExplorer, InteractionMode } from "@/components/WorldExplorer";
+import { deriveSoloWorldContext } from "@/lib/worldContext";
 import { setCameraForLandTransition } from "@/hooks/useFirstPersonControls";
 import { WorldMap2D } from "@/components/WorldMap2D";
 import { WorldContractPanel } from "@/components/WorldContractPanel";
@@ -677,7 +678,7 @@ const Index = () => {
                       worldX: multiplayer.currentLand.pos_x,
                       worldY: multiplayer.currentLand.pos_y,
                     }
-                  : undefined
+                  : deriveSoloWorldContext(activeParams.seed)
               }
               isOwnLand={worldMode === "solo" || !isOtherPlayerLand}
             />
@@ -688,8 +689,8 @@ const Index = () => {
                   params={activeParams} 
                   getShareUrl={getShareUrl}
                   isMultiplayer={worldMode === 'multiplayer'}
-                  worldX={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_x : undefined}
-                  worldY={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_y : undefined}
+                  worldX={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_x : deriveSoloWorldContext(activeParams.seed).worldX}
+                  worldY={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_y : deriveSoloWorldContext(activeParams.seed).worldY}
                 />
               </div>
             </div>
