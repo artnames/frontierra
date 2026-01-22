@@ -81,12 +81,59 @@ interface VegetationItem {
   type: VegetationType;
   colorVariant: number; // 0-1 for color variation
   rotation: number; // Y-axis rotation
+  slopeTiltX: number; // X-axis tilt based on terrain slope
+  slopeTiltZ: number; // Z-axis tilt based on terrain slope
 }
 
 // Deterministic pseudo-random based on coordinates and seed
 function seededRandom(x: number, y: number, seedOffset: number): number {
   const n = Math.sin(x * 12.9898 + y * 78.233 + seedOffset) * 43758.5453;
   return n - Math.floor(n);
+}
+
+// Calculate terrain slope at a position for slope-aware vegetation placement
+// Returns gradient in X and Z directions
+function calculateTerrainSlope(
+  world: WorldData,
+  worldX: number,
+  worldZ: number,
+  sampleDistance: number = 0.5
+): { slopeX: number; slopeZ: number } {
+  // Sample heights at neighboring points
+  const hCenter = getElevationAt(world, worldX, worldZ);
+  const hPosX = getElevationAt(world, worldX + sampleDistance, worldZ);
+  const hNegX = getElevationAt(world, worldX - sampleDistance, worldZ);
+  const hPosZ = getElevationAt(world, worldX, worldZ + sampleDistance);
+  const hNegZ = getElevationAt(world, worldX, worldZ - sampleDistance);
+  
+  // Calculate gradients (height change per unit distance)
+  const gradientX = (hPosX - hNegX) / (sampleDistance * 2);
+  const gradientZ = (hPosZ - hNegZ) / (sampleDistance * 2);
+  
+  // Guard against NaN/Infinity
+  const safeGradientX = Number.isFinite(gradientX) ? gradientX : 0;
+  const safeGradientZ = Number.isFinite(gradientZ) ? gradientZ : 0;
+  
+  return { slopeX: safeGradientX, slopeZ: safeGradientZ };
+}
+
+// Convert slope gradient to tilt angle for vegetation
+// Trees lean slightly downhill (opposite to slope direction)
+// Max tilt is limited for natural appearance
+const MAX_TREE_TILT = 0.15; // ~8.5 degrees max tilt
+const SLOPE_TILT_FACTOR = 0.08; // How much slope affects tilt
+
+function slopeToTilt(slopeX: number, slopeZ: number): { tiltX: number; tiltZ: number } {
+  // Trees lean downhill (opposite to slope), so negate the gradient
+  // The gradient points uphill, so we flip it for downhill lean
+  let tiltX = -slopeX * SLOPE_TILT_FACTOR;
+  let tiltZ = -slopeZ * SLOPE_TILT_FACTOR;
+  
+  // Clamp to max tilt
+  tiltX = Math.max(-MAX_TREE_TILT, Math.min(MAX_TREE_TILT, tiltX));
+  tiltZ = Math.max(-MAX_TREE_TILT, Math.min(MAX_TREE_TILT, tiltZ));
+  
+  return { tiltX, tiltZ };
 }
 
 // Helper to create color strings from palette with variation
@@ -291,6 +338,10 @@ export function ForestTrees({
                           : "bush";
             }
 
+            // Calculate slope for tree tilt
+            const slope = calculateTerrainSlope(world, treeX, treeZ);
+            const tilt = slopeToTilt(slope.slopeX, slope.slopeZ);
+
             items.push({
               x: treeX,
               y: terrainY,
@@ -299,6 +350,8 @@ export function ForestTrees({
               type: treeType,
               colorVariant: seededRandom(gx * 7, gy * 11, seed + 100),
               rotation: r2 * Math.PI * 2,
+              slopeTiltX: tilt.tiltX,
+              slopeTiltZ: tilt.tiltZ,
             });
           }
 
@@ -321,6 +374,7 @@ export function ForestTrees({
             const understoryType: VegetationType =
               understoryRoll < 0.4 ? "fern" : understoryRoll < 0.7 ? "mushroom" : "flower";
 
+            // Small vegetation gets minimal tilt
             items.push({
               x: understoryX,
               y: understoryY,
@@ -329,6 +383,8 @@ export function ForestTrees({
               type: understoryType,
               colorVariant: seededRandom(gx * 9, gy * 13, seed + 200),
               rotation: seededRandom(gx + 600, gy + 600, seed) * Math.PI * 2,
+              slopeTiltX: 0,
+              slopeTiltZ: 0,
             });
           }
 
@@ -347,6 +403,10 @@ export function ForestTrees({
             // Skip if terrain is below water level
             if (terrain2Y < waterHeight + waterSafetyMargin) continue;
 
+            // Calculate slope for tree tilt
+            const slope2 = calculateTerrainSlope(world, tree2X, tree2Z);
+            const tilt2 = slopeToTilt(slope2.slopeX, slope2.slopeZ);
+
             items.push({
               x: tree2X,
               y: terrain2Y,
@@ -355,6 +415,8 @@ export function ForestTrees({
               type: seededRandom(gx * 11, gy * 17, seed + 250) < 0.5 ? "bush" : "deciduous",
               colorVariant: seededRandom(gx * 13, gy * 19, seed + 300),
               rotation: seededRandom(gx + 900, gy + 900, seed) * Math.PI * 2,
+              slopeTiltX: tilt2.tiltX,
+              slopeTiltZ: tilt2.tiltZ,
             });
           }
         }
@@ -382,6 +444,10 @@ export function ForestTrees({
           else if (groundRoll < 0.7) groundType = "flower";
           else groundType = "bush";
 
+          // Ground vegetation gets slight tilt for natural variation
+          const groundSlope = calculateTerrainSlope(world, vegX, vegZ);
+          const groundTilt = slopeToTilt(groundSlope.slopeX, groundSlope.slopeZ);
+
           items.push({
             x: vegX,
             y: vegY,
@@ -390,6 +456,8 @@ export function ForestTrees({
             type: groundType,
             colorVariant: seededRandom(gx * 15, gy * 21, seed + 400),
             rotation: r2 * Math.PI * 2,
+            slopeTiltX: groundTilt.tiltX * 0.5, // Half tilt for small plants
+            slopeTiltZ: groundTilt.tiltZ * 0.5,
           });
         }
 
@@ -410,6 +478,10 @@ export function ForestTrees({
 
           const mountainRoll = seededRandom(gx * 6, gy * 6, seed + 450);
 
+          // Mountain vegetation gets full slope tilt
+          const mtSlope = calculateTerrainSlope(world, rockX, rockZ);
+          const mtTilt = slopeToTilt(mtSlope.slopeX, mtSlope.slopeZ);
+
           items.push({
             x: rockX,
             y: rockY,
@@ -418,6 +490,8 @@ export function ForestTrees({
             type: mountainRoll < 0.7 ? "rock" : mountainRoll < 0.9 ? "deadTree" : "pine",
             colorVariant: seededRandom(gx * 17, gy * 23, seed + 500),
             rotation: r2 * Math.PI * 2,
+            slopeTiltX: mtTilt.tiltX,
+            slopeTiltZ: mtTilt.tiltZ,
           });
         }
       }
@@ -455,7 +529,7 @@ const TREE_GROUND_OFFSET = -0.08; // Small sink to hide root artifacts (was -0.3
 const SMALL_VEG_GROUND_OFFSET = -0.03; // Minimal sink for small plants (was -0.12)
 
 // Main vegetation component that renders the appropriate type
-function Vegetation({ x, y, z, scale, type, colorVariant, rotation, seed }: VegetationItem & { seed: number }) {
+function Vegetation({ x, y, z, scale, type, colorVariant, rotation, slopeTiltX, slopeTiltZ, seed }: VegetationItem & { seed: number }) {
   const shadowsEnabled = useContext(VegetationShadowContext);
 
   // Apply ground offset based on vegetation type
@@ -467,7 +541,8 @@ function Vegetation({ x, y, z, scale, type, colorVariant, rotation, seed }: Vege
   const contactShadow =
     isTree && shadowsEnabled ? <ContactShadowBlob x={x} y={adjustedY + 0.02} z={z} scale={scale} seed={seed} /> : null;
 
-  const vegProps = { x, y: adjustedY, z, scale, colorVariant, rotation };
+  // Apply slope tilt to vegetation props
+  const vegProps = { x, y: adjustedY, z, scale, colorVariant, rotation, slopeTiltX, slopeTiltZ };
 
   switch (type) {
     case "pine":
@@ -536,6 +611,8 @@ interface VegProps {
   scale: number;
   colorVariant: number;
   rotation: number;
+  slopeTiltX: number; // X-axis tilt for slope-aware leaning
+  slopeTiltZ: number; // Z-axis tilt for slope-aware leaning
 }
 
 // Deterministic contact shadow blob under trees for grounding
@@ -622,7 +699,7 @@ function BarkMaterial({ color, isRich }: { color: string; isRich: boolean }) {
 }
 
 // Pine tree - tall conifer using palette colors
-function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+function PineTree({ x, y, z, scale, colorVariant, rotation, slopeTiltX, slopeTiltZ }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
   const outlines = useContext(VegetationOutlineContext);
@@ -634,7 +711,7 @@ function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const leafColor3 = getVegColor(baseLeaf, colorVariant + 0.4, 15);
 
   return (
-    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+    <group position={[x, y, z]} scale={scale} rotation={[slopeTiltX, rotation, slopeTiltZ]}>
       {/* trunk */}
       <OutlineShell enabled={outlines} position={[0, 0.4, 0]}>
         <cylinderGeometry args={[0.06, 0.1, 0.8, 6]} />
@@ -673,7 +750,7 @@ function PineTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 }
 
 // Deciduous tree - round leafy tree using palette colors
-function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+function DeciduousTree({ x, y, z, scale, colorVariant, rotation, slopeTiltX, slopeTiltZ }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
   const outlines = useContext(VegetationOutlineContext);
@@ -685,7 +762,7 @@ function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const leafColor3 = getVegColor(baseLeaf, colorVariant - 0.1, 25);
 
   return (
-    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+    <group position={[x, y, z]} scale={scale} rotation={[slopeTiltX, rotation, slopeTiltZ]}>
       {/* trunk */}
       <OutlineShell enabled={outlines} position={[0, 0.5, 0]}>
         <cylinderGeometry args={[0.08, 0.12, 1.0, 6]} />
@@ -868,7 +945,7 @@ function FallingLeaves({ treeX, treeY, treeZ, scale, colorVariant }: {
 }
 
 // Autumn tree - warm fall colors using palette amber, flame, coral
-function AutumnTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+function AutumnTree({ x, y, z, scale, colorVariant, rotation, slopeTiltX, slopeTiltZ }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
   const outlines = useContext(VegetationOutlineContext);
@@ -888,7 +965,7 @@ function AutumnTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const leafColor3 = getVegColor(autumnColors[(colorIndex + 2) % autumnColors.length], colorVariant + 0.4, 30);
 
   return (
-    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+    <group position={[x, y, z]} scale={scale} rotation={[slopeTiltX, rotation, slopeTiltZ]}>
       {/* Falling leaves effect */}
       <FallingLeaves treeX={0} treeY={0} treeZ={0} scale={1} colorVariant={colorVariant} />
       
@@ -930,7 +1007,7 @@ function AutumnTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 }
 
 // Bush - small shrub using palette colors
-function Bush({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+function Bush({ x, y, z, scale, colorVariant, rotation, slopeTiltX, slopeTiltZ }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
   const outlines = useContext(VegetationOutlineContext);
@@ -941,7 +1018,7 @@ function Bush({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const bushColor2 = getVegColor(baseLeaf, colorVariant + 0.15, 20);
 
   return (
-    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+    <group position={[x, y, z]} scale={scale} rotation={[slopeTiltX * 0.5, rotation, slopeTiltZ * 0.5]}>
       {/* stem */}
       <OutlineShell enabled={outlines} position={[0, 0.15, 0]}>
         <cylinderGeometry args={[0.03, 0.05, 0.3, 5]} />
@@ -972,7 +1049,7 @@ function Bush({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 }
 
 // Birch tree - white bark, slender (using palette)
-function BirchTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+function BirchTree({ x, y, z, scale, colorVariant, rotation, slopeTiltX, slopeTiltZ }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
   const outlines = useContext(VegetationOutlineContext);
@@ -983,7 +1060,7 @@ function BirchTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const birchLeaf2 = getVegColor(baseLeaf, colorVariant + 0.2, 20);
 
   return (
-    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+    <group position={[x, y, z]} scale={scale} rotation={[slopeTiltX, rotation, slopeTiltZ]}>
       {/* trunk - birch has light bark from palette mist */}
       <OutlineShell enabled={outlines} position={[0, 0.6, 0]}>
         <cylinderGeometry args={[0.05, 0.07, 1.2, 6]} />
@@ -1024,7 +1101,7 @@ function BirchTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 }
 
 // Willow tree - drooping branches (using palette)
-function WillowTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+function WillowTree({ x, y, z, scale, colorVariant, rotation, slopeTiltX, slopeTiltZ }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
   const outlines = useContext(VegetationOutlineContext);
@@ -1036,7 +1113,7 @@ function WillowTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const willowLeaf3 = getVegColor(baseLeaf, colorVariant + 0.1, 18);
 
   return (
-    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+    <group position={[x, y, z]} scale={scale} rotation={[slopeTiltX, rotation, slopeTiltZ]}>
       {/* trunk */}
       <OutlineShell enabled={outlines} position={[0, 0.5, 0]}>
         <cylinderGeometry args={[0.1, 0.15, 1.0, 6]} />
@@ -1084,7 +1161,7 @@ function WillowTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 }
 
 // Dead tree - bare branches (using palette)
-function DeadTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+function DeadTree({ x, y, z, scale, colorVariant, rotation, slopeTiltX, slopeTiltZ }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
   const outlines = useContext(VegetationOutlineContext);
@@ -1096,7 +1173,7 @@ function DeadTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const deadColor3 = getVegColor(baseBark, colorVariant - 0.1, 15);
 
   return (
-    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+    <group position={[x, y, z]} scale={scale} rotation={[slopeTiltX, rotation, slopeTiltZ]}>
       {/* trunk */}
       <OutlineShell enabled={outlines} position={[0, 0.5, 0]}>
         <cylinderGeometry args={[0.06, 0.1, 1.0, 5]} />
@@ -1135,7 +1212,7 @@ function DeadTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 }
 
 // Flower - colorful small plant (receives shadows only, too small to cast meaningful shadows)
-function Flower({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+function Flower({ x, y, z, scale, colorVariant, rotation, slopeTiltX, slopeTiltZ }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
 
@@ -1144,7 +1221,7 @@ function Flower({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const flowerColor = FLOWER_COLORS[colorIndex % FLOWER_COLORS.length];
 
   return (
-    <group position={[x, y, z]} scale={scale * 0.5} rotation={[0, rotation, 0]}>
+    <group position={[x, y, z]} scale={scale * 0.5} rotation={[slopeTiltX * 0.3, rotation, slopeTiltZ * 0.3]}>
       {/* Stem */}
       <mesh position={[0, 0.15, 0]} receiveShadow={shadows}>
         <cylinderGeometry args={[0.015, 0.02, 0.3, 4]} />
@@ -1165,7 +1242,7 @@ function Flower({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 }
 
 // Rock - natural stone (using palette)
-function Rock({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+function Rock({ x, y, z, scale, colorVariant, rotation, slopeTiltX, slopeTiltZ }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
   const outlines = useContext(VegetationOutlineContext);
@@ -1176,7 +1253,7 @@ function Rock({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const rockColor2 = getVegColor(baseRock, colorVariant - 0.15, 15);
 
   return (
-    <group position={[x, y, z]} scale={scale * 0.6} rotation={[0, rotation, colorVariant * 0.3]}>
+    <group position={[x, y, z]} scale={scale * 0.6} rotation={[slopeTiltX * 0.5, rotation, colorVariant * 0.3 + slopeTiltZ * 0.5]}>
       <OutlineShell enabled={outlines} position={[0, 0.12, 0]}>
         <dodecahedronGeometry args={[0.2, 0]} />
       </OutlineShell>
@@ -1201,7 +1278,7 @@ function Rock({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 }
 
 // Grass clump - tall grass (using palette)
-function GrassClump({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+function GrassClump({ x, y, z, scale, colorVariant, rotation, slopeTiltX, slopeTiltZ }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
 
@@ -1209,7 +1286,7 @@ function GrassClump({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const baseLeaf = VEGETATION_COLORS.bushBase;
 
   return (
-    <group position={[x, y, z]} scale={scale * 0.4} rotation={[0, rotation, 0]}>
+    <group position={[x, y, z]} scale={scale * 0.4} rotation={[slopeTiltX * 0.2, rotation, slopeTiltZ * 0.2]}>
       {[0, 0.4, 0.8, 1.2, 1.6].map((angle, i) => {
         const grassColor = getVegColor(baseLeaf, colorVariant + i * 0.05, 12);
         return (
@@ -1229,7 +1306,7 @@ function GrassClump({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 }
 
 // Mushroom - forest floor fungus (using palette)
-function Mushroom({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+function Mushroom({ x, y, z, scale, colorVariant, rotation, slopeTiltX, slopeTiltZ }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
 
@@ -1244,7 +1321,7 @@ function Mushroom({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const colors = mushroomColors[colorIndex % mushroomColors.length];
 
   return (
-    <group position={[x, y, z]} scale={scale * 0.3} rotation={[0, rotation, 0]}>
+    <group position={[x, y, z]} scale={scale * 0.3} rotation={[slopeTiltX * 0.2, rotation, slopeTiltZ * 0.2]}>
       {/* Stem */}
       <mesh position={[0, 0.1, 0]} receiveShadow={shadows}>
         <cylinderGeometry args={[0.04, 0.05, 0.2, 6]} />
@@ -1273,7 +1350,7 @@ function Mushroom({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 }
 
 // Fern - forest understory plant (using palette)
-function Fern({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+function Fern({ x, y, z, scale, colorVariant, rotation, slopeTiltX, slopeTiltZ }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
   const shadows = useContext(VegetationShadowContext);
 
@@ -1281,7 +1358,7 @@ function Fern({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const baseLeaf = VEGETATION_COLORS.pineBase;
 
   return (
-    <group position={[x, y, z]} scale={scale * 0.5} rotation={[0, rotation, 0]}>
+    <group position={[x, y, z]} scale={scale * 0.5} rotation={[slopeTiltX * 0.3, rotation, slopeTiltZ * 0.3]}>
       {/* Multiple fronds spreading out */}
       {[0, 1, 2, 3, 4].map((i) => {
         const angle = (i / 5) * Math.PI * 2 + colorVariant;
