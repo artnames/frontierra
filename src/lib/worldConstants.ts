@@ -31,9 +31,16 @@ export function applyElevationCurve(rawElevation: number): number {
 // WATER LEVEL FUNCTIONS
 // ============================================
 
+// Maximum water level ratio (0-1) to prevent flooding entire terrain
+// At 100% VAR[4], water should cover ~55% of elevation range max
+const WATER_LEVEL_MAX_RATIO = 0.55;
+
 // Raw water level from VAR[4] (uncurved, 0-1 range)
+// Clamped to prevent water flooding above reasonable terrain
 export function getWaterLevelRaw(vars: number[]): number {
-  return ((vars[4] ?? 50) / 100) * 0.45 + 0.1;
+  const rawVar = Math.min(100, Math.max(0, vars[4] ?? 50)); // Clamp VAR to 0-100
+  // Map 0-100 to 0.1-0.55 range (was 0.1-0.55 but could exceed if miscalculated)
+  return (rawVar / 100) * (WATER_LEVEL_MAX_RATIO - 0.1) + 0.1;
 }
 
 // Water level in CURVED terrain space (0-1 range, curved)
