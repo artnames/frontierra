@@ -199,25 +199,26 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
   }, [world, worldX, worldY, waterHeight]);
 
   const material = useMemo(() => {
-    // WATER/RIVER VISIBILITY FIX: Use palette-aligned colors
-    // Deep: Rich teal-blue that's visible against terrain
-    // Shallow: Lighter cyan-teal for depth variation
-    const deepColor = new THREE.Color(0.0, 0.11, 0.14);    // #001C24 from palette (abyss)
-    const shallowColor = new THREE.Color(0.34, 0.43, 0.27); // #576E45 (forest) for shallow
-    const foamColor = toThreeColor(PALETTE.mist, { linear: true });
+    // RIVER VISUAL IMPROVEMENT: Light blue semi-transparent water
+    // This lets the dark riverbed (#001C24) show through for natural depth
+    // Deep: Light sky blue for transparent water
+    // Shallow: Even lighter blue for depth variation
+    const deepColor = new THREE.Color(0.4, 0.7, 0.9);      // Light blue
+    const shallowColor = new THREE.Color(0.55, 0.82, 1.0); // Lighter sky blue
+    const foamColor = new THREE.Color(0.85, 0.95, 1.0);    // White-blue foam
     
     if (DEV) {
-      console.debug('[EnhancedWaterPlane] Water colors (palette):', {
-        deep: PALETTE.abyss,
-        shallow: PALETTE.forest,
-        foam: PALETTE.mist
+      console.debug('[EnhancedWaterPlane] Water colors (light blue transparent):', {
+        deep: '#66B3E6',
+        shallow: '#8CD1FF',
+        foam: '#D9F2FF'
       });
     }
     
     const m = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uOpacity: { value: 0.92 }, // High opacity for visibility
+        uOpacity: { value: 0.35 }, // Low opacity for transparency - see dark riverbed through
         uDeep: { value: deepColor },
         uShallow: { value: shallowColor },
         uFoam: { value: foamColor },

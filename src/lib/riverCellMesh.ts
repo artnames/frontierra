@@ -16,6 +16,10 @@ import {
 // Surface lift above riverbed - must match water shader
 const RIVER_SURFACE_LIFT = 0.12;
 
+// Width extension beyond river cells (in grid units)
+// This makes water overlap riverbed edges for natural appearance
+const RIVER_WIDTH_EXTENSION = 0.35;
+
 /**
  * Build river mesh from exact terrain cells
  * Uses IDENTICAL coordinate system as SmoothTerrainMesh:
@@ -92,8 +96,9 @@ export function buildRiverCellMesh(
     return flatWaterHeight;
   };
 
-  const ensureVertex = (x: number, y: number): number => {
-    const key = `${x},${y}`;
+  // Use string key with precision for extended coordinates
+  const ensureVertex = (x: number, y: number, isEdge: boolean = false): number => {
+    const key = `${x.toFixed(2)},${y.toFixed(2)}`;
     const existing = vertIndex.get(key);
     if (existing !== undefined) return existing;
 
@@ -105,7 +110,7 @@ export function buildRiverCellMesh(
       (x + worldX * (size - 1)) * 0.12,
       (y + worldY * (size - 1)) * 0.12
     );
-    edges.push(1.0); // Will be adjusted for edge cells
+    edges.push(isEdge ? 0.5 : 1.0); // Edge vertices get lower value for foam effect
     
     vertIndex.set(key, idx);
     return idx;
@@ -119,8 +124,10 @@ export function buildRiverCellMesh(
     return !!cell?.hasRiver && cell.type !== 'water';
   };
 
-  // Build quads for each river cell
-  // Use SAME loop structure as SmoothTerrainMesh for consistency
+  // Build EXTENDED quads for each river cell
+  // Water extends beyond cell boundaries for natural overlap with riverbed
+  const ext = RIVER_WIDTH_EXTENSION;
+  
   for (let y = 0; y < size - 1; y++) {
     for (let x = 0; x < size - 1; x++) {
       const flippedY = toRow(y, size);
@@ -128,28 +135,32 @@ export function buildRiverCellMesh(
       
       if (!cell?.hasRiver || cell.type === 'water') continue;
 
-      // Create quad vertices at cell corners
-      const v00 = ensureVertex(x, y);
-      const v10 = ensureVertex(x + 1, y);
-      const v01 = ensureVertex(x, y + 1);
-      const v11 = ensureVertex(x + 1, y + 1);
+      // Check neighbors to determine edge extension
+      const hasLeft = isRiverAt(y, x - 1);
+      const hasRight = isRiverAt(y, x + 1);
+      const hasUp = isRiverAt(y + 1, x);
+      const hasDown = isRiverAt(y - 1, x);
+
+      // Extended coordinates - extend outward at edges
+      const x0 = hasLeft ? x : x - ext;
+      const x1 = hasRight ? x + 1 : x + 1 + ext;
+      const y0 = hasDown ? y : y - ext;
+      const y1 = hasUp ? y + 1 : y + 1 + ext;
+
+      // Create extended quad vertices
+      const isEdgeLeft = !hasLeft;
+      const isEdgeRight = !hasRight;
+      const isEdgeDown = !hasDown;
+      const isEdgeUp = !hasUp;
+
+      const v00 = ensureVertex(x0, y0, isEdgeLeft || isEdgeDown);
+      const v10 = ensureVertex(x1, y0, isEdgeRight || isEdgeDown);
+      const v01 = ensureVertex(x0, y1, isEdgeLeft || isEdgeUp);
+      const v11 = ensureVertex(x1, y1, isEdgeRight || isEdgeUp);
 
       // Two triangles per cell (same winding as terrain)
       indices.push(v00, v01, v10);
       indices.push(v01, v11, v10);
-
-      // Check if this is an edge cell (for shading)
-      const isInterior = 
-        isRiverAt(y, x - 1) && isRiverAt(y, x + 1) &&
-        isRiverAt(y - 1, x) && isRiverAt(y + 1, x);
-
-      if (!isInterior) {
-        // Mark edge vertices for foam/transparency
-        edges[v00] = 0.7;
-        edges[v10] = 0.7;
-        edges[v01] = 0.7;
-        edges[v11] = 0.7;
-      }
     }
   }
 
