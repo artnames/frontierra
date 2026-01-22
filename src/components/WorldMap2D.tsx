@@ -6,7 +6,6 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { Check, Share2 } from 'lucide-react';
 import { WorldParams } from '@/lib/worldGenerator';
 import { normalizeNexArtInput } from '@/lib/nexartWorld';
-import { getWorldSeed, WORLD_A_ID } from '@/lib/worldContext';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
@@ -88,27 +87,17 @@ export function WorldMap2D({
           worldY: effectiveWorldY
         });
 
-        // Inject WORLD_X/WORLD_Y into source - SAME as 3D pipeline (nexartWorld.ts)
-        const injection = `var WORLD_X = ${effectiveWorldX}; var WORLD_Y = ${effectiveWorldY};`;
-        const finalSource = canonicalResult.source.replace(
-          'function setup() {',
-          `function setup() { ${injection}`
-        );
+        // No coordinate injection needed - the Solo generator doesn't use WORLD_X/WORLD_Y
 
-        // CRITICAL: Use the SAME seed calculation as 3D pipeline (nexartWorld.ts line 154)
-        // This ensures 2D map and 3D explorer produce identical outputs
-        const worldContext = {
-          worldId: WORLD_A_ID,
-          worldX: effectiveWorldX,
-          worldY: effectiveWorldY
-        };
-        const executionSeed = getWorldSeed(worldContext, input.seed);
+        // SEED: Use raw seed directly (the WORLD_LAYOUT_SOURCE generator doesn't use WORLD_X/WORLD_Y)
+        // This matches the 3D pipeline which also uses raw seed for consistency
+        const executionSeed = input.seed;
 
         const executionPromise = executeCodeMode({
-          source: finalSource,
+          source: canonicalResult.source,
           width: 64,
           height: 64,
-          seed: executionSeed,  // Use combined seed, not raw input.seed
+          seed: executionSeed,
           vars: input.vars,
           mode: input.mode,
         });
