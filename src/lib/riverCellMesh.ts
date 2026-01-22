@@ -1,6 +1,6 @@
-// River Cell Mesh Builder - DIRECT CELL-BASED approach
-// Builds river geometry from exact terrain cells marked as river
-// NO dilation, blur, or marching squares - guarantees perfect alignment with terrain
+// River Cell Mesh Builder - UNIFIED SURFACE approach
+// Builds a single continuous water mesh from all river cells
+// Expands the covered area and creates ONE unified surface to avoid patchy overlaps
 // Uses same coordinate system as SmoothTerrainMesh
 // FIX: Water is FLAT - uses a single consistent water level per connected river segment
 
@@ -13,18 +13,18 @@ const RIVER_SURFACE_LIFT = 0.08;
 
 // Width extension beyond river cells (in grid units)
 // This makes water overlap riverbed edges for natural appearance
-const RIVER_WIDTH_EXTENSION = 1.5;
+const RIVER_WIDTH_EXTENSION = 0.5;
 
 /**
- * Build river mesh from exact terrain cells
+ * Build river mesh from terrain cells using UNIFIED surface approach
+ * 
+ * Instead of creating per-cell quads (which overlap and cause patchy appearance),
+ * we first expand the river mask, then build ONE continuous surface.
+ * 
  * Uses IDENTICAL coordinate system as SmoothTerrainMesh:
  * - For loop y = 0..size (render Z coordinate)
  * - Position: (x, height, y)
  * - Terrain access: terrain[toRow(y, size)][x]
- *
- * FIX: Water is FLAT - we compute one water level for the entire river
- * based on the MINIMUM riverbed height. This ensures water flows naturally
- * downhill and doesn't follow terrain undulations.
  */
 export function buildRiverCellMesh(world: WorldData, worldX: number, worldY: number): THREE.BufferGeometry {
   if (!world?.terrain || world.terrain.length === 0 || !world.gridSize) {
@@ -33,120 +33,140 @@ export function buildRiverCellMesh(world: WorldData, worldX: number, worldY: num
 
   const size = world.gridSize;
 
-  // PASS 1: Find ALL river cells and compute GLOBAL minimum riverbed height
-  // This creates a flat water surface that settles at the lowest point
-  const riverCells: Array<{ x: number; renderY: number; bedHeight: number }> = [];
+  // PASS 1: Build binary river mask and find riverbed heights
+  const riverMask: boolean[][] = [];
+  const bedHeights: number[][] = [];
   let globalMinBedHeight = Infinity;
   let globalMaxBedHeight = -Infinity;
+  let riverCellCount = 0;
 
   for (let y = 0; y < size; y++) {
+    riverMask[y] = [];
+    bedHeights[y] = [];
     for (let x = 0; x < size; x++) {
       const flippedY = toRow(y, size);
       const cell = world.terrain[flippedY]?.[x];
 
-      if (!cell?.hasRiver || cell.type === "water") continue;
+      if (cell?.hasRiver && cell.type !== "water") {
+        riverMask[y][x] = true;
+        riverCellCount++;
 
-      const baseH = cell.elevation * WORLD_HEIGHT_SCALE;
-      const carve = computeRiverCarveDepth(
-        world.terrain,
-        x,
-        y, // render Y for noise
-        flippedY, // flipped index for terrain access
-        true, // isRiverCell
-        world.seed,
-      );
-
-      const bedHeight = baseH - carve;
-      riverCells.push({ x, renderY: y, bedHeight });
-
-      globalMinBedHeight = Math.min(globalMinBedHeight, bedHeight);
-      globalMaxBedHeight = Math.max(globalMaxBedHeight, bedHeight);
+        const baseH = cell.elevation * WORLD_HEIGHT_SCALE;
+        const carve = computeRiverCarveDepth(
+          world.terrain,
+          x,
+          y,
+          flippedY,
+          true,
+          world.seed,
+        );
+        const bedHeight = baseH - carve;
+        bedHeights[y][x] = bedHeight;
+        globalMinBedHeight = Math.min(globalMinBedHeight, bedHeight);
+        globalMaxBedHeight = Math.max(globalMaxBedHeight, bedHeight);
+      } else {
+        riverMask[y][x] = false;
+        bedHeights[y][x] = 0;
+      }
     }
   }
 
-  if (riverCells.length === 0) {
+  if (riverCellCount === 0) {
     return new THREE.BufferGeometry();
   }
 
-  // FIX: Use a SINGLE flat water level for the entire river
-  // The water surface is positioned at the average bed height + water above bed + lift
-  // This creates realistic flat water that doesn't follow terrain bumps
+  // PASS 2: Expand river mask by extension amount
+  // This creates a dilated mask so water extends beyond riverbed edges
+  const ext = RIVER_WIDTH_EXTENSION;
+  const expandedMask: boolean[][] = [];
+  
+  for (let y = 0; y < size; y++) {
+    expandedMask[y] = [];
+    for (let x = 0; x < size; x++) {
+      // Check if this cell is within extension distance of any river cell
+      let isNearRiver = false;
+      
+      // Check nearby cells within extension radius (use ceiling for integer range)
+      const range = Math.ceil(ext);
+      for (let dy = -range; dy <= range && !isNearRiver; dy++) {
+        for (let dx = -range; dx <= range && !isNearRiver; dx++) {
+          const ny = y + dy;
+          const nx = x + dx;
+          if (ny >= 0 && ny < size && nx >= 0 && nx < size) {
+            if (riverMask[ny][nx]) {
+              // Check actual distance
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist <= ext + 0.5) { // +0.5 to include cell centers
+                isNearRiver = true;
+              }
+            }
+          }
+        }
+      }
+      
+      expandedMask[y][x] = isNearRiver;
+    }
+  }
+
+  // Compute flat water height from riverbed average
   const avgBedHeight = (globalMinBedHeight + globalMaxBedHeight) / 2;
   const flatWaterHeight = avgBedHeight + RIVER_WATER_ABOVE_BED + RIVER_SURFACE_LIFT;
 
+  // PASS 3: Build UNIFIED mesh from expanded mask
   const positions: number[] = [];
   const uvs: number[] = [];
   const edges: number[] = [];
   const indices: number[] = [];
-
-  // Vertex deduplication (same as terrain mesh)
   const vertIndex = new Map<string, number>();
 
-  // Now use FLAT water height for all vertices
-  const getWaterHeight = (_x: number, _renderY: number): number => {
-    return flatWaterHeight;
-  };
-
-  // Use string key with precision for extended coordinates
-  const ensureVertex = (x: number, y: number, isEdge: boolean = false): number => {
-    const key = `${x.toFixed(2)},${y.toFixed(2)}`;
+  const ensureVertex = (x: number, y: number, isEdge: boolean): number => {
+    const key = `${x},${y}`;
     const existing = vertIndex.get(key);
     if (existing !== undefined) return existing;
 
-    const h = getWaterHeight(x, y);
     const idx = positions.length / 3;
-
-    positions.push(x, h, y);
+    positions.push(x, flatWaterHeight, y);
     uvs.push((x + worldX * (size - 1)) * 0.12, (y + worldY * (size - 1)) * 0.12);
-    edges.push(isEdge ? 0.5 : 1.0); // Edge vertices get lower value for foam effect
+    edges.push(isEdge ? 0.3 : 1.0);
 
     vertIndex.set(key, idx);
     return idx;
   };
 
-  // Check if a cell is a river (not ocean)
-  const isRiverAt = (renderY: number, x: number): boolean => {
-    if (x < 0 || x >= size || renderY < 0 || renderY >= size) return false;
-    const flippedY = toRow(renderY, size);
-    const cell = world.terrain[flippedY]?.[x];
-    return !!cell?.hasRiver && cell.type !== "water";
+  // Check if expanded mask has water at position
+  const hasWaterAt = (x: number, y: number): boolean => {
+    if (x < 0 || x >= size || y < 0 || y >= size) return false;
+    return expandedMask[y][x];
   };
 
-  // Build EXTENDED quads for each river cell
-  // Water extends beyond cell boundaries for natural overlap with riverbed
-  const ext = RIVER_WIDTH_EXTENSION;
-
+  // Build quads for expanded mask (single layer, no overlaps)
   for (let y = 0; y < size - 1; y++) {
     for (let x = 0; x < size - 1; x++) {
-      const flippedY = toRow(y, size);
-      const cell = world.terrain[flippedY]?.[x];
+      // Only create quad if this cell is in expanded mask
+      if (!expandedMask[y][x]) continue;
 
-      if (!cell?.hasRiver || cell.type === "water") continue;
+      // Check all 4 corners of this cell
+      const has00 = hasWaterAt(x, y);
+      const has10 = hasWaterAt(x + 1, y);
+      const has01 = hasWaterAt(x, y + 1);
+      const has11 = hasWaterAt(x + 1, y + 1);
 
-      // Check neighbors to determine edge extension
-      const hasLeft = isRiverAt(y, x - 1);
-      const hasRight = isRiverAt(y, x + 1);
-      const hasUp = isRiverAt(y + 1, x);
-      const hasDown = isRiverAt(y - 1, x);
+      // Only create quad if at least 3 corners have water (smooth edges)
+      const cornerCount = (has00 ? 1 : 0) + (has10 ? 1 : 0) + (has01 ? 1 : 0) + (has11 ? 1 : 0);
+      if (cornerCount < 3) continue;
 
-      // Extended coordinates - extend outward at edges
-      const x0 = hasLeft ? x : x - ext;
-      const x1 = hasRight ? x + 1 : x + 1 + ext;
-      const y0 = hasDown ? y : y - ext;
-      const y1 = hasUp ? y + 1 : y + 1 + ext;
+      // Determine which corners are edge (for foam effect)
+      const isEdge00 = !hasWaterAt(x - 1, y) || !hasWaterAt(x, y - 1);
+      const isEdge10 = !hasWaterAt(x + 2, y) || !hasWaterAt(x + 1, y - 1);
+      const isEdge01 = !hasWaterAt(x - 1, y + 1) || !hasWaterAt(x, y + 2);
+      const isEdge11 = !hasWaterAt(x + 2, y + 1) || !hasWaterAt(x + 1, y + 2);
 
-      // Create extended quad vertices
-      const isEdgeLeft = !hasLeft;
-      const isEdgeRight = !hasRight;
-      const isEdgeDown = !hasDown;
-      const isEdgeUp = !hasUp;
+      const v00 = ensureVertex(x, y, isEdge00);
+      const v10 = ensureVertex(x + 1, y, isEdge10);
+      const v01 = ensureVertex(x, y + 1, isEdge01);
+      const v11 = ensureVertex(x + 1, y + 1, isEdge11);
 
-      const v00 = ensureVertex(x0, y0, isEdgeLeft || isEdgeDown);
-      const v10 = ensureVertex(x1, y0, isEdgeRight || isEdgeDown);
-      const v01 = ensureVertex(x0, y1, isEdgeLeft || isEdgeUp);
-      const v11 = ensureVertex(x1, y1, isEdgeRight || isEdgeUp);
-
-      // Two triangles per cell (same winding as terrain)
+      // Two triangles per quad
       indices.push(v00, v01, v10);
       indices.push(v01, v11, v10);
     }
