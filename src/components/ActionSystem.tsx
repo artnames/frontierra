@@ -173,8 +173,10 @@ export function PlacedBeaconMesh({ action, world }: PlacedBeaconProps) {
   const posX = action.gridX;
   const posZ = flippedZ;
 
-  // Get elevation at grid coordinates - getElevationAt handles the Y-flip internally
-  const terrainY = getElevationAt(world, action.gridX, action.gridY);
+  // COORDINATE FIX: getElevationAt expects world coordinates (worldX, worldZ)
+  // where worldZ corresponds to the 3D Z position (flippedZ), not the grid Y
+  // This ensures the beacon sits correctly on the terrain surface
+  const terrainY = getElevationAt(world, posX, posZ);
 
   return (
     <group position={[posX, terrainY, posZ]}>
