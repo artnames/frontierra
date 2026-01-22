@@ -87,11 +87,10 @@ export function getTerrainHeightAt(
 
   let height = baseH - carve;
   
-  // Paths use terrain height + small lift (bridge logic removed)
+  // Paths: add small lift above terrain for visibility (bridge removed)
+  // No max cap - paths follow terrain contours naturally
   if (cell.type === "path") {
-    const waterHeight = safeNumber(getWaterHeight(world.vars), 0, 'getTerrainHeightAt.waterHeight');
-    const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
-    height = Math.min(height, pathMaxHeight);
+    height = baseH + 0.05;
   }
 
   return safeNumber(height, 0, 'getTerrainHeightAt.final');

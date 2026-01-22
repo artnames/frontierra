@@ -330,7 +330,8 @@ export function getTileColorBright(
     };
   }
 
-  if (isPath && type !== "bridge") {
+  if (isPath) {
+    // Bridge removed - paths cannot cross water
     const pc = BASE_COLORS.path;
     const boost = BRIGHTNESS_MULTIPLIERS.path;
     return {
