@@ -1,9 +1,10 @@
 // Generator Proof Overlay
-// Shows generator mode, source hash, BUILD_ID, and mapped values
+// Shows generator mode, source hash, BUILD_ID, and single canonical pixelHash
+// SINGLE SOURCE OF TRUTH: 2D and 3D share the same artifact
 // Visible with ?debug=1 URL param
 
 import { GeneratorMode } from '@/lib/generatorCanonical';
-import { BUILD_ID } from '@/lib/worldPipeline';
+import { BUILD_ID } from '@/lib/generateCanonicalWorld';
 
 interface GeneratorProofOverlayProps {
   mode: GeneratorMode;
@@ -18,9 +19,9 @@ interface GeneratorProofOverlayProps {
   // World coordinates for unified generation proof
   worldX?: number;
   worldY?: number;
-  // Pixel hash for parity verification (3D)
+  // SINGLE pixel hash from canonical artifact (shared by 2D and 3D)
   pixelHash?: string;
-  // 2D pixel hash for comparison
+  // DEPRECATED: kept for backwards compatibility but should always match pixelHash
   pixelHash2D?: string;
 }
 

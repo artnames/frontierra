@@ -1,10 +1,7 @@
 // Multiplayer World Hook
-// Manages the deterministic world loading and edge transitions
-// Integrates with World A shared macro geography via worldContext
+// Manages land transitions and multiplayer state
+// DOES NOT generate worlds internally - Index.tsx owns canonical generation
 // Uses deterministic neighbor preloading for seamless transitions
-// FIX B: Proper request versioning with AbortController pattern
-// FIX C: Validates micro_overrides from DB (range + type safety)
-// FIX D: Proactive LRU cache pruning every 60s
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { PlayerLand, LAND_GRID_SIZE, WORLD_A_GRID_WIDTH, WORLD_A_GRID_HEIGHT, EdgeCrossing, getNeighborPosition } from '@/lib/multiplayer/types';
@@ -17,9 +14,8 @@ import {
   subscribeLandChanges,
   updateLand
 } from '@/lib/multiplayer/landRegistry';
-import { useNexArtWorld } from './useNexArtWorld';
 import { useEdgeTransition } from './useEdgeTransition';
-import { createWorldContext, WorldContext } from '@/lib/worldContext';
+import { createWorldContext } from '@/lib/worldContext';
 import { 
   getCachedWorld, 
   cacheWorld, 
@@ -59,6 +55,8 @@ interface UseMultiplayerWorldOptions {
   initialPlayerId?: string;
   autoCreate?: boolean;
   onLandTransition?: (entryPosition: { x: number; z: number }) => void;
+  // Callback to trigger regeneration in parent (Index.tsx owns generation)
+  onRequestRegenerate?: () => void;
 }
 
 // FIX D: Bounded LRU cache for neighbor params (max 100 entries, 10 min TTL)
@@ -177,71 +175,9 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     };
   }, [state.currentLand]);
   
-  const { 
-    world: generatedWorld, 
-    isLoading: isWorldLoading, 
-    isVerifying,
-    error: worldError,
-    forceRegenerate 
-  } = useNexArtWorld({
-    seed: worldParams.seed,
-    vars: worldParams.vars,
-    worldContext
-  });
-  
-  // FIX B: Use cached world if available for instant transitions, otherwise use generated
-  // Only use generated world if it's from the current request (prevents race conditions)
-  const world = useMemo(() => {
-    // If we have a cached world and state is loading, use cached for instant display
-    if (state.cachedWorld && state.worldGenState === 'loading') {
-      return state.cachedWorld;
-    }
-    // Otherwise use generated world if valid
-    if (generatedWorld && isWorldValid(generatedWorld)) {
-      return generatedWorld;
-    }
-    return state.cachedWorld ?? generatedWorld;
-  }, [state.cachedWorld, state.worldGenState, generatedWorld]);
-  
-  // FIX B: Update world gen state and cache when generated world is ready
-  // Uses land key comparison to prevent race conditions
-  useEffect(() => {
-    if (!state.currentLand) return;
-    
-    const landKey = `${state.currentLand.pos_x}:${state.currentLand.pos_y}:${state.currentLand.seed}`;
-    
-    // Only process if this is still the current land
-    if (landKey !== currentLandKeyRef.current) return;
-    
-    if (generatedWorld && isWorldValid(generatedWorld)) {
-      const currentRequestId = requestIdRef.current;
-      
-      // Verify this is still the current request (race condition prevention)
-      if (currentRequestId === requestIdRef.current) {
-        cacheWorld(
-          state.currentLand.pos_x, 
-          state.currentLand.pos_y, 
-          generatedWorld, 
-          state.currentLand.seed, 
-          state.currentLand.vars
-        );
-        
-        // Clear cachedWorld and mark as ready once authoritative generated world is ready
-        setState(prev => {
-          // Double-check we're still on the same land
-          if (prev.currentLand?.pos_x !== state.currentLand!.pos_x ||
-              prev.currentLand?.pos_y !== state.currentLand!.pos_y) {
-            return prev;
-          }
-          return {
-            ...prev,
-            cachedWorld: null,
-            worldGenState: 'ready'
-          };
-        });
-      }
-    }
-  }, [generatedWorld, state.currentLand]);
+  // REMOVED: useNexArtWorld hook - world generation is now owned by Index.tsx
+  // This hook only manages land transitions and multiplayer state
+  // The canonical artifact is passed down to components from Index.tsx
   
   // Preload neighbors when current land changes
   useEffect(() => {
@@ -312,8 +248,8 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
       // Clear neighbor params cache for new location
       neighborParamsCache.clear();
       
-      // Force regenerate to get the authoritative world (will update cache)
-      forceRegenerate();
+      // Signal parent to regenerate (Index.tsx owns canonical generation)
+      options.onRequestRegenerate?.();
       // Notify parent to reposition camera
       options.onLandTransition?.(entryPosition);
     } else {
@@ -343,7 +279,7 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
       }));
       options.onLandTransition?.(pushed);
     }
-  }, [forceRegenerate, options.onLandTransition, state.currentLand]);
+  }, [options.onLandTransition, options.onRequestRegenerate, state.currentLand]);
   
   const edgeTransition = useEdgeTransition({
     playerId: state.playerId,
@@ -474,9 +410,10 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     });
     if (updatedLand) {
       setState(prev => ({ ...prev, currentLand: updatedLand }));
-      forceRegenerate();
+      // Signal parent to regenerate
+      options.onRequestRegenerate?.();
     }
-  }, [state.playerId, state.currentLand, options.initialPlayerId, forceRegenerate]);
+  }, [state.playerId, state.currentLand, options.initialPlayerId, options.onRequestRegenerate]);
   
   useEffect(() => {
     const unsubscribe = subscribeLandChanges((updatedLand) => {
@@ -507,16 +444,14 @@ export function useMultiplayerWorld(options: UseMultiplayerWorldOptions = {}) {
     unclaimedAttempt: state.unclaimedAttempt,
     worldContext,
     worldParams, // Expose full V2 params
-    world,
-    isLoading: state.isLoading || isWorldLoading,
-    isVerifying,
+    // REMOVED: world, isVerifying, forceRegenerate - Index.tsx owns canonical generation
+    isLoading: state.isLoading,
     isTransitioning: edgeTransition.isTransitioning,
-    error: state.error || worldError,
+    error: state.error,
     initializePlayerLand,
     visitLand,
     updatePlayerPosition,
     updateLandParams,
-    forceRegenerate,
     dismissUnclaimedAttempt
   };
 }

@@ -121,12 +121,21 @@ const Index = () => {
   const handleLandTransition = useCallback((entryPosition: { x: number; z: number }) => {
     setCameraForLandTransition(entryPosition.x, entryPosition.z);
   }, []);
+  
+  // Regeneration key - incremented to force canonical regeneration
+  const [regenKey, setRegenKey] = useState(0);
+  
+  // Callback for multiplayer to request regeneration
+  const handleRequestRegenerate = useCallback(() => {
+    setRegenKey(k => k + 1);
+  }, []);
 
   // Multiplayer world management - use authenticated user ID
   const multiplayer = useMultiplayerWorld({
     autoCreate: worldMode === "multiplayer" && isAuthenticated,
     initialPlayerId: user?.id,
     onLandTransition: handleLandTransition,
+    onRequestRegenerate: handleRequestRegenerate,
   });
 
   // Discovery game - only active in multiplayer mode
@@ -245,6 +254,7 @@ const Index = () => {
 
   // CANONICAL WORLD GENERATION - Single execution per refresh
   // Both 2D and 3D views consume this same artifact
+  // regenKey triggers regeneration when multiplayer requests it
   useEffect(() => {
     let cancelled = false;
     setIsGenerating(true);
@@ -269,7 +279,7 @@ const Index = () => {
     return () => {
       cancelled = true;
     };
-  }, [activeParams.seed, activeParams.vars, worldMode, multiplayer.currentLand]);
+  }, [activeParams.seed, activeParams.vars, worldMode, multiplayer.currentLand, regenKey]);
 
   // Derive world for contract panel from canonical artifact
   const world = canonicalArtifact?.worldData ?? null;
