@@ -13,14 +13,14 @@ const RIVER_SURFACE_LIFT = 0.08;
 
 // Width extension beyond river cells (in grid units)
 // This makes water overlap riverbed edges for natural appearance
-const RIVER_WIDTH_EXTENSION = 0.5;
+const RIVER_WIDTH_EXTENSION = 1.5;
 
 /**
  * Build river mesh from terrain cells using UNIFIED surface approach
- * 
+ *
  * Instead of creating per-cell quads (which overlap and cause patchy appearance),
  * we first expand the river mask, then build ONE continuous surface.
- * 
+ *
  * Uses IDENTICAL coordinate system as SmoothTerrainMesh:
  * - For loop y = 0..size (render Z coordinate)
  * - Position: (x, height, y)
@@ -52,14 +52,7 @@ export function buildRiverCellMesh(world: WorldData, worldX: number, worldY: num
         riverCellCount++;
 
         const baseH = cell.elevation * WORLD_HEIGHT_SCALE;
-        const carve = computeRiverCarveDepth(
-          world.terrain,
-          x,
-          y,
-          flippedY,
-          true,
-          world.seed,
-        );
+        const carve = computeRiverCarveDepth(world.terrain, x, y, flippedY, true, world.seed);
         const bedHeight = baseH - carve;
         bedHeights[y][x] = bedHeight;
         globalMinBedHeight = Math.min(globalMinBedHeight, bedHeight);
@@ -79,13 +72,13 @@ export function buildRiverCellMesh(world: WorldData, worldX: number, worldY: num
   // This creates a dilated mask so water extends beyond riverbed edges
   const ext = RIVER_WIDTH_EXTENSION;
   const expandedMask: boolean[][] = [];
-  
+
   for (let y = 0; y < size; y++) {
     expandedMask[y] = [];
     for (let x = 0; x < size; x++) {
       // Check if this cell is within extension distance of any river cell
       let isNearRiver = false;
-      
+
       // Check nearby cells within extension radius (use ceiling for integer range)
       const range = Math.ceil(ext);
       for (let dy = -range; dy <= range && !isNearRiver; dy++) {
@@ -96,14 +89,15 @@ export function buildRiverCellMesh(world: WorldData, worldX: number, worldY: num
             if (riverMask[ny][nx]) {
               // Check actual distance
               const dist = Math.sqrt(dx * dx + dy * dy);
-              if (dist <= ext + 0.5) { // +0.5 to include cell centers
+              if (dist <= ext + 0.5) {
+                // +0.5 to include cell centers
                 isNearRiver = true;
               }
             }
           }
         }
       }
-      
+
       expandedMask[y][x] = isNearRiver;
     }
   }
