@@ -757,7 +757,7 @@ const Index = () => {
 
           {/* Discovery Points HUD - show in multiplayer mode */}
           {worldMode === "multiplayer" && viewMode === "firstperson" && isAuthenticated && (
-            <div className="absolute top-16 right-4 z-20">
+            <div className="absolute top-32 right-4 z-20">
               <DiscoveryPointsHUD
                 points={discoveryGame.discoveryPoints}
                 canDiscover={discoveryGame.canDiscoverCurrent}
