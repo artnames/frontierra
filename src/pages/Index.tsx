@@ -736,7 +736,9 @@ const Index = () => {
                 onActionsChange={setActions}
                 onPositionUpdate={handlePositionUpdate}
                 onDiscoveryTrigger={discoveryGame.handleDiscovery}
-                deterministicTest={deterministicTest}
+                // Only surface determinism-test state in ?debug=1.
+                // Prevents the scary overlay from ever showing during normal play.
+                deterministicTest={showDebugOverlay ? deterministicTest : null}
                 isReplaying={isReplaying}
                 replayFrame={replayFrame}
                 interactionMode={effectiveInteractionMode}
