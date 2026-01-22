@@ -2,6 +2,7 @@
 // Builds river geometry from exact terrain cells marked as river
 // NO dilation, blur, or marching squares - guarantees perfect alignment with terrain
 // Uses same coordinate system as SmoothTerrainMesh
+// FIX: Water is FLAT - uses a single consistent water level per connected river segment
 
 import * as THREE from "three";
 import { WorldData } from "@/lib/worldData";
@@ -22,7 +23,9 @@ const RIVER_SURFACE_LIFT = 0.12;
  * - Position: (x, height, y)
  * - Terrain access: terrain[toRow(y, size)][x]
  * 
- * This guarantees pixel-perfect alignment with the terrain mesh.
+ * FIX: Water is FLAT - we compute one water level for the entire river
+ * based on the MINIMUM riverbed height. This ensures water flows naturally
+ * downhill and doesn't follow terrain undulations.
  */
 export function buildRiverCellMesh(
   world: WorldData,
@@ -34,6 +37,48 @@ export function buildRiverCellMesh(
   }
 
   const size = world.gridSize;
+  
+  // PASS 1: Find ALL river cells and compute GLOBAL minimum riverbed height
+  // This creates a flat water surface that settles at the lowest point
+  const riverCells: Array<{ x: number; renderY: number; bedHeight: number }> = [];
+  let globalMinBedHeight = Infinity;
+  let globalMaxBedHeight = -Infinity;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const flippedY = toRow(y, size);
+      const cell = world.terrain[flippedY]?.[x];
+      
+      if (!cell?.hasRiver || cell.type === 'water') continue;
+      
+      const baseH = cell.elevation * WORLD_HEIGHT_SCALE;
+      const carve = computeRiverCarveDepth(
+        world.terrain,
+        x,
+        y,     // render Y for noise
+        flippedY, // flipped index for terrain access
+        true,  // isRiverCell
+        world.seed
+      );
+      
+      const bedHeight = baseH - carve;
+      riverCells.push({ x, renderY: y, bedHeight });
+      
+      globalMinBedHeight = Math.min(globalMinBedHeight, bedHeight);
+      globalMaxBedHeight = Math.max(globalMaxBedHeight, bedHeight);
+    }
+  }
+
+  if (riverCells.length === 0) {
+    return new THREE.BufferGeometry();
+  }
+
+  // FIX: Use a SINGLE flat water level for the entire river
+  // The water surface is positioned at the average bed height + water above bed + lift
+  // This creates realistic flat water that doesn't follow terrain bumps
+  const avgBedHeight = (globalMinBedHeight + globalMaxBedHeight) / 2;
+  const flatWaterHeight = avgBedHeight + RIVER_WATER_ABOVE_BED + RIVER_SURFACE_LIFT;
+
   const positions: number[] = [];
   const uvs: number[] = [];
   const edges: number[] = [];
@@ -42,23 +87,9 @@ export function buildRiverCellMesh(
   // Vertex deduplication (same as terrain mesh)
   const vertIndex = new Map<string, number>();
   
-  const getWaterHeight = (x: number, renderY: number): number => {
-    const flippedY = toRow(renderY, size);
-    const cell = world.terrain[flippedY]?.[x];
-    if (!cell) return 0;
-    
-    const baseH = cell.elevation * WORLD_HEIGHT_SCALE;
-    const carve = computeRiverCarveDepth(
-      world.terrain,
-      x,
-      renderY,  // render Y for noise
-      flippedY, // flipped index for terrain access
-      true,     // isRiverCell
-      world.seed
-    );
-    
-    const bedHeight = baseH - carve;
-    return bedHeight + RIVER_WATER_ABOVE_BED + RIVER_SURFACE_LIFT;
+  // Now use FLAT water height for all vertices
+  const getWaterHeight = (_x: number, _renderY: number): number => {
+    return flatWaterHeight;
   };
 
   const ensureVertex = (x: number, y: number): number => {
