@@ -3,6 +3,7 @@
 // BUG-003: Implements safe disposal pattern for Three.js resources
 
 import { useMemo, createContext, useContext, useEffect, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { WorldData, getElevationAt, isNearWater } from "@/lib/worldData";
 import { useWorldTextures } from "@/hooks/useWorldTextures";
@@ -701,6 +702,110 @@ function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   );
 }
 
+// Falling leaves particle effect for autumn trees
+function FallingLeaves({ treeX, treeY, treeZ, scale, colorVariant }: { 
+  treeX: number; treeY: number; treeZ: number; scale: number; colorVariant: number 
+}) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const leafCount = 8; // Leaves per tree
+  
+  // Autumn colors for leaves
+  const autumnColors = [
+    new THREE.Color('#FE9402'), // amber
+    new THREE.Color('#FD5602'), // flame
+    new THREE.Color('#D17A74'), // coral
+    new THREE.Color('#AAC64B'), // lime-gold
+  ];
+  
+  // Generate deterministic leaf data based on position
+  const leafData = useMemo(() => {
+    const leaves = [];
+    const seed = Math.abs(treeX * 1000 + treeZ * 100 + colorVariant * 10);
+    
+    for (let i = 0; i < leafCount; i++) {
+      const hash = ((seed + i * 127) * 16807) % 2147483647;
+      const rand = () => {
+        const h = ((hash + leaves.length * 31) * 16807) % 2147483647;
+        return (h % 1000) / 1000;
+      };
+      
+      leaves.push({
+        // Spread around tree canopy
+        offsetX: (rand() - 0.5) * 1.2,
+        offsetZ: (rand() - 0.5) * 1.2,
+        // Start height varies
+        startY: 0.8 + rand() * 1.0,
+        // Animation timing offset
+        phase: rand() * Math.PI * 2,
+        // Fall speed variation
+        fallSpeed: 0.3 + rand() * 0.4,
+        // Sway amount
+        swayAmount: 0.2 + rand() * 0.3,
+        // Color index
+        colorIndex: Math.floor(rand() * autumnColors.length),
+        // Rotation speed
+        rotSpeed: (rand() - 0.5) * 2,
+        // Scale variation
+        leafScale: 0.6 + rand() * 0.4,
+      });
+    }
+    return leaves;
+  }, [treeX, treeZ, colorVariant]);
+
+  useFrame(({ clock }) => {
+    if (!meshRef.current) return;
+    
+    const time = clock.getElapsedTime();
+    const dummy = new THREE.Object3D();
+    const color = new THREE.Color();
+    
+    leafData.forEach((leaf, i) => {
+      // Looping fall animation (0-1 range, then reset)
+      const fallCycle = ((time * leaf.fallSpeed + leaf.phase) % 3) / 3;
+      
+      // Y position: falls from startY to ground level
+      const fallY = leaf.startY * (1 - fallCycle * 1.2);
+      
+      // Horizontal sway as leaf falls
+      const swayX = Math.sin(time * 2 + leaf.phase) * leaf.swayAmount * (1 - fallCycle);
+      const swayZ = Math.cos(time * 1.5 + leaf.phase) * leaf.swayAmount * 0.5 * (1 - fallCycle);
+      
+      // Leaf rotation
+      const rotY = time * leaf.rotSpeed;
+      const rotZ = Math.sin(time * 3 + leaf.phase) * 0.5;
+      
+      dummy.position.set(
+        treeX + leaf.offsetX * scale + swayX * scale,
+        treeY + Math.max(0, fallY) * scale,
+        treeZ + leaf.offsetZ * scale + swayZ * scale
+      );
+      dummy.rotation.set(0, rotY, rotZ);
+      dummy.scale.setScalar(scale * 0.08 * leaf.leafScale);
+      dummy.updateMatrix();
+      
+      meshRef.current!.setMatrixAt(i, dummy.matrix);
+      meshRef.current!.setColorAt(i, autumnColors[leaf.colorIndex]);
+    });
+    
+    meshRef.current.instanceMatrix.needsUpdate = true;
+    if (meshRef.current.instanceColor) {
+      meshRef.current.instanceColor.needsUpdate = true;
+    }
+  });
+
+  return (
+    <instancedMesh ref={meshRef} args={[undefined, undefined, leafCount]}>
+      <planeGeometry args={[1, 1]} />
+      <meshBasicMaterial 
+        color="#FE9402" 
+        side={THREE.DoubleSide}
+        transparent
+        opacity={0.9}
+      />
+    </instancedMesh>
+  );
+}
+
 // Autumn tree - warm fall colors using palette amber, flame, coral
 function AutumnTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
   const isRich = useContext(VegetationRichnessContext);
@@ -723,6 +828,9 @@ function AutumnTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
 
   return (
     <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+      {/* Falling leaves effect */}
+      <FallingLeaves treeX={0} treeY={0} treeZ={0} scale={1} colorVariant={colorVariant} />
+      
       {/* trunk */}
       <OutlineShell enabled={outlines} position={[0, 0.5, 0]}>
         <cylinderGeometry args={[0.08, 0.12, 1.0, 6]} />
