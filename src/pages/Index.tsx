@@ -1,4 +1,4 @@
-import { useCallback, useState, useMemo, useEffect } from "react";
+import { useCallback, useState, useMemo, useEffect, lazy, Suspense } from "react";
 import {
   Eye,
   Map,
@@ -36,10 +36,9 @@ import {
   parseActions,
   ReplayFrame,
 } from "@/lib/worldContract";
-import { WorldExplorer, InteractionMode } from "@/components/WorldExplorer";
+import type { InteractionMode } from "@/components/WorldExplorer";
 import { deriveSoloWorldContext } from "@/lib/worldContext";
 import { setCameraForLandTransition } from "@/hooks/useFirstPersonControls";
-import { WorldMap2D } from "@/components/WorldMap2D";
 import { WorldContractPanel } from "@/components/WorldContractPanel";
 import { ReplayControls } from "@/components/ReplayControls";
 import { ActionSystem } from "@/components/ActionSystem";
@@ -57,6 +56,20 @@ import { useToast } from "@/hooks/use-toast";
 import { useSearchParams } from "react-router-dom";
 import { GeneratorProofOverlay, BuildStamp } from "@/components/GeneratorProofOverlay";
 import { useGeneratorProof } from "@/hooks/useGeneratorProof";
+
+// Lazy load heavy 3D components to reduce TTI
+const WorldExplorer = lazy(() => import("@/components/WorldExplorer").then(m => ({ default: m.WorldExplorer })));
+const WorldMap2D = lazy(() => import("@/components/WorldMap2D").then(m => ({ default: m.WorldMap2D })));
+
+// Lightweight loading placeholder for 3D view
+const WorldLoader = () => (
+  <div className="w-full h-full flex items-center justify-center bg-background">
+    <div className="flex flex-col items-center gap-3">
+      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <p className="text-sm text-muted-foreground">Loading world...</p>
+    </div>
+  </div>
+);
 
 type ViewMode = "map" | "firstperson";
 type SidebarTab = "parameters" | "contract" | "actions" | "worldmap" | "social";
@@ -659,42 +672,44 @@ const Index = () => {
       <main className="flex-1 flex overflow-hidden relative z-0">
         {/* World View */}
         <div className="flex-1 relative z-0">
-          {viewMode === "firstperson" ? (
-            <WorldExplorer
-              seed={activeParams.seed}
-              vars={activeParams.vars}
-              initialActions={actions}
-              onActionsChange={setActions}
-              onPositionUpdate={handlePositionUpdate}
-              onDiscoveryTrigger={discoveryGame.handleDiscovery}
-              deterministicTest={deterministicTest}
-              isReplaying={isReplaying}
-              replayFrame={replayFrame}
-              interactionMode={effectiveInteractionMode}
-              onModeChange={handleInteractionModeChange}
-              worldContext={
-                worldMode === "multiplayer" && multiplayer.currentLand
-                  ? {
-                      worldX: multiplayer.currentLand.pos_x,
-                      worldY: multiplayer.currentLand.pos_y,
-                    }
-                  : deriveSoloWorldContext(activeParams.seed)
-              }
-              isOwnLand={worldMode === "solo" || !isOtherPlayerLand}
-            />
-          ) : (
-            <div className="w-full h-full flex bg-background">
-              <div className="flex-1 flex items-center justify-center p-4">
-                <WorldMap2D 
-                  params={activeParams} 
-                  getShareUrl={getShareUrl}
-                  isMultiplayer={worldMode === 'multiplayer'}
-                  worldX={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_x : deriveSoloWorldContext(activeParams.seed).worldX}
-                  worldY={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_y : deriveSoloWorldContext(activeParams.seed).worldY}
-                />
+          <Suspense fallback={<WorldLoader />}>
+            {viewMode === "firstperson" ? (
+              <WorldExplorer
+                seed={activeParams.seed}
+                vars={activeParams.vars}
+                initialActions={actions}
+                onActionsChange={setActions}
+                onPositionUpdate={handlePositionUpdate}
+                onDiscoveryTrigger={discoveryGame.handleDiscovery}
+                deterministicTest={deterministicTest}
+                isReplaying={isReplaying}
+                replayFrame={replayFrame}
+                interactionMode={effectiveInteractionMode}
+                onModeChange={handleInteractionModeChange}
+                worldContext={
+                  worldMode === "multiplayer" && multiplayer.currentLand
+                    ? {
+                        worldX: multiplayer.currentLand.pos_x,
+                        worldY: multiplayer.currentLand.pos_y,
+                      }
+                    : deriveSoloWorldContext(activeParams.seed)
+                }
+                isOwnLand={worldMode === "solo" || !isOtherPlayerLand}
+              />
+            ) : (
+              <div className="w-full h-full flex bg-background">
+                <div className="flex-1 flex items-center justify-center p-4">
+                  <WorldMap2D 
+                    params={activeParams} 
+                    getShareUrl={getShareUrl}
+                    isMultiplayer={worldMode === 'multiplayer'}
+                    worldX={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_x : deriveSoloWorldContext(activeParams.seed).worldX}
+                    worldY={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_y : deriveSoloWorldContext(activeParams.seed).worldY}
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </Suspense>
 
           {/* Land Transition Overlay */}
           {worldMode === "multiplayer" && multiplayer.isTransitioning && (
