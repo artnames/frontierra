@@ -281,50 +281,84 @@ export function getElevationAt(world: WorldData, worldX: number, worldY: number)
     return 0;
   }
 
-  const gridX = Math.floor(worldX);
-  const gridY = Math.floor(worldY);
+  // Use bilinear interpolation for smooth height matching with rendered terrain
+  // This prevents camera clipping and vegetation floating on steep slopes
+  return getInterpolatedElevation(world, worldX, worldY);
+}
 
-  // FIX #6: Explicit bounds checks with safe fallback
-  if (gridX < 0 || gridX >= world.gridSize || gridY < 0 || gridY >= world.gridSize) {
-    // Return safe height (0) for out-of-bounds positions
-    return 0;
-  }
-
+/**
+ * Get height at a specific grid cell (integer coordinates)
+ * Used for sampling corners in bilinear interpolation
+ */
+function getCellHeight(world: WorldData, gridX: number, gridY: number): number {
+  // Clamp to valid range
+  const clampedX = Math.max(0, Math.min(world.gridSize - 1, gridX));
+  const clampedY = Math.max(0, Math.min(world.gridSize - 1, gridY));
+  
   // COORDINATE FIX: Flip Y-axis to match P5.js [y][x] grid with Three.js PlaneGeometry
-  // P5.js draws from top-left, Three.js PlaneGeometry maps from bottom-left
-  const flippedY = world.gridSize - 1 - gridY;
-
-  // FIX #6: Additional bounds check for flipped coordinate
+  const flippedY = world.gridSize - 1 - clampedY;
+  
   if (flippedY < 0 || flippedY >= world.terrain.length) {
     return 0;
   }
-
+  
   const row = world.terrain[flippedY];
-  if (!row || gridX >= row.length) {
+  if (!row || clampedX >= row.length) {
     return 0;
   }
-
-  const cell = row[gridX];
+  
+  const cell = row[clampedX];
   if (!cell) return 0;
-
+  
   // Use the unified getSurfaceHeightAt function from worldConstants
-  // This handles terrain, river carving, path capping, AND bridge deck height
   const height = getSurfaceHeightAt(
     world.terrain,
-    gridX,
-    gridY,
+    clampedX,
+    clampedY,
     flippedY,
     cell,
     world.vars,
     world.seed
   );
-
-  // FIX #6: Guard against NaN/Infinity in height calculation
+  
   if (!Number.isFinite(height)) {
     return 0;
   }
-
+  
   return height;
+}
+
+/**
+ * Bilinear interpolation for smooth elevation across terrain
+ * Matches how the GPU interpolates vertex heights across faces
+ */
+function getInterpolatedElevation(world: WorldData, worldX: number, worldY: number): number {
+  // Get the four corner cells
+  const x0 = Math.floor(worldX);
+  const y0 = Math.floor(worldY);
+  const x1 = x0 + 1;
+  const y1 = y0 + 1;
+  
+  // Fractional position within the cell
+  const fx = worldX - x0;
+  const fy = worldY - y0;
+  
+  // Get heights at the four corners
+  const h00 = getCellHeight(world, x0, y0);
+  const h10 = getCellHeight(world, x1, y0);
+  const h01 = getCellHeight(world, x0, y1);
+  const h11 = getCellHeight(world, x1, y1);
+  
+  // Bilinear interpolation
+  const h0 = h00 * (1 - fx) + h10 * fx; // Interpolate along x at y0
+  const h1 = h01 * (1 - fx) + h11 * fx; // Interpolate along x at y1
+  const h = h0 * (1 - fy) + h1 * fy;    // Interpolate along y
+  
+  if (!Number.isFinite(h)) {
+    return h00; // Fallback to corner height
+  }
+  
+  return h;
 }
 
 export function isWalkable(world: WorldData, worldX: number, worldY: number): boolean {

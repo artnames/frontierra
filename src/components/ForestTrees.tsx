@@ -459,7 +459,7 @@ function Vegetation({ x, y, z, scale, type, colorVariant, rotation, seed }: Vege
   const shadowsEnabled = useContext(VegetationShadowContext);
 
   // Apply ground offset based on vegetation type
-  const isTree = ["pine", "deciduous", "birch", "willow", "deadTree"].includes(type);
+  const isTree = ["pine", "deciduous", "autumn", "birch", "willow", "deadTree"].includes(type);
   const groundOffset = isTree ? TREE_GROUND_OFFSET : SMALL_VEG_GROUND_OFFSET;
   const adjustedY = y + groundOffset;
 
