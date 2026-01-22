@@ -181,7 +181,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     return geo;
   }, [world, worldX, worldY, riverCellCount]);
 
-  // Lake/ocean geometry - flat plane at water level, extended slightly into ground for smooth edges
+  // Lake/ocean geometry - EXTENDED into ground for seamless blending (no patchy edges)
   const lakeGeo = useMemo(() => {
     if (!world || !world.terrain || world.terrain.length === 0) {
       return new THREE.BufferGeometry();
@@ -189,42 +189,119 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
 
     const SURFACE_LIFT = 0.02;
     const size = world.gridSize;
+    const EXTENSION_RADIUS = 3; // Extend water 3 cells into ground
     
-    // Build a set of water cells AND their neighbors for smooth edge blending
-    const waterAndNeighbors = new Set<string>();
+    // Build a map: cell key -> distance from nearest water cell (0 = water, 1-3 = extension)
+    const cellDistance = new Map<string, number>();
     
+    // First pass: mark all water cells as distance 0
     for (let fy = 0; fy < size; fy++) {
       for (let x = 0; x < size; x++) {
         const cell = world.terrain[fy]?.[x];
         if (cell?.type === "water") {
-          // Add the water cell itself
-          waterAndNeighbors.add(`${x},${fy}`);
-          // Add 1-cell border around water for smooth edge blending
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
+          cellDistance.set(`${x},${fy}`, 0);
+        }
+      }
+    }
+    
+    // Expand outward for each extension level
+    for (let dist = 1; dist <= EXTENSION_RADIUS; dist++) {
+      for (let fy = 0; fy < size; fy++) {
+        for (let x = 0; x < size; x++) {
+          const key = `${x},${fy}`;
+          if (cellDistance.has(key)) continue; // Already marked
+          
+          // Check if any neighbor is at distance (dist - 1)
+          let hasCloserNeighbor = false;
+          for (let dy = -1; dy <= 1 && !hasCloserNeighbor; dy++) {
+            for (let dx = -1; dx <= 1 && !hasCloserNeighbor; dx++) {
+              if (dx === 0 && dy === 0) continue;
               const nx = x + dx;
               const nfy = fy + dy;
               if (nx >= 0 && nx < size && nfy >= 0 && nfy < size) {
-                waterAndNeighbors.add(`${nx},${nfy}`);
+                const neighborDist = cellDistance.get(`${nx},${nfy}`);
+                if (neighborDist !== undefined && neighborDist === dist - 1) {
+                  hasCloserNeighbor = true;
+                }
               }
             }
+          }
+          
+          if (hasCloserNeighbor) {
+            cellDistance.set(key, dist);
           }
         }
       }
     }
     
-    return buildWaterGeometry(
-      world,
-      worldX,
-      worldY,
-      (c) => {
-        // Include water cells AND their neighbors for extended coverage
-        const isWater = c.type === "water";
-        return isWater; // Still only pick water cells, but edge handling will blend
-      },
-      () => waterHeight + SURFACE_LIFT,
-      0.4, // Higher edge floor = more opacity at edges, less tile-like
-    );
+    // Custom geometry builder that uses the distance map
+    const positions: number[] = [];
+    const uvs: number[] = [];
+    const edge: number[] = [];
+    const indices: number[] = [];
+    const vertIndex = new Map<string, number>();
+    
+    const ensureV = (x: number, y: number, h: number, edgeVal: number) => {
+      const k = `${x},${y}`;
+      const existing = vertIndex.get(k);
+      if (existing !== undefined) {
+        // Update edge to minimum (most transparent at edges)
+        edge[existing] = Math.min(edge[existing], edgeVal);
+        return existing;
+      }
+
+      const idx = positions.length / 3;
+      positions.push(x, h, y);
+      uvs.push((x + worldX * (size - 1)) * 0.12, (y + worldY * (size - 1)) * 0.12);
+      edge.push(edgeVal);
+      vertIndex.set(k, idx);
+      return idx;
+    };
+    
+    // Build quads for all cells in the distance map
+    for (let y = 0; y < size - 1; y++) {
+      for (let x = 0; x < size - 1; x++) {
+        const fy = toRow(y, size);
+        const fy01 = toRow(y + 1, size);
+        
+        // Check if this quad has any corner in the water extension zone
+        const d00 = cellDistance.get(`${x},${fy}`);
+        const d10 = cellDistance.get(`${x + 1},${fy}`);
+        const d01 = cellDistance.get(`${x},${fy01}`);
+        const d11 = cellDistance.get(`${x + 1},${fy01}`);
+        
+        // Skip if no corner is in the extended water zone
+        if (d00 === undefined && d10 === undefined && d01 === undefined && d11 === undefined) {
+          continue;
+        }
+        
+        // Height is flat at water level
+        const h = waterHeight + SURFACE_LIFT;
+        
+        // Edge values: 1.0 for water cells, fading to 0.0 at extension boundary
+        const edgeVal = (d: number | undefined) => {
+          if (d === undefined) return 0.0; // Outside water zone
+          if (d === 0) return 1.0; // Water cell - full opacity
+          return Math.max(0.0, 1.0 - (d / (EXTENSION_RADIUS + 1))); // Fade with distance
+        };
+        
+        const v00 = ensureV(x, y, h, edgeVal(d00));
+        const v10 = ensureV(x + 1, y, h, edgeVal(d10));
+        const v01 = ensureV(x, y + 1, h, edgeVal(d01));
+        const v11 = ensureV(x + 1, y + 1, h, edgeVal(d11));
+        
+        indices.push(v00, v01, v10);
+        indices.push(v01, v11, v10);
+      }
+    }
+    
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setAttribute("aEdge", new THREE.Float32BufferAttribute(edge, 1));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    return geo;
   }, [world, worldX, worldY, waterHeight]);
 
   const material = useMemo(() => {
