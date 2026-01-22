@@ -64,16 +64,20 @@ export function useGeneratorProof(
   world: WorldData | null,
   isMultiplayer: boolean,
   seed: number,
-  vars: number[]
+  vars: number[],
+  worldX: number = 0,
+  worldY: number = 0
 ): GeneratorProofData {
-  // Get canonical source info
+  // Get canonical source info with worldX/worldY for unified generation proof
   const canonicalResult = useMemo(() => {
     return getCanonicalWorldLayoutSource({
       isMultiplayer,
       seed,
-      vars
+      vars,
+      worldX,
+      worldY
     });
-  }, [isMultiplayer, seed, vars]);
+  }, [isMultiplayer, seed, vars, worldX, worldY]);
   
   // Compute water level using V1 mapping
   const waterLevel = useMemo(() => {

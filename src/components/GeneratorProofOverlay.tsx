@@ -17,6 +17,11 @@ interface GeneratorProofOverlayProps {
   riverCellCount: number;
   riverVertices: number;
   riverIndices: number;
+  // World coordinates for unified generation proof
+  worldX?: number;
+  worldY?: number;
+  // Pixel hash for parity verification
+  pixelHash?: string;
 }
 
 export function GeneratorProofOverlay({
@@ -27,9 +32,12 @@ export function GeneratorProofOverlay({
   biomeRichness,
   riverCellCount,
   riverVertices,
-  riverIndices
+  riverIndices,
+  worldX = 0,
+  worldY = 0,
+  pixelHash
 }: GeneratorProofOverlayProps) {
-  // Only show in DEV mode
+  // Only show in DEV mode or with ?debug=1
   if (!DEV) return null;
   
   const getModeLabel = () => {
@@ -89,11 +97,25 @@ export function GeneratorProofOverlay({
         <span style={{ color: 'hsl(var(--chart-2))' }}>{sourceHash.slice(0, 8)}</span>
       </div>
       
+      {/* World Coordinates - Critical for parity verification */}
+      <div className="flex gap-2">
+        <span style={{ color: 'hsl(var(--muted-foreground))' }}>World:</span>
+        <span style={{ color: 'hsl(var(--chart-3))' }}>({worldX}, {worldY})</span>
+      </div>
+      
       {/* Context */}
       <div className="flex gap-2">
         <span style={{ color: 'hsl(var(--muted-foreground))' }}>MP:</span>
         <span>{isMultiplayer ? 'Yes' : 'No'}</span>
       </div>
+      
+      {/* Pixel Hash - Must match between Solo/MP at same coords */}
+      {pixelHash && (
+        <div className="flex gap-2">
+          <span style={{ color: 'hsl(var(--muted-foreground))' }}>PxHash:</span>
+          <span style={{ color: 'hsl(var(--primary))' }}>{pixelHash.slice(0, 8)}</span>
+        </div>
+      )}
       
       {/* Water & Biome (key coupling check) */}
       <div className="mt-1 pt-1" style={{ borderTop: '1px solid hsl(var(--border))' }}>

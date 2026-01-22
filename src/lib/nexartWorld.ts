@@ -114,12 +114,16 @@ const NEXART_TIMEOUT_MS = 15000;
 export async function generateNexArtWorld(params: WorldParams & { worldContext?: { worldX: number; worldY: number } }): Promise<NexArtWorldGrid> {
   const GRID_SIZE = 64;
   
-  // Build world context if provided
-  const worldContext: WorldContext | undefined = params.worldContext ? {
+  // UNIFIED: Default worldX/worldY to 0 if not provided (ensures Solo uses same generator)
+  const effectiveWorldX = params.worldContext?.worldX ?? 0;
+  const effectiveWorldY = params.worldContext?.worldY ?? 0;
+  
+  // Build world context - ALWAYS present now for unified generation
+  const worldContext: WorldContext = {
     worldId: WORLD_A_ID,
-    worldX: params.worldContext.worldX,
-    worldY: params.worldContext.worldY
-  } : undefined;
+    worldX: effectiveWorldX,
+    worldY: effectiveWorldY
+  };
   
   const input = normalizeNexArtInput({
     seed: params.seed,
@@ -129,8 +133,8 @@ export async function generateNexArtWorld(params: WorldParams & { worldContext?:
   });
   
   // CANONICAL SOURCE SELECTION - Single entry point
-  // Both Solo and Multiplayer use the same selector
-  const isWorldA = !!input.worldContext;
+  // Both Solo and Multiplayer use the same World-A source
+  const isWorldA = !!params.worldContext; // For metadata only
   
   // Import canonical selector
   const { getCanonicalWorldLayoutSource } = await import('./generatorCanonical');
@@ -139,17 +143,15 @@ export async function generateNexArtWorld(params: WorldParams & { worldContext?:
     isMultiplayer: isWorldA,
     seed: input.seed,
     vars: input.vars,
-    worldX: input.worldContext?.worldX,
-    worldY: input.worldContext?.worldY
+    worldX: effectiveWorldX,
+    worldY: effectiveWorldY
   });
   
   const source = canonicalResult.source;
   
-  // Compute the combined seed (includes world position for unified/World A modes)
-  let executionSeed = input.seed;
-  if (input.worldContext) {
-    executionSeed = getWorldSeed(input.worldContext, input.seed);
-  }
+  // Compute the combined seed (includes world position for unified generation)
+  // Always use worldContext since we always have effectiveWorldX/Y
+  const executionSeed = getWorldSeed(worldContext, input.seed);
   
   try {
     // Check if we're in a browser environment with canvas support
@@ -175,15 +177,14 @@ export async function generateNexArtWorld(params: WorldParams & { worldContext?:
     
     let finalSource = source;
     
-    // Inject World coordinates for World A multiplayer
-    if (input.worldContext) {
-      const injection = `var WORLD_X = ${input.worldContext.worldX}; var WORLD_Y = ${input.worldContext.worldY};`;
-      finalSource = finalSource.replace(
-        'function setup() {',
-        `function setup() { ${injection}`
-      );
-      execOptions.source = finalSource;
-    }
+    // ALWAYS inject World coordinates - ensures unified generation
+    // Both Solo and Multiplayer use the same WORLD_X/WORLD_Y injection
+    const injection = `var WORLD_X = ${effectiveWorldX}; var WORLD_Y = ${effectiveWorldY};`;
+    finalSource = finalSource.replace(
+      'function setup() {',
+      `function setup() { ${injection}`
+    );
+    execOptions.source = finalSource;
     
     const executionPromise = executeCodeMode(execOptions);
     
@@ -197,11 +198,24 @@ export async function generateNexArtWorld(params: WorldParams & { worldContext?:
     const pixelHash = computePixelHash(imageData);
     const grid = parseRGBAPixels(imageData, GRID_SIZE, input.seed, input.vars);
     
+    // Count tile types for verification
+    let waterCount = 0, riverCount = 0, pathCount = 0;
+    for (const row of grid.cells) {
+      for (const cell of row) {
+        if (cell.tileType === TileType.WATER) waterCount++;
+        if (cell.isRiver) riverCount++;
+        if (cell.isPath) pathCount++;
+      }
+    }
+    
+    // Console instrumentation for parity verification
+    console.debug(`[NexArt] Generated world: seed=${input.seed}, worldX=${effectiveWorldX}, worldY=${effectiveWorldY}, pixelHash=${pixelHash}, water=${waterCount}, river=${riverCount}, path=${pathCount}`);
+    
     return {
       ...grid,
       pixelHash,
       isValid: true,
-      worldContext: input.worldContext
+      worldContext // Always include worldContext with effective values
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

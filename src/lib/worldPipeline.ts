@@ -184,14 +184,18 @@ export async function generateWorldPipeline(
   vars: number[],
   worldContext?: { worldX: number; worldY: number }
 ): Promise<WorldPipelineResult> {
+  // UNIFIED: Default worldX/worldY to 0 for consistent generation
+  const effectiveWorldX = worldContext?.worldX ?? 0;
+  const effectiveWorldY = worldContext?.worldY ?? 0;
+  
   // Get canonical source info
   const isMultiplayer = !!worldContext;
   const canonicalResult = getCanonicalWorldLayoutSource({
     isMultiplayer,
     seed,
     vars,
-    worldX: worldContext?.worldX,
-    worldY: worldContext?.worldY,
+    worldX: effectiveWorldX,
+    worldY: effectiveWorldY,
   });
   
   try {
