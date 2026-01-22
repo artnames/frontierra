@@ -45,19 +45,28 @@ export function WorldMap2D({
     const imageData = new ImageData(64, 64);
     
     // Apply elevation-based brightness adjustment for visualization
-    for (let i = 0; i < artifact.rgbaBuffer.length; i += 4) {
-      const r = artifact.rgbaBuffer[i];
-      const g = artifact.rgbaBuffer[i + 1];
-      const b = artifact.rgbaBuffer[i + 2];
-      const a = artifact.rgbaBuffer[i + 3]; // Elevation (0-255)
+    // IMPORTANT: Flip Y so the 2D map matches the 3D coordinate convention.
+    // NexArt pixels are row-major with y=0 at the top; 3D uses a flipped row index.
+    const size = 64;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const srcY = (size - 1) - y;
+        const srcIdx = (srcY * size + x) * 4;
+        const dstIdx = (y * size + x) * 4;
 
-      // Apply subtle elevation-based brightness adjustment
-      const elevFactor = 0.7 + (a / 255) * 0.4;
-      
-      imageData.data[i] = Math.min(255, Math.round(r * elevFactor));
-      imageData.data[i + 1] = Math.min(255, Math.round(g * elevFactor));
-      imageData.data[i + 2] = Math.min(255, Math.round(b * elevFactor));
-      imageData.data[i + 3] = 255; // Full opacity for display
+        const r = artifact.rgbaBuffer[srcIdx];
+        const g = artifact.rgbaBuffer[srcIdx + 1];
+        const b = artifact.rgbaBuffer[srcIdx + 2];
+        const a = artifact.rgbaBuffer[srcIdx + 3]; // Elevation (0-255)
+
+        // Apply subtle elevation-based brightness adjustment
+        const elevFactor = 0.7 + (a / 255) * 0.4;
+
+        imageData.data[dstIdx] = Math.min(255, Math.round(r * elevFactor));
+        imageData.data[dstIdx + 1] = Math.min(255, Math.round(g * elevFactor));
+        imageData.data[dstIdx + 2] = Math.min(255, Math.round(b * elevFactor));
+        imageData.data[dstIdx + 3] = 255; // Full opacity for display
+      }
     }
 
     ctx.imageSmoothingEnabled = false;
