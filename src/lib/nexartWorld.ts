@@ -114,33 +114,24 @@ const NEXART_TIMEOUT_MS = 15000;
 export async function generateNexArtWorld(params: WorldParams & { worldContext?: { worldX: number; worldY: number } }): Promise<NexArtWorldGrid> {
   const GRID_SIZE = 64;
   
-  // UNIFIED: Default worldX/worldY to 0 if not provided (ensures Solo uses same generator)
+  // Check if this is multiplayer mode (explicit world context provided)
+  const isMultiplayer = !!params.worldContext;
+  
+  // Default worldX/worldY to 0 for Solo mode
   const effectiveWorldX = params.worldContext?.worldX ?? 0;
   const effectiveWorldY = params.worldContext?.worldY ?? 0;
-  
-  // Build world context - ALWAYS present now for unified generation
-  const worldContext: WorldContext = {
-    worldId: WORLD_A_ID,
-    worldX: effectiveWorldX,
-    worldY: effectiveWorldY
-  };
   
   const input = normalizeNexArtInput({
     seed: params.seed,
     vars: params.vars,
     mode: 'static',
-    worldContext
   });
   
   // CANONICAL SOURCE SELECTION - Single entry point
-  // Both Solo and Multiplayer use the same World-A source
-  const isWorldA = !!params.worldContext; // For metadata only
-  
-  // Import canonical selector
   const { getCanonicalWorldLayoutSource } = await import('./generatorCanonical');
   
   const canonicalResult = getCanonicalWorldLayoutSource({
-    isMultiplayer: isWorldA,
+    isMultiplayer,
     seed: input.seed,
     vars: input.vars,
     worldX: effectiveWorldX,
@@ -149,9 +140,12 @@ export async function generateNexArtWorld(params: WorldParams & { worldContext?:
   
   const source = canonicalResult.source;
   
-  // Compute the combined seed (includes world position for unified generation)
-  // Always use worldContext since we always have effectiveWorldX/Y
-  const executionSeed = getWorldSeed(worldContext, input.seed);
+  // SEED SELECTION:
+  // - Solo mode: Use raw seed directly (the generator doesn't use WORLD_X/WORLD_Y)
+  // - Multiplayer: Use combined seed that includes world position
+  // NOTE: The current WORLD_LAYOUT_SOURCE doesn't use WORLD_X/WORLD_Y variables,
+  // so we use the raw seed for consistency with the original Solo behavior.
+  const executionSeed = input.seed;
   
   try {
     // Check if we're in a browser environment with canvas support
@@ -165,7 +159,7 @@ export async function generateNexArtWorld(params: WorldParams & { worldContext?:
       setTimeout(() => reject(new Error('NexArt execution timeout')), NEXART_TIMEOUT_MS);
     });
     
-    // Build execution options
+    // Build execution options - use raw seed
     const execOptions: Parameters<typeof executeCodeMode>[0] = {
       source,
       width: GRID_SIZE,
@@ -175,16 +169,7 @@ export async function generateNexArtWorld(params: WorldParams & { worldContext?:
       mode: input.mode,
     };
     
-    let finalSource = source;
-    
-    // ALWAYS inject World coordinates - ensures unified generation
-    // Both Solo and Multiplayer use the same WORLD_X/WORLD_Y injection
-    const injection = `var WORLD_X = ${effectiveWorldX}; var WORLD_Y = ${effectiveWorldY};`;
-    finalSource = finalSource.replace(
-      'function setup() {',
-      `function setup() { ${injection}`
-    );
-    execOptions.source = finalSource;
+    // No coordinate injection needed - the Solo generator doesn't use WORLD_X/WORLD_Y
     
     const executionPromise = executeCodeMode(execOptions);
     
@@ -215,7 +200,7 @@ export async function generateNexArtWorld(params: WorldParams & { worldContext?:
       ...grid,
       pixelHash,
       isValid: true,
-      worldContext // Always include worldContext with effective values
+      worldContext: isMultiplayer ? { worldId: WORLD_A_ID, worldX: effectiveWorldX, worldY: effectiveWorldY } : undefined
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
