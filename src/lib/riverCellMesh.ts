@@ -6,19 +6,14 @@
 
 import * as THREE from "three";
 import { WorldData } from "@/lib/worldData";
-import {
-  WORLD_HEIGHT_SCALE,
-  RIVER_WATER_ABOVE_BED,
-  computeRiverCarveDepth,
-  toRow,
-} from "@/lib/worldConstants";
+import { WORLD_HEIGHT_SCALE, RIVER_WATER_ABOVE_BED, computeRiverCarveDepth, toRow } from "@/lib/worldConstants";
 
 // Surface lift above riverbed - must match water shader
 const RIVER_SURFACE_LIFT = 0.12;
 
 // Width extension beyond river cells (in grid units)
 // This makes water overlap riverbed edges for natural appearance
-const RIVER_WIDTH_EXTENSION = 0.5;
+const RIVER_WIDTH_EXTENSION = 1.5;
 
 /**
  * Build river mesh from exact terrain cells
@@ -26,22 +21,18 @@ const RIVER_WIDTH_EXTENSION = 0.5;
  * - For loop y = 0..size (render Z coordinate)
  * - Position: (x, height, y)
  * - Terrain access: terrain[toRow(y, size)][x]
- * 
+ *
  * FIX: Water is FLAT - we compute one water level for the entire river
  * based on the MINIMUM riverbed height. This ensures water flows naturally
  * downhill and doesn't follow terrain undulations.
  */
-export function buildRiverCellMesh(
-  world: WorldData,
-  worldX: number,
-  worldY: number
-): THREE.BufferGeometry {
+export function buildRiverCellMesh(world: WorldData, worldX: number, worldY: number): THREE.BufferGeometry {
   if (!world?.terrain || world.terrain.length === 0 || !world.gridSize) {
     return new THREE.BufferGeometry();
   }
 
   const size = world.gridSize;
-  
+
   // PASS 1: Find ALL river cells and compute GLOBAL minimum riverbed height
   // This creates a flat water surface that settles at the lowest point
   const riverCells: Array<{ x: number; renderY: number; bedHeight: number }> = [];
@@ -52,22 +43,22 @@ export function buildRiverCellMesh(
     for (let x = 0; x < size; x++) {
       const flippedY = toRow(y, size);
       const cell = world.terrain[flippedY]?.[x];
-      
-      if (!cell?.hasRiver || cell.type === 'water') continue;
-      
+
+      if (!cell?.hasRiver || cell.type === "water") continue;
+
       const baseH = cell.elevation * WORLD_HEIGHT_SCALE;
       const carve = computeRiverCarveDepth(
         world.terrain,
         x,
-        y,     // render Y for noise
+        y, // render Y for noise
         flippedY, // flipped index for terrain access
-        true,  // isRiverCell
-        world.seed
+        true, // isRiverCell
+        world.seed,
       );
-      
+
       const bedHeight = baseH - carve;
       riverCells.push({ x, renderY: y, bedHeight });
-      
+
       globalMinBedHeight = Math.min(globalMinBedHeight, bedHeight);
       globalMaxBedHeight = Math.max(globalMaxBedHeight, bedHeight);
     }
@@ -90,7 +81,7 @@ export function buildRiverCellMesh(
 
   // Vertex deduplication (same as terrain mesh)
   const vertIndex = new Map<string, number>();
-  
+
   // Now use FLAT water height for all vertices
   const getWaterHeight = (_x: number, _renderY: number): number => {
     return flatWaterHeight;
@@ -104,14 +95,11 @@ export function buildRiverCellMesh(
 
     const h = getWaterHeight(x, y);
     const idx = positions.length / 3;
-    
+
     positions.push(x, h, y);
-    uvs.push(
-      (x + worldX * (size - 1)) * 0.12,
-      (y + worldY * (size - 1)) * 0.12
-    );
+    uvs.push((x + worldX * (size - 1)) * 0.12, (y + worldY * (size - 1)) * 0.12);
     edges.push(isEdge ? 0.5 : 1.0); // Edge vertices get lower value for foam effect
-    
+
     vertIndex.set(key, idx);
     return idx;
   };
@@ -121,19 +109,19 @@ export function buildRiverCellMesh(
     if (x < 0 || x >= size || renderY < 0 || renderY >= size) return false;
     const flippedY = toRow(renderY, size);
     const cell = world.terrain[flippedY]?.[x];
-    return !!cell?.hasRiver && cell.type !== 'water';
+    return !!cell?.hasRiver && cell.type !== "water";
   };
 
   // Build EXTENDED quads for each river cell
   // Water extends beyond cell boundaries for natural overlap with riverbed
   const ext = RIVER_WIDTH_EXTENSION;
-  
+
   for (let y = 0; y < size - 1; y++) {
     for (let x = 0; x < size - 1; x++) {
       const flippedY = toRow(y, size);
       const cell = world.terrain[flippedY]?.[x];
-      
-      if (!cell?.hasRiver || cell.type === 'water') continue;
+
+      if (!cell?.hasRiver || cell.type === "water") continue;
 
       // Check neighbors to determine edge extension
       const hasLeft = isRiverAt(y, x - 1);
@@ -183,16 +171,16 @@ export function buildRiverCellMesh(
  */
 export function hasRiverCells(world: WorldData): boolean {
   if (!world?.terrain) return false;
-  
+
   for (const row of world.terrain) {
     if (!row) continue;
     for (const cell of row) {
-      if (cell?.hasRiver && cell.type !== 'water') {
+      if (cell?.hasRiver && cell.type !== "water") {
         return true;
       }
     }
   }
-  
+
   return false;
 }
 
@@ -201,16 +189,16 @@ export function hasRiverCells(world: WorldData): boolean {
  */
 export function countRiverCells(world: WorldData): number {
   if (!world?.terrain) return 0;
-  
+
   let count = 0;
   for (const row of world.terrain) {
     if (!row) continue;
     for (const cell of row) {
-      if (cell?.hasRiver && cell.type !== 'water') {
+      if (cell?.hasRiver && cell.type !== "water") {
         count++;
       }
     }
   }
-  
+
   return count;
 }
