@@ -258,6 +258,9 @@ const Index = () => {
   useEffect(() => {
     let cancelled = false;
     setIsGenerating(true);
+    // Clear any previous determinism-test state whenever we regenerate the world.
+    // This prevents the "WORLD INVALID" overlay from persisting across normal regen events.
+    setDeterministicTest(null);
 
     // FIX #1: ALWAYS pass explicit worldContext - never undefined
     // Solo uses fixed (0,0), Multiplayer uses actual grid coordinates

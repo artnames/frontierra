@@ -145,14 +145,14 @@ export function WorldCanvas({ params, onGenerate }: WorldCanvasProps) {
 
   return (
     <div className="relative">
-      <div className="absolute top-2 left-2 z-10 px-2 py-1 text-[10px] font-mono bg-yellow-500/90 text-black rounded">
+      <div className="absolute top-2 left-2 z-10 px-2 py-1 text-[10px] font-mono bg-accent/90 text-accent-foreground rounded">
         DEV ONLY - 512×512
       </div>
       <canvas
         ref={canvasRef}
         width={512}
         height={512}
-        className="world-canvas w-full max-w-[512px] aspect-square bg-background border-2 border-dashed border-yellow-500/50"
+        className="world-canvas w-full max-w-[512px] aspect-square bg-background border-2 border-dashed border-accent/50"
       />
       
       {isGenerating && (
