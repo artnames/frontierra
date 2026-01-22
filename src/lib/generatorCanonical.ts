@@ -2,7 +2,7 @@
 // SINGLE ENTRY POINT for all world generation (Solo & Multiplayer, 2D & 3D)
 // This ensures both the 2D map and 3D explorer use the exact same generator
 
-import { WORLD_LAYOUT_SOURCE } from './worldGenerator';
+import { WORLD_A_LAYOUT_SOURCE } from './worldGenerator';
 
 // ============================================
 // GENERATOR MODES
@@ -56,9 +56,12 @@ function getSourceHash(source: string): string {
 // ============================================
 
 export function getCanonicalWorldLayoutSource(ctx: GeneratorContext): CanonicalGeneratorResult {
-  // V1-ONLY: Use the same generator for both modes
-  // This ensures multiplayer worlds match solo worlds exactly
-  const source = WORLD_LAYOUT_SOURCE;
+  // UNIFIED: Always use World-A layout source for both Solo and Multiplayer
+  // This source uses WORLD_X/WORLD_Y for shared macro geography
+  // Solo defaults to (0,0) if worldX/worldY not provided
+  const source = WORLD_A_LAYOUT_SOURCE;
+  
+  // Mode label for debugging - both use the same generator
   const mode: GeneratorMode = ctx.isMultiplayer ? 'v1_worldA' : 'v1_solo';
   
   return {

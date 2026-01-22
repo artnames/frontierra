@@ -258,12 +258,21 @@ const Index = () => {
     };
   }, [activeParams.seed, activeParams.vars]);
 
-  // Generator proof overlay data
+  // Generator proof overlay data - derive worldX/worldY for unified generation proof
+  const proofWorldCoords = useMemo(() => {
+    if (worldMode === 'multiplayer' && multiplayer.currentLand) {
+      return { worldX: multiplayer.currentLand.pos_x, worldY: multiplayer.currentLand.pos_y };
+    }
+    return deriveSoloWorldContext(activeParams.seed);
+  }, [worldMode, multiplayer.currentLand, activeParams.seed]);
+  
   const generatorProof = useGeneratorProof(
     world,
     worldMode === 'multiplayer',
     activeParams.seed,
-    activeParams.vars
+    activeParams.vars,
+    proofWorldCoords.worldX,
+    proofWorldCoords.worldY
   );
 
   // Show overlay only with ?debug=1 URL param (not in dev mode by default)
@@ -423,6 +432,9 @@ const Index = () => {
           riverCellCount={generatorProof.riverStats.riverCellCount}
           riverVertices={generatorProof.riverStats.riverVertices}
           riverIndices={generatorProof.riverStats.riverIndices}
+          worldX={proofWorldCoords.worldX}
+          worldY={proofWorldCoords.worldY}
+          pixelHash={world?.nexartHash}
         />
       )}
       

@@ -74,16 +74,28 @@ export function WorldMap2D({
 
         // Use CANONICAL source selector - SAME as 3D explorer
         const { getCanonicalWorldLayoutSource } = await import('@/lib/generatorCanonical');
+        
+        // Default worldX/worldY to 0 if not provided (Solo mode)
+        const effectiveWorldX = worldX ?? 0;
+        const effectiveWorldY = worldY ?? 0;
+        
         const canonicalResult = getCanonicalWorldLayoutSource({
           isMultiplayer,
           seed: input.seed,
           vars: input.vars,
-          worldX,
-          worldY
+          worldX: effectiveWorldX,
+          worldY: effectiveWorldY
         });
 
+        // Inject WORLD_X/WORLD_Y into source - SAME as 3D pipeline (nexartWorld.ts)
+        const injection = `var WORLD_X = ${effectiveWorldX}; var WORLD_Y = ${effectiveWorldY};`;
+        const finalSource = canonicalResult.source.replace(
+          'function setup() {',
+          `function setup() { ${injection}`
+        );
+
         const executionPromise = executeCodeMode({
-          source: canonicalResult.source,
+          source: finalSource,
           width: 64,
           height: 64,
           seed: input.seed,
