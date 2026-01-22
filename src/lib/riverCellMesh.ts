@@ -9,7 +9,7 @@ import { WorldData } from "@/lib/worldData";
 import { WORLD_HEIGHT_SCALE, RIVER_WATER_ABOVE_BED, computeRiverCarveDepth, toRow } from "@/lib/worldConstants";
 
 // Surface lift above riverbed - must match water shader
-const RIVER_SURFACE_LIFT = 0.12;
+const RIVER_SURFACE_LIFT = 0.08;
 
 // Width extension beyond river cells (in grid units)
 // This makes water overlap riverbed edges for natural appearance
