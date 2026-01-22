@@ -6,6 +6,7 @@ import { useMemo, createContext, useContext, useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { WorldData, getElevationAt, isNearWater } from "@/lib/worldData";
+import { getWaterHeight } from "@/lib/worldConstants";
 import { useWorldTextures } from "@/hooks/useWorldTextures";
 import { MaterialKind } from "@/lib/materialRegistry";
 import { PALETTE, ROLES, hexToRgb255, VEGETATION_COLORS } from "@/theme/palette";
@@ -225,6 +226,11 @@ export function ForestTrees({
     }
 
     const seed = world.seed || 0;
+    
+    // Get water height for this world - vegetation must be above water
+    const waterHeight = getWaterHeight(world.vars || []);
+    // Buffer above water level to prevent vegetation at water's edge
+    const waterSafetyMargin = 0.3;
 
     // Define vegetation distribution based on terrain properties
     for (let gy = 1; gy < world.gridSize - 1; gy += 1) {
@@ -250,6 +256,9 @@ export function ForestTrees({
             if (isNearWater(world, treeX, treeZ, 0.8)) continue;
             
             const terrainY = getElevationAt(world, treeX, treeZ);
+            
+            // Skip if terrain is below water level (prevents trees in flooded areas)
+            if (terrainY < waterHeight + waterSafetyMargin) continue;
 
             // Select tree type based on elevation and moisture
             let treeType: VegetationType;
@@ -304,6 +313,9 @@ export function ForestTrees({
             if (isNearWater(world, understoryX, understoryZ, 0.5)) continue;
             
             const understoryY = getElevationAt(world, understoryX, understoryZ);
+            
+            // Skip if terrain is below water level
+            if (understoryY < waterHeight + waterSafetyMargin) continue;
 
             const understoryRoll = seededRandom(gx * 5, gy * 5, seed + 150);
             const understoryType: VegetationType =
@@ -331,6 +343,9 @@ export function ForestTrees({
             if (isNearWater(world, tree2X, tree2Z, 0.8)) continue;
             
             const terrain2Y = getElevationAt(world, tree2X, tree2Z);
+            
+            // Skip if terrain is below water level
+            if (terrain2Y < waterHeight + waterSafetyMargin) continue;
 
             items.push({
               x: tree2X,
@@ -355,6 +370,9 @@ export function ForestTrees({
           if (isNearWater(world, vegX, vegZ, 0.5)) continue;
           
           const vegY = getElevationAt(world, vegX, vegZ);
+          
+          // Skip if terrain is below water level
+          if (vegY < waterHeight + waterSafetyMargin) continue;
 
           const groundRoll = seededRandom(gx * 4, gy * 4, seed + 350);
           let groundType: VegetationType;
@@ -386,6 +404,9 @@ export function ForestTrees({
           if (isNearWater(world, rockX, rockZ, 0.5)) continue;
           
           const rockY = getElevationAt(world, rockX, rockZ);
+          
+          // Skip if terrain is below water level
+          if (rockY < waterHeight + waterSafetyMargin) continue;
 
           const mountainRoll = seededRandom(gx * 6, gy * 6, seed + 450);
 
