@@ -276,7 +276,9 @@ export async function generateCanonicalWorld(params: {
 
   try {
     // Generate via NexArt - this is the SINGLE execution per refresh
-    const worldContext = isMultiplayer ? { worldX, worldY } : undefined;
+    // FIX #1: ALWAYS pass explicit worldContext - never undefined
+    // This ensures dedupe keys, caches, and logs are consistent between Solo and Multiplayer
+    const worldContext = { worldX, worldY };
     const grid = await generateNexArtWorld({ seed, vars, worldContext });
     
     if (!grid.isValid) {

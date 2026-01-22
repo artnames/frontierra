@@ -1,3 +1,12 @@
+// DEV-ONLY: 512x512 NexArt preview canvas
+// This component is QUARANTINED from production to prevent:
+// - Duplicate NexArt executions (uses different resolution than canonical 64x64)
+// - Hash confusion (512x512 hashes will never match canonical pipeline)
+// - Log pollution in production builds
+//
+// If you need a visual NexArt preview, use WorldMap2D which renders
+// from the shared CanonicalWorldArtifact.
+
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { WorldParams, WORLD_SOURCE } from '@/lib/worldGenerator';
 import { normalizeNexArtInput } from '@/lib/nexartWorld';
@@ -8,6 +17,9 @@ interface WorldCanvasProps {
 }
 
 const NEXART_TIMEOUT_MS = 10000;
+
+// FIX #3: Compile-time gate - this component only works in DEV mode
+const IS_DEV = import.meta.env.DEV;
 
 export function WorldCanvas({ params, onGenerate }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -26,11 +38,17 @@ export function WorldCanvas({ params, onGenerate }: WorldCanvasProps) {
   const genKey = `${input.seed}:${input.vars.join(',')}:${input.mode}`;
 
   useEffect(() => {
+    // QUARANTINE: Block all execution in production builds
+    if (!IS_DEV) {
+      console.warn('[WorldCanvas] BLOCKED: This component is DEV-only to prevent duplicate NexArt executions');
+      return;
+    }
+
     // Skip if already generated this exact key
     if (genKey === lastGenerated) return;
 
     let cancelled = false;
-    console.log('[NexArt] Starting generation:', genKey);
+    console.log('[WorldCanvas/DEV] Starting 512x512 preview:', genKey);
 
     const runGeneration = async () => {
       setIsGenerating(true);
@@ -56,7 +74,7 @@ export function WorldCanvas({ params, onGenerate }: WorldCanvasProps) {
         const result = await Promise.race([executionPromise, timeoutPromise]);
 
         if (cancelled) return;
-        console.log('[NexArt] Generation complete:', genKey);
+        console.log('[WorldCanvas/DEV] Generation complete:', genKey);
 
         // The SDK returns result.image as a PNG Blob for static mode
         if (canvasRef.current && result.image) {
@@ -99,7 +117,7 @@ export function WorldCanvas({ params, onGenerate }: WorldCanvasProps) {
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : String(err);
-        console.error('[NexArt] Generation failed:', message);
+        console.error('[WorldCanvas/DEV] Generation failed:', message);
         setError(`World cannot be verified — ${message}`);
         setLastGenerated(genKey);
       } finally {
@@ -116,39 +134,44 @@ export function WorldCanvas({ params, onGenerate }: WorldCanvasProps) {
     };
   }, [genKey, input, lastGenerated, onGenerate]);
 
+  // FIX #3: Render nothing in production - component is quarantined
+  if (!IS_DEV) {
+    return (
+      <div className="p-4 text-xs text-muted-foreground bg-muted/50 rounded">
+        [WorldCanvas disabled in production]
+      </div>
+    );
+  }
+
   return (
     <div className="relative">
+      <div className="absolute top-2 left-2 z-10 px-2 py-1 text-[10px] font-mono bg-yellow-500/90 text-black rounded">
+        DEV ONLY - 512×512
+      </div>
       <canvas
         ref={canvasRef}
         width={512}
         height={512}
-        className="world-canvas w-full max-w-[512px] aspect-square bg-background"
+        className="world-canvas w-full max-w-[512px] aspect-square bg-background border-2 border-dashed border-yellow-500/50"
       />
       
       {isGenerating && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/80">
           <div className="flex flex-col items-center gap-2">
             <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs text-muted-foreground">GENERATING VIA NEXART...</span>
+            <span className="text-xs text-muted-foreground">DEV PREVIEW...</span>
           </div>
         </div>
       )}
       
-      {/* NexArt Failure - World Cannot Be Verified */}
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-destructive/20">
           <div className="terminal-panel p-6 border-destructive bg-background/95 text-center max-w-sm">
             <div className="text-2xl font-display font-bold text-destructive mb-3">
-              ⚠ WORLD CANNOT BE VERIFIED
-            </div>
-            <div className="text-sm text-muted-foreground mb-4">
-              NexArt execution failed. The world layout cannot be generated or validated.
+              ⚠ DEV PREVIEW FAILED
             </div>
             <div className="text-xs text-destructive/70 font-mono p-2 bg-destructive/10 rounded">
               {error}
-            </div>
-            <div className="text-xs text-muted-foreground mt-4">
-              NexArt is required for world generation. No fallback available.
             </div>
           </div>
         </div>

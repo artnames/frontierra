@@ -37,7 +37,7 @@ import {
   ReplayFrame,
 } from "@/lib/worldContract";
 import type { InteractionMode } from "@/components/WorldExplorer";
-import { deriveSoloWorldContext } from "@/lib/worldContext";
+// deriveSoloWorldContext removed - Solo now uses fixed (0,0) coordinates
 import { setCameraForLandTransition } from "@/hooks/useFirstPersonControls";
 import { ReplayControls } from "@/components/ReplayControls";
 import { MultiplayerHUD } from "@/components/MultiplayerHUD";
@@ -259,9 +259,11 @@ const Index = () => {
     let cancelled = false;
     setIsGenerating(true);
 
+    // FIX #1: ALWAYS pass explicit worldContext - never undefined
+    // Solo uses fixed (0,0), Multiplayer uses actual grid coordinates
     const worldContext = worldMode === 'multiplayer' && multiplayer.currentLand
       ? { worldX: multiplayer.currentLand.pos_x, worldY: multiplayer.currentLand.pos_y }
-      : deriveSoloWorldContext(activeParams.seed);
+      : { worldX: 0, worldY: 0 }; // Solo always uses canonical (0,0)
 
     generateCanonicalWorld({
       seed: activeParams.seed,
@@ -292,8 +294,9 @@ const Index = () => {
     if (worldMode === 'multiplayer' && multiplayer.currentLand) {
       return { worldX: multiplayer.currentLand.pos_x, worldY: multiplayer.currentLand.pos_y };
     }
-    return deriveSoloWorldContext(activeParams.seed);
-  }, [canonicalArtifact, worldMode, multiplayer.currentLand, activeParams.seed]);
+    // Solo always uses canonical (0,0) coordinates
+    return { worldX: 0, worldY: 0 };
+  }, [canonicalArtifact, worldMode, multiplayer.currentLand]);
   
   // Generator proof from canonical artifact (single source of truth)
   const generatorProof = useMemo(() => ({
@@ -741,7 +744,7 @@ const Index = () => {
                         worldX: multiplayer.currentLand.pos_x,
                         worldY: multiplayer.currentLand.pos_y,
                       }
-                    : deriveSoloWorldContext(activeParams.seed)
+                    : { worldX: 0, worldY: 0 } // Solo always uses canonical (0,0)
                 }
                 isOwnLand={worldMode === "solo" || !isOtherPlayerLand}
               />
