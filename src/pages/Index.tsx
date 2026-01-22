@@ -54,7 +54,7 @@ import { useMultiplayerWorld } from "@/hooks/useMultiplayerWorld";
 import { useDiscoveryGame } from "@/hooks/useDiscoveryGame";
 import { useToast } from "@/hooks/use-toast";
 import { useSearchParams } from "react-router-dom";
-import { GeneratorProofOverlay } from "@/components/GeneratorProofOverlay";
+import { GeneratorProofOverlay, BuildStamp } from "@/components/GeneratorProofOverlay";
 import { useGeneratorProof } from "@/hooks/useGeneratorProof";
 
 type ViewMode = "map" | "firstperson";
@@ -975,6 +975,7 @@ const Index = () => {
           </div>
 
           <div className="flex items-center gap-1.5">
+            <BuildStamp />
             <span className="text-muted-foreground">NexArt v1.5</span>
             <span className={isInvalid ? "text-destructive" : "text-primary"}>●</span>
           </div>

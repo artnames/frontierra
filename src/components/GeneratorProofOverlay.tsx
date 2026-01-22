@@ -1,8 +1,9 @@
 // Generator Proof Overlay
-// DEV-only overlay showing generator mode, source hash, and mapped values
+// DEV-only overlay showing generator mode, source hash, BUILD_ID, and mapped values
 // Makes it impossible to be on the wrong generator without noticing
 
 import { GeneratorMode } from '@/lib/generatorCanonical';
+import { BUILD_ID } from '@/lib/worldPipeline';
 
 const DEV = import.meta.env.DEV;
 
@@ -70,8 +71,12 @@ export function GeneratorProofOverlay({
         border: '1px solid hsl(var(--border))'
       }}
     >
-      <div className="font-bold mb-1" style={{ color: 'hsl(var(--primary))' }}>
-        🔬 Generator Proof
+      {/* BUILD_ID - Critical for cache verification */}
+      <div className="font-bold mb-1 flex items-center gap-2" style={{ color: 'hsl(var(--primary))' }}>
+        <span>🔬 Generator Proof</span>
+        <span className="text-[9px] px-1 py-0.5 rounded" style={{ backgroundColor: 'hsl(var(--accent))' }}>
+          {BUILD_ID}
+        </span>
       </div>
       
       {/* Generator Mode & Hash */}
@@ -131,5 +136,17 @@ export function GeneratorProofOverlay({
         </div>
       </div>
     </div>
+  );
+}
+
+// Small footer build stamp for non-debug mode
+export function BuildStamp() {
+  return (
+    <span className="text-[9px] font-mono px-1 py-0.5 rounded" style={{ 
+      backgroundColor: 'hsl(var(--accent) / 0.3)', 
+      color: 'hsl(var(--muted-foreground))' 
+    }}>
+      v{BUILD_ID}
+    </span>
   );
 }

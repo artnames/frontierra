@@ -1,6 +1,8 @@
 // Marching Squares + Chaikin Smoothing for contour-based river mesh
 // DETERMINISTIC: No Math.random, uses seed-based logic where needed
 
+import { toRow } from './worldConstants';
+
 type Point = [number, number];
 type Polyline = Point[];
 
@@ -284,7 +286,8 @@ export function buildRiverMaskField(
   const field = new Float32Array(gridSize * gridSize);
 
   for (let y = 0; y < gridSize; y++) {
-    const fy = gridSize - 1 - y; // Flip Y for grid->world conversion
+    // Use shared coordinate helper for consistency
+    const fy = toRow(y, gridSize);
     const row = terrain[fy];
     if (!row) continue;
 

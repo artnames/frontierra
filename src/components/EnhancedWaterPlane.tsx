@@ -15,6 +15,7 @@ import {
   getWaterHeight, 
   RIVER_WATER_ABOVE_BED,
   computeRiverCarveDepth,
+  toRow,
 } from "@/lib/worldConstants";
 import { buildSmoothRiverGeometry, hasRiverCells, countRiverCellsInWorld } from "@/lib/riverContourMesh";
 import { toThreeColor, ROLES, PALETTE } from "@/theme/palette";
@@ -74,7 +75,8 @@ function buildWaterGeometry(
 
   for (let y = 0; y < size - 1; y++) {
     for (let x = 0; x < size - 1; x++) {
-      const fy = size - 1 - y;
+      // Use shared coordinate helper
+      const fy = toRow(y, size);
       const c = world.terrain[fy]?.[x];
       if (!c || !pickCell(c)) continue;
 
