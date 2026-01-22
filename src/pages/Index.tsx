@@ -27,7 +27,7 @@ import { useWorldParams } from "@/hooks/useWorldParams";
 import { useAuth } from "@/hooks/useAuth";
 import { useVisualSettings } from "@/hooks/useVisualSettings";
 import { VAR_LABELS } from "@/lib/worldGenerator";
-import { generateWorldDataAsync, WorldData } from "@/lib/worldData";
+import { generateCanonicalWorld, CanonicalWorldArtifact } from "@/lib/generateCanonicalWorld";
 import {
   WorldAction,
   DeterminismTest,
@@ -51,7 +51,6 @@ import { useDiscoveryGame } from "@/hooks/useDiscoveryGame";
 import { useToast } from "@/hooks/use-toast";
 import { useSearchParams } from "react-router-dom";
 import { GeneratorProofOverlay, BuildStamp } from "@/components/GeneratorProofOverlay";
-import { useGeneratorProof } from "@/hooks/useGeneratorProof";
 
 // Lazy load sidebar components to reduce main-thread work
 const WorldContractPanel = lazy(() => import("@/components/WorldContractPanel").then(m => ({ default: m.WorldContractPanel })));
@@ -91,7 +90,9 @@ const Index = () => {
   const [playerPosition, setPlayerPosition] = useState({ x: 32, y: 32, z: 0 });
   const [showClaimModal, setShowClaimModal] = useState(false);
   const [pendingMultiplayerSwitch, setPendingMultiplayerSwitch] = useState(false);
-  const [pixelHash2D, setPixelHash2D] = useState<string>('');
+  // CANONICAL WORLD ARTIFACT - Single source of truth for both 2D and 3D
+  const [canonicalArtifact, setCanonicalArtifact] = useState<CanonicalWorldArtifact | null>(null);
+  const [isGenerating, setIsGenerating] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -242,39 +243,61 @@ const Index = () => {
       ? { seed: multiplayer.currentLand.seed, vars: multiplayer.currentLand.vars }
       : params;
 
-  // Generate world for contract panel - ASYNC VERSION
-  const [world, setWorld] = useState<WorldData | null>(null);
-
+  // CANONICAL WORLD GENERATION - Single execution per refresh
+  // Both 2D and 3D views consume this same artifact
   useEffect(() => {
     let cancelled = false;
+    setIsGenerating(true);
 
-    generateWorldDataAsync(activeParams.seed, activeParams.vars).then((data) => {
+    const worldContext = worldMode === 'multiplayer' && multiplayer.currentLand
+      ? { worldX: multiplayer.currentLand.pos_x, worldY: multiplayer.currentLand.pos_y }
+      : deriveSoloWorldContext(activeParams.seed);
+
+    generateCanonicalWorld({
+      seed: activeParams.seed,
+      vars: activeParams.vars,
+      worldX: worldContext.worldX,
+      worldY: worldContext.worldY,
+      isMultiplayer: worldMode === 'multiplayer',
+    }).then((artifact) => {
       if (!cancelled) {
-        setWorld(data);
+        setCanonicalArtifact(artifact);
+        setIsGenerating(false);
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [activeParams.seed, activeParams.vars]);
+  }, [activeParams.seed, activeParams.vars, worldMode, multiplayer.currentLand]);
 
-  // Generator proof overlay data - derive worldX/worldY for unified generation proof
+  // Derive world for contract panel from canonical artifact
+  const world = canonicalArtifact?.worldData ?? null;
+
+  // Generator proof data from canonical artifact
   const proofWorldCoords = useMemo(() => {
+    if (canonicalArtifact?.inputsUsed) {
+      return { worldX: canonicalArtifact.inputsUsed.worldX, worldY: canonicalArtifact.inputsUsed.worldY };
+    }
     if (worldMode === 'multiplayer' && multiplayer.currentLand) {
       return { worldX: multiplayer.currentLand.pos_x, worldY: multiplayer.currentLand.pos_y };
     }
     return deriveSoloWorldContext(activeParams.seed);
-  }, [worldMode, multiplayer.currentLand, activeParams.seed]);
+  }, [canonicalArtifact, worldMode, multiplayer.currentLand, activeParams.seed]);
   
-  const generatorProof = useGeneratorProof(
-    world,
-    worldMode === 'multiplayer',
-    activeParams.seed,
-    activeParams.vars,
-    proofWorldCoords.worldX,
-    proofWorldCoords.worldY
-  );
+  // Generator proof from canonical artifact (single source of truth)
+  const generatorProof = useMemo(() => ({
+    mode: canonicalArtifact?.mode ?? 'v1_unified',
+    sourceHash: canonicalArtifact?.sourceHash ?? '',
+    isMultiplayer: worldMode === 'multiplayer',
+    waterLevel: 0,
+    biomeRichness: 0,
+    riverStats: {
+      riverCellCount: canonicalArtifact?.counts.river ?? 0,
+      riverVertices: 0,
+      riverIndices: 0,
+    },
+  }), [canonicalArtifact, worldMode]);
 
   // Show overlay only with ?debug=1 URL param (not in dev mode by default)
   const showDebugOverlay = searchParams.get('debug') === '1';
@@ -423,7 +446,7 @@ const Index = () => {
       className={`h-screen bg-background flex flex-col overflow-hidden touch-none ${isInvalid ? "border-4 border-destructive" : ""}`}
     >
       {/* Generator Proof Overlay - DEV only or ?debug=1 */}
-      {showDebugOverlay && (
+      {showDebugOverlay && canonicalArtifact && (
         <GeneratorProofOverlay
           mode={generatorProof.mode}
           sourceHash={generatorProof.sourceHash}
@@ -435,8 +458,8 @@ const Index = () => {
           riverIndices={generatorProof.riverStats.riverIndices}
           worldX={proofWorldCoords.worldX}
           worldY={proofWorldCoords.worldY}
-          pixelHash={world?.nexartHash}
-          pixelHash2D={pixelHash2D}
+          pixelHash={canonicalArtifact.pixelHash}
+          pixelHash2D={canonicalArtifact.pixelHash}
         />
       )}
       
@@ -691,8 +714,8 @@ const Index = () => {
           <Suspense fallback={<WorldLoader />}>
             {viewMode === "firstperson" ? (
               <WorldExplorer
-                seed={activeParams.seed}
-                vars={activeParams.vars}
+                artifact={canonicalArtifact}
+                isLoading={isGenerating}
                 initialActions={actions}
                 onActionsChange={setActions}
                 onPositionUpdate={handlePositionUpdate}
@@ -716,12 +739,9 @@ const Index = () => {
               <div className="w-full h-full flex bg-background">
                 <div className="flex-1 flex items-center justify-center p-4">
                   <WorldMap2D 
-                    params={activeParams} 
+                    artifact={canonicalArtifact}
                     getShareUrl={getShareUrl}
-                    isMultiplayer={worldMode === 'multiplayer'}
-                    worldX={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_x : deriveSoloWorldContext(activeParams.seed).worldX}
-                    worldY={worldMode === 'multiplayer' && multiplayer.currentLand ? multiplayer.currentLand.pos_y : deriveSoloWorldContext(activeParams.seed).worldY}
-                    onHashChange={setPixelHash2D}
+                    isLoading={isGenerating}
                   />
                 </div>
               </div>
