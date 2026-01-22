@@ -250,8 +250,8 @@ const Index = () => {
     activeParams.vars
   );
 
-  // Show overlay in dev mode or with ?debug=1 URL param
-  const showDebugOverlay = import.meta.env.DEV || searchParams.get('debug') === '1';
+  // Show overlay only with ?debug=1 URL param (not in dev mode by default)
+  const showDebugOverlay = searchParams.get('debug') === '1';
 
   const handleGenerate = useCallback(() => {
     applyToUrl();

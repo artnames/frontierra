@@ -60,6 +60,7 @@ const VegetationOutlineContext = createContext(false);
 type VegetationType =
   | "pine"
   | "deciduous"
+  | "autumn"
   | "bush"
   | "birch"
   | "willow"
@@ -265,17 +266,19 @@ export function ForestTrees({
               // Low moisture - dead trees and sparse pines
               treeType = typeRoll < 0.5 ? "deadTree" : typeRoll < 0.8 ? "pine" : "bush";
             } else {
-              // Normal conditions - mixed forest
+              // Normal conditions - mixed forest with autumn trees
               treeType =
-                typeRoll < 0.25
+                typeRoll < 0.2
                   ? "pine"
-                  : typeRoll < 0.5
+                  : typeRoll < 0.4
                     ? "deciduous"
-                    : typeRoll < 0.7
-                      ? "birch"
-                      : typeRoll < 0.85
-                        ? "willow"
-                        : "bush";
+                    : typeRoll < 0.55
+                      ? "autumn"
+                      : typeRoll < 0.7
+                        ? "birch"
+                        : typeRoll < 0.85
+                          ? "willow"
+                          : "bush";
             }
 
             items.push({
@@ -457,6 +460,13 @@ function Vegetation({ x, y, z, scale, type, colorVariant, rotation, seed }: Vege
         <>
           {contactShadow}
           <DeciduousTree {...vegProps} />
+        </>
+      );
+    case "autumn":
+      return (
+        <>
+          {contactShadow}
+          <AutumnTree {...vegProps} />
         </>
       );
     case "bush":
@@ -664,6 +674,65 @@ function DeciduousTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
       </mesh>
 
       {/* foliage blobs */}
+      <OutlineShell enabled={outlines} position={[0, 1.4, 0]}>
+        <sphereGeometry args={[0.55, 8, 6]} />
+      </OutlineShell>
+      <mesh position={[0, 1.4, 0]} castShadow={shadows} receiveShadow={shadows}>
+        <sphereGeometry args={[0.55, 8, 6]} />
+        <VegMaterial color={leafColor1} isRich={isRich} />
+      </mesh>
+
+      <OutlineShell enabled={outlines} position={[0.25, 1.2, 0.15]}>
+        <sphereGeometry args={[0.35, 6, 5]} />
+      </OutlineShell>
+      <mesh position={[0.25, 1.2, 0.15]} castShadow={shadows} receiveShadow={shadows}>
+        <sphereGeometry args={[0.35, 6, 5]} />
+        <VegMaterial color={leafColor2} isRich={isRich} />
+      </mesh>
+
+      <OutlineShell enabled={outlines} position={[-0.2, 1.3, -0.1]}>
+        <sphereGeometry args={[0.3, 6, 5]} />
+      </OutlineShell>
+      <mesh position={[-0.2, 1.3, -0.1]} castShadow={shadows} receiveShadow={shadows}>
+        <sphereGeometry args={[0.3, 6, 5]} />
+        <VegMaterial color={leafColor3} isRich={isRich} />
+      </mesh>
+    </group>
+  );
+}
+
+// Autumn tree - warm fall colors using palette amber, flame, coral
+function AutumnTree({ x, y, z, scale, colorVariant, rotation }: VegProps) {
+  const isRich = useContext(VegetationRichnessContext);
+  const shadows = useContext(VegetationShadowContext);
+  const outlines = useContext(VegetationOutlineContext);
+
+  // Use warm autumn palette colors - amber, flame, coral with variation
+  const autumnColors = [
+    { r: 0.996, g: 0.580, b: 0.008 }, // amber #FE9402
+    { r: 0.992, g: 0.337, b: 0.008 }, // flame #FD5602
+    { r: 0.820, g: 0.478, b: 0.455 }, // coral #D17A74
+    { r: 0.667, g: 0.773, b: 0.294 }, // lime #AAC64B (some green-gold)
+  ];
+  
+  // Select autumn colors based on colorVariant
+  const colorIndex = Math.floor(colorVariant * autumnColors.length) % autumnColors.length;
+  const leafColor1 = getVegColor(autumnColors[colorIndex], colorVariant, 30);
+  const leafColor2 = getVegColor(autumnColors[(colorIndex + 1) % autumnColors.length], colorVariant + 0.2, 30);
+  const leafColor3 = getVegColor(autumnColors[(colorIndex + 2) % autumnColors.length], colorVariant + 0.4, 30);
+
+  return (
+    <group position={[x, y, z]} scale={scale} rotation={[0, rotation, 0]}>
+      {/* trunk */}
+      <OutlineShell enabled={outlines} position={[0, 0.5, 0]}>
+        <cylinderGeometry args={[0.08, 0.12, 1.0, 6]} />
+      </OutlineShell>
+      <mesh position={[0, 0.5, 0]} castShadow={shadows} receiveShadow={shadows}>
+        <cylinderGeometry args={[0.08, 0.12, 1.0, 6]} />
+        <BarkMaterial color={PALETTE.rust} isRich={isRich} />
+      </mesh>
+
+      {/* foliage blobs - warm autumn colors */}
       <OutlineShell enabled={outlines} position={[0, 1.4, 0]}>
         <sphereGeometry args={[0.55, 8, 6]} />
       </OutlineShell>
