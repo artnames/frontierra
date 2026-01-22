@@ -214,11 +214,9 @@ function nexartGridToWorldData(grid: NexArtWorldGrid): WorldData {
 export async function generateWorldDataAsync(
   seed: number,
   vars: number[],
-  worldContext?: { worldX: number; worldY: number },
-  mappingVersion?: "v1" | "v2",
-  microOverrides?: Map<number, number>,
+  worldContext?: { worldX: number; worldY: number }
 ): Promise<WorldData> {
-  const grid = await generateNexArtWorld({ seed, vars, worldContext, mappingVersion, microOverrides });
+  const grid = await generateNexArtWorld({ seed, vars, worldContext });
 
   if (!grid.isValid) {
     return {

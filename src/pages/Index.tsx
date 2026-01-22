@@ -36,7 +36,7 @@ import {
   parseActions,
   ReplayFrame,
 } from "@/lib/worldContract";
-import { buildParamsV2, selectArchetype, ARCHETYPE_PROFILES, ARCHETYPES, type WorldArchetype } from "@/world";
+import { WorldExplorer, InteractionMode } from "@/components/WorldExplorer";
 import { WorldExplorer, InteractionMode } from "@/components/WorldExplorer";
 import { setCameraForLandTransition } from "@/hooks/useFirstPersonControls";
 import { WorldMap2D } from "@/components/WorldMap2D";
@@ -93,13 +93,8 @@ const Index = () => {
 
   const {
     params,
-    derivedMicroVars,
     setSeed,
     setVar,
-    setMicroVar,
-    resetMicroVar,
-    resetAllMicroVars,
-    setMappingVersion,
     getShareUrl,
     applyToUrl,
     randomizeSeed,
@@ -231,17 +226,6 @@ const Index = () => {
       ? { seed: multiplayer.currentLand.seed, vars: multiplayer.currentLand.vars }
       : params;
 
-  // Get active V2 settings
-  const activeMappingVersion =
-    worldMode === "multiplayer" && multiplayer.currentLand
-      ? (multiplayer.worldParams.mappingVersion ?? "v1")
-      : params.mappingVersion;
-
-  const activeMicroOverrides =
-    worldMode === "multiplayer" && multiplayer.currentLand
-      ? multiplayer.worldParams.microOverrides
-      : params.microOverrides;
-
   // Generate world for contract panel - ASYNC VERSION
   const [world, setWorld] = useState<WorldData | null>(null);
 
@@ -262,11 +246,9 @@ const Index = () => {
   // Generator proof overlay data
   const generatorProof = useGeneratorProof(
     world,
-    activeMappingVersion,
     worldMode === 'multiplayer',
     activeParams.seed,
-    activeParams.vars,
-    activeMicroOverrides
+    activeParams.vars
   );
 
   // Show overlay in dev mode or with ?debug=1 URL param
@@ -400,11 +382,9 @@ const Index = () => {
         <GeneratorProofOverlay
           mode={generatorProof.mode}
           sourceHash={generatorProof.sourceHash}
-          mappingVersion={generatorProof.mappingVersion}
           isMultiplayer={generatorProof.isMultiplayer}
           waterLevel={generatorProof.waterLevel}
           biomeRichness={generatorProof.biomeRichness}
-          microVars={generatorProof.microVars}
           riverCellCount={generatorProof.riverStats.riverCellCount}
           riverVertices={generatorProof.riverStats.riverVertices}
           riverIndices={generatorProof.riverStats.riverIndices}

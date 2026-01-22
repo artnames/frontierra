@@ -9,11 +9,9 @@ const DEV = import.meta.env.DEV;
 interface GeneratorProofOverlayProps {
   mode: GeneratorMode;
   sourceHash: string;
-  mappingVersion: 'v1' | 'v2';
   isMultiplayer: boolean;
   waterLevel: number;
   biomeRichness: number;
-  microVars: number[];
   // River debug counters
   riverCellCount: number;
   riverVertices: number;
@@ -23,11 +21,9 @@ interface GeneratorProofOverlayProps {
 export function GeneratorProofOverlay({
   mode,
   sourceHash,
-  mappingVersion,
   isMultiplayer,
   waterLevel,
   biomeRichness,
-  microVars,
   riverCellCount,
   riverVertices,
   riverIndices
@@ -39,7 +35,6 @@ export function GeneratorProofOverlay({
     switch (mode) {
       case 'v1_solo': return 'V1 Solo';
       case 'v1_worldA': return 'V1 World-A';
-      case 'v2_refinement': return 'V2 Refine';
       default: return mode;
     }
   };
@@ -48,7 +43,6 @@ export function GeneratorProofOverlay({
     switch (mode) {
       case 'v1_solo': return 'hsl(var(--chart-4))';
       case 'v1_worldA': return 'hsl(var(--chart-2))';
-      case 'v2_refinement': return 'hsl(var(--chart-1))';
       default: return 'hsl(var(--foreground))';
     }
   };
@@ -92,9 +86,6 @@ export function GeneratorProofOverlay({
       
       {/* Context */}
       <div className="flex gap-2">
-        <span style={{ color: 'hsl(var(--muted-foreground))' }}>Ver:</span>
-        <span>{mappingVersion.toUpperCase()}</span>
-        <span style={{ color: 'hsl(var(--muted-foreground))' }}>|</span>
         <span style={{ color: 'hsl(var(--muted-foreground))' }}>MP:</span>
         <span>{isMultiplayer ? 'Yes' : 'No'}</span>
       </div>
@@ -110,16 +101,6 @@ export function GeneratorProofOverlay({
           <span style={{ color: 'hsl(var(--chart-1))' }}>{biomeRichness.toFixed(2)}</span>
         </div>
       </div>
-      
-      {/* Micro Vars [0-2] */}
-      {mappingVersion === 'v2' && microVars.length > 0 && (
-        <div className="flex gap-2">
-          <span style={{ color: 'hsl(var(--muted-foreground))' }}>MV[0-2]:</span>
-          <span style={{ color: 'hsl(var(--chart-5))' }}>
-            {microVars.map(v => v.toFixed(0)).join(', ')}
-          </span>
-        </div>
-      )}
       
       {/* River Debug Counters */}
       <div className="mt-1 pt-1" style={{ borderTop: '1px solid hsl(var(--border))' }}>

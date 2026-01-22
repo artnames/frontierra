@@ -12,12 +12,9 @@ import { useToast } from '@/hooks/use-toast';
 interface WorldMap2DProps {
   params: WorldParams;
   getShareUrl: () => string;
-  // V2: Accept mappingVersion to ensure 2D and 3D use same generator
-  mappingVersion?: 'v1' | 'v2';
   isMultiplayer?: boolean;
   worldX?: number;
   worldY?: number;
-  microOverrides?: Map<number, number>;
 }
 
 const NEXART_TIMEOUT_MS = 10000;
@@ -37,11 +34,9 @@ const TILE_LEGEND = [
 export function WorldMap2D({ 
   params, 
   getShareUrl,
-  mappingVersion = 'v1',
   isMultiplayer = false,
   worldX,
-  worldY,
-  microOverrides
+  worldY
 }: WorldMap2DProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -58,8 +53,8 @@ export function WorldMap2D({
     mode: 'static'
   }), [params.seed, params.vars]);
 
-  // Include mappingVersion in genKey to regenerate when it changes
-  const genKey = `${input.seed}:${input.vars.join(',')}:${mappingVersion}:${worldX ?? ''}:${worldY ?? ''}`;
+  // Include context in genKey to regenerate when it changes
+  const genKey = `${input.seed}:${input.vars.join(',')}:${worldX ?? ''}:${worldY ?? ''}`;
 
   useEffect(() => {
     if (genKey === lastGenerated) return;
@@ -78,16 +73,13 @@ export function WorldMap2D({
         });
 
         // Use CANONICAL source selector - SAME as 3D explorer
-        // Pass the SAME mappingVersion to ensure 2D/3D parity
         const { getCanonicalWorldLayoutSource } = await import('@/lib/generatorCanonical');
         const canonicalResult = getCanonicalWorldLayoutSource({
-          mappingVersion,  // Use prop, not hardcoded 'v1'
           isMultiplayer,
           seed: input.seed,
           vars: input.vars,
           worldX,
-          worldY,
-          microOverrides
+          worldY
         });
 
         const executionPromise = executeCodeMode({
