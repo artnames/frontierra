@@ -15,6 +15,7 @@ import {
   WORLD_HEIGHT_SCALE,
   RIVER_WATER_ABOVE_BED,
   computeRiverCarveDepth,
+  toRow,
 } from "@/lib/worldConstants";
 
 type Point = [number, number];
@@ -83,8 +84,8 @@ function computeWaterHeightAt(
   const gridX = Math.max(0, Math.min(size - 1, Math.floor(contourX)));
   const gridY = Math.max(0, Math.min(size - 1, Math.floor(contourY)));
   
-  // Convert render Y to terrain array row index (same as terrain mesh does)
-  const terrainRowIndex = size - 1 - gridY;
+  // Convert render Y to terrain array row index using shared helper
+  const terrainRowIndex = toRow(gridY, size);
   
   const row = world.terrain[terrainRowIndex];
   if (!row) return 0;

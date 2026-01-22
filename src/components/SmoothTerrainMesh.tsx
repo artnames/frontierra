@@ -10,11 +10,11 @@ import * as THREE from "three";
 import { WorldData, TerrainCell } from "@/lib/worldData";
 import { 
   WORLD_HEIGHT_SCALE,
-  getWaterHeight,
-  PATH_HEIGHT_OFFSET,
+  PATH_HEIGHT_LIFT,
   computeRiverCarveDepth,
   getRiverMicroVariation,
   computeRiverMask,
+  toRow,
 } from "@/lib/worldConstants";
 import { MaterialKind, getMaterialKind } from "@/lib/materialRegistry";
 import { createTerrainPbrDetailMaterial } from "@/lib/terrainPbrMaterial";
@@ -67,9 +67,6 @@ export function SmoothTerrainMesh({
   microDetailEnabled = true,
 }: SmoothTerrainMeshProps) {
   const heightScale = WORLD_HEIGHT_SCALE;
-  // Use shared water height function for consistency
-  const waterHeight = getWaterHeight(world?.vars || []);
-  const pathMaxHeight = waterHeight + PATH_HEIGHT_OFFSET;
 
   // FIX A: Track previous resources for safe disposal
   const prevGeometryRef = useRef<THREE.BufferGeometry | null>(null);
@@ -94,7 +91,8 @@ export function SmoothTerrainMesh({
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const vi = y * size + x;
-        const flippedY = size - 1 - y;
+        // Use shared coordinate helper
+        const flippedY = toRow(y, size);
         const cell = world.terrain[flippedY]?.[x];
 
         let h = 0;
@@ -119,9 +117,10 @@ export function SmoothTerrainMesh({
             h = baseH - carve;
           }
 
-          // Bridge removed - paths use terrain height
-          if (cell.isPath) {
-            h = Math.min(h, pathMaxHeight);
+          // FIX: Path height is terrain + lift, NEVER capped below terrain
+          // This fixes the path sinking bug
+          if (cell.isPath || cell.type === 'path') {
+            h = h + PATH_HEIGHT_LIFT;
           }
         }
 
@@ -185,7 +184,7 @@ export function SmoothTerrainMesh({
     geo.setIndex(new THREE.BufferAttribute(indices, 1));
     geo.computeVertexNormals();
     return geo;
-  }, [world, heightScale, pathMaxHeight, worldX, worldY]);
+  }, [world, heightScale, worldX, worldY]);
 
   const material = useMemo(() => {
     if (!world?.gridSize) return new THREE.MeshStandardMaterial({ vertexColors: true });

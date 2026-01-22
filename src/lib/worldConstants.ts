@@ -195,6 +195,36 @@ export function getRiverWaterSurfaceHeight(
 }
 
 // ============================================
+// COORDINATE HELPERS - SHARED ACROSS ALL GEOMETRY
+// ============================================
+
+/**
+ * Convert render Z coordinate to terrain array row index
+ * Terrain mesh uses: position Z = y (loop variable)
+ * Terrain array uses: terrain[size - 1 - y][x]
+ */
+export function toRow(z: number, size: number): number {
+  return size - 1 - z;
+}
+
+/**
+ * Get cell from terrain array using render coordinates (x, z)
+ * This is the CANONICAL way to access terrain cells from 3D positions
+ */
+export function cellAt<T>(
+  terrain: T[][],
+  x: number,
+  z: number,
+  size: number
+): T | undefined {
+  const row = toRow(z, size);
+  if (row < 0 || row >= terrain.length) return undefined;
+  const cells = terrain[row];
+  if (!cells || x < 0 || x >= cells.length) return undefined;
+  return cells[x];
+}
+
+// ============================================
 // SURFACE HEIGHT (No bridges - V2)
 // ============================================
 
@@ -202,6 +232,7 @@ export function getRiverWaterSurfaceHeight(
  * Get surface height at a position - THE canonical function for collision/movement
  * Returns terrain height (with river carving) + path lift if applicable.
  * NOTE: Bridges removed - paths simply stop at water.
+ * FIX: Path height is ALWAYS terrain + lift, never capped below terrain.
  */
 export function getSurfaceHeightAt(
   terrain: { hasRiver?: boolean; elevation?: number; type?: string }[][],
@@ -222,7 +253,8 @@ export function getSurfaceHeightAt(
   const carve = computeRiverCarveDepth(terrain, x, y, flippedY, isRiver, seed);
   let terrainHeight = baseH - carve;
   
-  // Paths use terrain height + small lift for visual layering
+  // FIX: Paths use terrain height + small lift for visual layering
+  // Path height is ALWAYS above terrain, never capped to a maximum
   if (cell.type === 'path') {
     terrainHeight = terrainHeight + PATH_HEIGHT_LIFT;
   }
