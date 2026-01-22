@@ -1,10 +1,9 @@
-// EnhancedWaterPlane - Water rendering with smooth contour-based rivers
+// EnhancedWaterPlane - Water rendering with CELL-BASED rivers
 // CRITICAL: Uses shared constants from worldConstants.ts for collision alignment
 // CRITICAL: Uses canonical palette from src/theme/palette.ts
-// Rivers use Marching Squares + Chaikin smoothing for smooth silhouettes
+// COORDINATE FIX: Rivers now use IDENTICAL loop structure as SmoothTerrainMesh
+// This guarantees pixel-perfect alignment with terrain
 // FIX A: Proper geometry/material disposal with refs to avoid race conditions
-// RIVER FIX: Ensure rivers are always visible with proper colors and depth settings
-// RIVER DEBUG: Reports geometry stats to global registry for overlay
 
 import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
@@ -13,12 +12,10 @@ import { WorldData, TerrainCell } from "@/lib/worldData";
 import { 
   WORLD_HEIGHT_SCALE, 
   getWaterHeight, 
-  RIVER_WATER_ABOVE_BED,
-  computeRiverCarveDepth,
   toRow,
 } from "@/lib/worldConstants";
-import { buildSmoothRiverGeometry, hasRiverCells, countRiverCellsInWorld } from "@/lib/riverContourMesh";
-import { toThreeColor, ROLES, PALETTE } from "@/theme/palette";
+import { buildRiverCellMesh, hasRiverCells, countRiverCells } from "@/lib/riverCellMesh";
+import { toThreeColor, PALETTE } from "@/theme/palette";
 import { setGlobalRiverStats } from "@/hooks/useGeneratorProof";
 
 const DEV = import.meta.env.DEV;
@@ -73,33 +70,39 @@ function buildWaterGeometry(
     return !!c && pickCell(c);
   };
 
+  // Use SAME loop structure as SmoothTerrainMesh for coordinate consistency
+  // y is the render Z coordinate, terrain is accessed via toRow(y, size)
   for (let y = 0; y < size - 1; y++) {
     for (let x = 0; x < size - 1; x++) {
-      // Use shared coordinate helper
       const fy = toRow(y, size);
       const c = world.terrain[fy]?.[x];
       if (!c || !pickCell(c)) continue;
 
+      // Get corner cells - note: y+1 means fy-1 in terrain array
       const c00 = world.terrain[fy]?.[x];
       const c10 = world.terrain[fy]?.[x + 1];
-      const c01 = world.terrain[fy - 1]?.[x];
-      const c11 = world.terrain[fy - 1]?.[x + 1];
+      const fy01 = toRow(y + 1, size);
+      const c01 = world.terrain[fy01]?.[x];
+      const c11 = world.terrain[fy01]?.[x + 1];
       if (!c00 || !c10 || !c01 || !c11) continue;
 
+      // Heights at each corner - pass render coordinates (x, y) for consistency
       const h00 = heightAtVertex(c00, x, y, fy);
       const h10 = heightAtVertex(c10, x + 1, y, fy);
-      const h01 = heightAtVertex(c01, x, y + 1, fy - 1);
-      const h11 = heightAtVertex(c11, x + 1, y + 1, fy - 1);
+      const h01 = heightAtVertex(c01, x, y + 1, fy01);
+      const h11 = heightAtVertex(c11, x + 1, y + 1, fy01);
 
       const v00 = ensureV(x, y, h00);
       const v10 = ensureV(x + 1, y, h10);
       const v01 = ensureV(x, y + 1, h01);
       const v11 = ensureV(x + 1, y + 1, h11);
 
+      // Same triangle winding as terrain mesh
       indices.push(v00, v01, v10);
       indices.push(v01, v11, v10);
 
-      const interior = isPicked(fy, x) && isPicked(fy, x + 1) && isPicked(fy - 1, x) && isPicked(fy - 1, x + 1);
+      // Check all 4 corners for interior detection
+      const interior = isPicked(fy, x) && isPicked(fy, x + 1) && isPicked(fy01, x) && isPicked(fy01, x + 1);
 
       if (!interior) {
         const e = Math.max(0, Math.min(1, edgeFloor));
@@ -146,74 +149,21 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
 
   // Count river cells for debug stats
   const riverCellCount = useMemo(() => {
-    return world ? countRiverCellsInWorld(world) : 0;
+    return world ? countRiverCells(world) : 0;
   }, [world]);
 
-  // River geometry - smooth contour-based mesh using Marching Squares
-  // RIVER FIX: Always try to render rivers if riverCellCount > 0
+  // River geometry - CELL-BASED mesh for perfect terrain alignment
+  // Uses IDENTICAL loop/coordinate system as SmoothTerrainMesh
   const riverGeo = useMemo(() => {
-    if (!world || !world.terrain || world.terrain.length === 0) {
-      // Report zero stats
+    if (!world || !world.terrain || world.terrain.length === 0 || riverCellCount === 0) {
       setGlobalRiverStats({ riverCellCount: 0, riverVertices: 0, riverIndices: 0 });
       return new THREE.BufferGeometry();
     }
 
-    // SURFACE_LIFT ensures river renders above terrain
-    const SURFACE_LIFT = 0.15; // Increased for visibility
-    const bankClearance = 0.02;
-
-    let geo: THREE.BufferGeometry;
-
-    // Try smooth contour-based mesh first if we have river cells
-    if (riverCellCount > 0) {
-      const smoothGeo = buildSmoothRiverGeometry(world, worldX, worldY);
-      
-      // Check if we got valid geometry
-      const posAttr = smoothGeo.getAttribute('position');
-      const indexCount = smoothGeo.index?.count ?? 0;
-      
-      if (posAttr && posAttr.count >= 3 && indexCount >= 3) {
-        if (DEV) {
-          console.debug(`[EnhancedWaterPlane] River contour mesh: ${posAttr.count} vertices, ${indexCount} indices`);
-        }
-        geo = smoothGeo;
-      } else {
-        smoothGeo.dispose();
-        
-        if (DEV) {
-          console.warn(`[EnhancedWaterPlane] Contour mesh failed (${posAttr?.count ?? 0} verts, ${indexCount} indices), using cell-based fallback`);
-        }
-        
-        // Fallback: cell-based geometry (guaranteed to work if riverCellCount > 0)
-        geo = buildWaterGeometry(
-          world,
-          worldX,
-          worldY,
-          (c) => !!c.hasRiver && c.type !== "water",
-          (cell, x, y, fy) => {
-            const baseH = cell.elevation * heightScale;
-            const carve = computeRiverCarveDepth(
-              world.terrain,
-              x,
-              y,
-              fy,
-              true,
-              world.seed
-            );
-            const bedHeight = baseH - carve;
-            const waterSurface = bedHeight + RIVER_WATER_ABOVE_BED;
-            const surface = Math.min(waterSurface, baseH - bankClearance);
-            return surface + SURFACE_LIFT;
-          },
-          0.85, // High edge floor for visible edges
-        );
-      }
-    } else {
-      // No river cells
-      geo = new THREE.BufferGeometry();
-    }
-
-    // Report geometry stats to global registry for overlay
+    // Build cell-based river mesh (NO dilation/blur/marching squares)
+    const geo = buildRiverCellMesh(world, worldX, worldY);
+    
+    // Report geometry stats
     const posAttr = geo.getAttribute('position');
     const vertexCount = posAttr?.count ?? 0;
     const indexCount = geo.index?.count ?? 0;
@@ -224,12 +174,12 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
       riverIndices: indexCount
     });
 
-    if (DEV && riverCellCount > 0) {
-      console.debug(`[EnhancedWaterPlane] Final river stats: cells=${riverCellCount}, vertices=${vertexCount}, indices=${indexCount}`);
+    if (DEV) {
+      console.debug(`[EnhancedWaterPlane] River cell mesh: ${riverCellCount} cells, ${vertexCount} vertices, ${indexCount} indices`);
     }
 
     return geo;
-  }, [world, worldX, worldY, heightScale, riverCellCount]);
+  }, [world, worldX, worldY, riverCellCount]);
 
   // Lake/ocean geometry - flat plane at water level
   const lakeGeo = useMemo(() => {
