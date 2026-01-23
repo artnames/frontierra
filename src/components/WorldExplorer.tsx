@@ -19,7 +19,7 @@ import { TexturedTerrainMesh, SimpleTerrainMesh } from "@/components/TexturedTer
 import { SmoothTerrainMesh } from "@/components/SmoothTerrainMesh";
 import { EnhancedWaterPlane } from "@/components/EnhancedWaterPlane";
 import { ForestTrees } from "@/components/ForestTrees";
-import { PlacedBeaconMesh } from "@/components/ActionSystem";
+// PlacedBeaconMesh removed - landmark uses PlantedObject directly via VARs
 import { SkyDome } from "@/components/SkyDome";
 import { TimeOfDayHUD } from "@/components/TimeOfDayHUD";
 import { PostFXZelda } from "@/components/postfx/PostFXZelda";
@@ -139,9 +139,8 @@ function FirstPersonScene({
       <PlantedObject world={world} isDiscovered={isDiscovered} />
       {interactionMode === "editor" && <GridOverlay world={world} />}
 
-      {actions.map((action, i) => (
-        <PlacedBeaconMesh key={i} action={action} world={world} />
-      ))}
+      {/* Landmark is rendered by PlantedObject based on VAR[1]/VAR[2] coordinates */}
+      {/* No separate beacon mesh needed - action updates VARs which move the PlantedObject */}
 
       {isReplaying && replayFrame && <ReplayCamera frame={replayFrame} />}
     </>
