@@ -149,9 +149,9 @@ export default function Auth() {
             <img 
               src={frontierraLogo} 
               alt="Frontierra" 
-              width="400" 
-              height="160"
-              fetchPriority="high"
+              width={400} 
+              height={160}
+              loading="eager"
               className="relative h-24 sm:h-32 lg:h-40 object-contain drop-shadow-[0_0_40px_hsl(var(--primary)/0.5)]"
             />
           </div>
