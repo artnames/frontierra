@@ -37,11 +37,11 @@ export function ActionSystem({
 
   const canPlace = cell && cell.type !== "water" && actions.length === 0;
 
-  const handlePlaceBeacon = useCallback(() => {
+  const handlePlaceLandmark = useCallback(() => {
     if (!canPlace || !isWorldReady) return;
 
     const action: WorldAction = {
-      type: "plant_beacon",
+      type: "plant_beacon", // Keep internal type for compatibility
       gridX,
       gridY,
     };
@@ -53,8 +53,8 @@ export function ActionSystem({
       onActionExecute(action);
       setIsPlacing(false);
       toast({
-        title: "Beacon Planted",
-        description: `Location: (${gridX}, ${gridY}) | Hash: ${result.hash}`,
+        title: "Landmark Placed",
+        description: `Location: (${gridX}, ${gridY}) - VARs updated`,
       });
     } else {
       toast({
@@ -99,19 +99,19 @@ export function ActionSystem({
       <Button
         variant={hasPlacedAction ? "outline" : "default"}
         size="sm"
-        onClick={handlePlaceBeacon}
+        onClick={handlePlaceLandmark}
         disabled={disabled || !canPlace || hasPlacedAction}
         className="w-full gap-1.5 text-xs"
       >
         <Crosshair className="w-3.5 h-3.5" />
-        {hasPlacedAction ? "Beacon Already Placed" : "Plant Beacon Here"}
+        {hasPlacedAction ? "Landmark Already Placed" : "Place Landmark Here"}
       </Button>
 
       {/* Placed action info */}
       {hasPlacedAction && (
         <div className="bg-secondary/50 rounded p-2 text-[9px]">
           <div className="flex justify-between items-center mb-1">
-            <span className="text-muted-foreground">PLACED BEACON:</span>
+            <span className="text-muted-foreground">PLACED LANDMARK:</span>
             {onActionReset && (
               <Button
                 variant="ghost"
@@ -126,10 +126,6 @@ export function ActionSystem({
           </div>
           <div className="font-mono space-y-0.5">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Type:</span>
-              <span className="text-primary">{actions[0].type}</span>
-            </div>
-            <div className="flex justify-between">
               <span className="text-muted-foreground">Location:</span>
               <span className="text-secondary-foreground">
                 ({actions[0].gridX}, {actions[0].gridY})
@@ -143,57 +139,16 @@ export function ActionSystem({
       <div className="text-[9px] text-muted-foreground border-t border-border pt-2">
         <p className="text-primary mb-1">Rules:</p>
         <ul className="list-disc list-inside space-y-0.5">
-          <li>One action per world</li>
+          <li>One landmark per world</li>
           <li>Cannot place on water</li>
-          <li>Result is deterministic</li>
-          <li>Anyone with URL sees same beacon</li>
+          <li>Updates Landmark X/Y VARs</li>
+          <li>Anyone with URL sees same landmark</li>
         </ul>
       </div>
     </div>
   );
 }
 
-// Visual beacon component for 3D scene
-interface PlacedBeaconProps {
-  action: WorldAction;
-  world: WorldData;
-}
-
-export function PlacedBeaconMesh({ action, world }: PlacedBeaconProps) {
-  // Guard against incomplete world data
-  if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
-    return null;
-  }
-
-  // Flip Z for Three.js positioning (P5.js Y -> Three.js -Z)
-  const flippedZ = world.gridSize - 1 - action.gridY;
-
-  // Object positioned directly at grid coordinates (no offset)
-  // since TexturedTerrainMesh is positioned at origin
-  const posX = action.gridX;
-  const posZ = flippedZ;
-
-  // COORDINATE FIX: getElevationAt expects world coordinates (worldX, worldZ)
-  // where worldZ corresponds to the 3D Z position (flippedZ), not the grid Y
-  // This ensures the beacon sits correctly on the terrain surface
-  const terrainY = getElevationAt(world, posX, posZ);
-
-  return (
-    <group position={[posX, terrainY, posZ]}>
-      {/* Small base stone */}
-      <mesh position={[0, 0.08, 0]}>
-        <cylinderGeometry args={[0.12, 0.15, 0.16, 6]} />
-        <meshStandardMaterial color="#4a5a5a" />
-      </mesh>
-
-      {/* Tiny glowing crystal */}
-      <mesh position={[0, 0.25, 0]}>
-        <octahedronGeometry args={[0.1, 0]} />
-        <meshStandardMaterial color="#5ac4c4" emissive="#5ac4c4" emissiveIntensity={0.8} />
-      </mesh>
-
-      {/* Very subtle point light - only visible when close */}
-      <pointLight position={[0, 0.25, 0]} color="#5ac4c4" intensity={0.5} distance={3} />
-    </group>
-  );
-}
+// PlacedBeaconMesh removed - landmark placement now updates VARs directly,
+// and the PlantedObject component in WorldRenderer handles rendering the landmark
+// at the position derived from VAR[1] and VAR[2]. This eliminates duplication.

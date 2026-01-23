@@ -425,10 +425,11 @@ const Index = () => {
 
   const handleActionExecute = useCallback(
     (action: WorldAction) => {
+      // Track action for UI state (to prevent duplicate placements)
       const newActions = [...actions, action];
       setActions(newActions);
 
-      // Sync beacon position to VAR[1] (Landmark X) and VAR[2] (Landmark Y)
+      // Sync landmark position to VAR[1] (Landmark X) and VAR[2] (Landmark Y)
       // Grid mapping: gridCoord = map(VAR, 0, 100, 4, GRID_SIZE-4)
       // Inverse: VAR = ((gridCoord - 4) / (GRID_SIZE - 8)) * 100
       const GRID_SIZE = 64;
@@ -439,7 +440,7 @@ const Index = () => {
       const clampedVar1 = Math.max(0, Math.min(100, newVar1));
       const clampedVar2 = Math.max(0, Math.min(100, newVar2));
       
-      // Update VARs to sync landmark position with beacon
+      // Update VARs to move the landmark (PlantedObject will render at new position)
       setVar(1, clampedVar1);
       setVar(2, clampedVar2);
       
@@ -448,12 +449,11 @@ const Index = () => {
       updatedVars[1] = clampedVar1;
       updatedVars[2] = clampedVar2;
       
+      // Only store vars in URL - actions are tracked in state only
       const varsStr = updatedVars.join(",");
-      const actionsStr = serializeActions(newActions);
       setSearchParams({
         seed: params.seed.toString(),
         vars: varsStr,
-        actions: actionsStr,
       });
     },
     [actions, params, setSearchParams, setVar],
@@ -461,16 +461,22 @@ const Index = () => {
 
   const handleActionReset = useCallback(() => {
     setActions([]);
-    const varsStr = params.vars.join(",");
+    // Reset VARs to default center position
+    setVar(1, 50);
+    setVar(2, 50);
+    const updatedVars = [...params.vars];
+    updatedVars[1] = 50;
+    updatedVars[2] = 50;
+    const varsStr = updatedVars.join(",");
     setSearchParams({
       seed: params.seed.toString(),
       vars: varsStr,
     });
     toast({
-      title: "Beacon Reset",
-      description: "You can now place a new beacon",
+      title: "Landmark Reset",
+      description: "Landmark returned to center position",
     });
-  }, [params, setSearchParams, toast]);
+  }, [params, setSearchParams, setVar, toast]);
 
   const handleDeterminismBreak = useCallback(
     (breakType: "math_random" | "date" | "none") => {
