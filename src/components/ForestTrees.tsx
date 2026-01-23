@@ -15,6 +15,8 @@ import { PALETTE, ROLES, hexToRgb255, VEGETATION_COLORS } from "@/theme/palette"
 const DEV = import.meta.env.DEV;
 let devGeometryCount = 0;
 let devMaterialCount = 0;
+// FIX: Use a flag to ensure only one interval is created globally
+let devIntervalStarted = false;
 
 function trackResourceCreate(type: 'geometry' | 'material') {
   if (!DEV) return;
@@ -28,14 +30,18 @@ function trackResourceDispose(type: 'geometry' | 'material') {
   else devMaterialCount--;
 }
 
-// Log resource stats periodically in dev mode
-if (DEV) {
+// FIX: Guarded interval start - only runs once per module load
+// This prevents multiple intervals if module is hot-reloaded
+function startDevResourceLogging() {
+  if (!DEV || devIntervalStarted) return;
+  devIntervalStarted = true;
   setInterval(() => {
     if (devGeometryCount > 0 || devMaterialCount > 0) {
       console.debug(`[ForestTrees] Resources: geometries=${devGeometryCount}, materials=${devMaterialCount}`);
     }
   }, 10000);
 }
+startDevResourceLogging();
 
 interface ForestTreesProps {
   world: WorldData;
