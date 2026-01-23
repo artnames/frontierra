@@ -9,8 +9,10 @@ import {
   recordDiscovery,
   getDiscoveryPoints,
   canDiscoverLand,
+  getDiscoveryLeaderboard,
   DiscoveryResult
 } from '@/lib/multiplayer/discoveryRegistry';
+import { LeaderboardEntry } from '@/components/DiscoveryLeaderboard';
 
 interface UseDiscoveryGameOptions {
   playerId: string | null;
@@ -28,16 +30,52 @@ export function useDiscoveryGame({
   const [cooldownEndsAt, setCooldownEndsAt] = useState<Date | null>(null);
   const [lastDiscoveryResult, setLastDiscoveryResult] = useState<DiscoveryResult | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [playerRank, setPlayerRank] = useState<LeaderboardEntry | null>(null);
   
   // Track which land we've already checked
   const checkedLandRef = useRef<string | null>(null);
 
-  // Fetch player's discovery points on mount
+  // Fetch player's discovery points and leaderboard on mount
   useEffect(() => {
     if (!playerId || !enabled) return;
     
     getDiscoveryPoints(playerId).then(setDiscoveryPoints);
+    fetchLeaderboard();
   }, [playerId, enabled]);
+
+  // Fetch leaderboard data
+  const fetchLeaderboard = useCallback(async () => {
+    if (!playerId) return;
+    
+    // Fetch enough to find player's rank (top 50)
+    const data = await getDiscoveryLeaderboard(50);
+    
+    // Add ranks to entries
+    const rankedData: LeaderboardEntry[] = data.map((entry, index) => ({
+      player_id: entry.player_id,
+      display_name: entry.display_name,
+      discovery_points: entry.discovery_points,
+      rank: index + 1
+    }));
+    
+    // Top 3 for display
+    setLeaderboard(rankedData.slice(0, 3));
+    
+    // Find current player's rank
+    const playerEntry = rankedData.find(e => e.player_id === playerId);
+    if (playerEntry) {
+      setPlayerRank(playerEntry);
+    } else {
+      // Player not in top 50, show as unranked
+      setPlayerRank({
+        player_id: playerId,
+        display_name: null,
+        discovery_points: 0,
+        rank: 50 + 1 // Show as 51+
+      });
+    }
+  }, [playerId]);
 
   // FIX #5: Reset checkedLandRef when land changes to avoid stale state
   useEffect(() => {
@@ -109,6 +147,8 @@ export function useDiscoveryGame({
         // Mark as discovered for this session
         setCanDiscoverCurrent(false);
         setCooldownEndsAt(result.cooldownEndsAt || null);
+        // Refresh leaderboard after discovery
+        fetchLeaderboard();
       } else if (result.isOnCooldown) {
         setCanDiscoverCurrent(false);
         setCooldownEndsAt(result.cooldownEndsAt || null);
@@ -174,6 +214,8 @@ export function useDiscoveryGame({
     lastDiscoveryResult,
     isProcessing,
     handleDiscovery,
-    clearLastResult
+    clearLastResult,
+    leaderboard,
+    playerRank
   };
 }
