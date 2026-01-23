@@ -99,6 +99,15 @@ const Index = () => {
   
   // Welcome screen for first-time visitors
   const { showWelcome, dismissWelcome } = useWelcomeScreen();
+  
+  // Check if user came from Auth page with Solo Mode selected
+  useEffect(() => {
+    const modeFromAuth = sessionStorage.getItem('frontierra-mode');
+    if (modeFromAuth === 'solo') {
+      sessionStorage.removeItem('frontierra-mode');
+      setWorldMode('solo');
+    }
+  }, []);
 
   // Authentication
   const { user, isAuthenticated, isLoading: isAuthLoading, signOut } = useAuth();
