@@ -431,10 +431,13 @@ const Index = () => {
 
       // Sync landmark position to VAR[1] (Landmark X) and VAR[2] (Landmark Y)
       // Grid mapping: gridCoord = map(VAR, 0, 100, 4, GRID_SIZE-4)
-      // Inverse: VAR = ((gridCoord - 4) / (GRID_SIZE - 8)) * 100
+      // Inverse: VAR = ((gridCoord - 4) / (GRID_SIZE - 4 - 4)) * 100
+      // COORDINATE FIX: gridY from ActionSystem is in Three.js space (Z-flipped)
+      // We need to flip it back to NexArt/P5.js coordinate space for VAR storage
       const GRID_SIZE = 64;
+      const nexartY = GRID_SIZE - 1 - action.gridY; // Flip Y back to NexArt space
       const newVar1 = Math.round(((action.gridX - 4) / (GRID_SIZE - 8)) * 100);
-      const newVar2 = Math.round(((action.gridY - 4) / (GRID_SIZE - 8)) * 100);
+      const newVar2 = Math.round(((nexartY - 4) / (GRID_SIZE - 8)) * 100);
       
       // Clamp to valid range [0, 100]
       const clampedVar1 = Math.max(0, Math.min(100, newVar1));
