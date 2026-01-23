@@ -65,7 +65,7 @@ const retryImport = <T,>(importFn: () => Promise<T>, retries = 2): Promise<T> =>
 
 // Lazy load sidebar components to reduce main-thread work
 const WorldContractPanel = lazy(() => retryImport(() => import("@/components/WorldContractPanel").then(m => ({ default: m.WorldContractPanel }))));
-const ActionSystem = lazy(() => retryImport(() => import("@/components/ActionSystem").then(m => ({ default: m.ActionSystem }))));
+// ActionSystem removed - landmarks are placed via VARs only
 const WorldAMap = lazy(() => retryImport(() => import("@/components/WorldAMap").then(m => ({ default: m.WorldAMap }))));
 const SocialPanel = lazy(() => retryImport(() => import("@/components/social/SocialPanel").then(m => ({ default: m.SocialPanel }))));
 
@@ -84,7 +84,7 @@ const WorldLoader = () => (
 );
 
 type ViewMode = "map" | "firstperson";
-type SidebarTab = "parameters" | "contract" | "actions" | "worldmap" | "social";
+type SidebarTab = "parameters" | "contract" | "worldmap" | "social";
 type WorldMode = "solo" | "multiplayer";
 
 const Index = () => {
@@ -423,63 +423,7 @@ const Index = () => {
     }
   };
 
-  const handleActionExecute = useCallback(
-    (action: WorldAction) => {
-      // Track action for UI state (to prevent duplicate placements)
-      const newActions = [...actions, action];
-      setActions(newActions);
-
-      // Sync landmark position to VAR[1] (Landmark X) and VAR[2] (Landmark Y)
-      // Grid mapping: gridCoord = map(VAR, 0, 100, 4, GRID_SIZE-4)
-      // Inverse: VAR = ((gridCoord - 4) / (GRID_SIZE - 4 - 4)) * 100
-      // COORDINATE FIX: gridY from ActionSystem is in Three.js space (Z-flipped)
-      // We need to flip it back to NexArt/P5.js coordinate space for VAR storage
-      const GRID_SIZE = 64;
-      const nexartY = GRID_SIZE - 1 - action.gridY; // Flip Y back to NexArt space
-      const newVar1 = Math.round(((action.gridX - 4) / (GRID_SIZE - 8)) * 100);
-      const newVar2 = Math.round(((nexartY - 4) / (GRID_SIZE - 8)) * 100);
-      
-      // Clamp to valid range [0, 100]
-      const clampedVar1 = Math.max(0, Math.min(100, newVar1));
-      const clampedVar2 = Math.max(0, Math.min(100, newVar2));
-      
-      // Update VARs to move the landmark (PlantedObject will render at new position)
-      setVar(1, clampedVar1);
-      setVar(2, clampedVar2);
-      
-      // Use updated vars array
-      const updatedVars = [...params.vars];
-      updatedVars[1] = clampedVar1;
-      updatedVars[2] = clampedVar2;
-      
-      // Only store vars in URL - actions are tracked in state only
-      const varsStr = updatedVars.join(",");
-      setSearchParams({
-        seed: params.seed.toString(),
-        vars: varsStr,
-      });
-    },
-    [actions, params, setSearchParams, setVar],
-  );
-
-  const handleActionReset = useCallback(() => {
-    setActions([]);
-    // Reset VARs to default center position
-    setVar(1, 50);
-    setVar(2, 50);
-    const updatedVars = [...params.vars];
-    updatedVars[1] = 50;
-    updatedVars[2] = 50;
-    const varsStr = updatedVars.join(",");
-    setSearchParams({
-      seed: params.seed.toString(),
-      vars: varsStr,
-    });
-    toast({
-      title: "Landmark Reset",
-      description: "Landmark returned to center position",
-    });
-  }, [params, setSearchParams, setVar, toast]);
+  // handleActionExecute and handleActionReset removed - landmarks placed via VARs only
 
   const handleDeterminismBreak = useCallback(
     (breakType: "math_random" | "date" | "none") => {
@@ -922,8 +866,8 @@ const Index = () => {
             {/* Tab Navigation */}
             <div className="flex border-b border-border bg-secondary/30">
               {(worldMode === "multiplayer"
-                ? (["worldmap", "social", "contract", "actions", "parameters"] as SidebarTab[])
-                : (["contract", "actions", "parameters"] as SidebarTab[])
+                ? (["worldmap", "social", "contract", "parameters"] as SidebarTab[])
+                : (["contract", "parameters"] as SidebarTab[])
               ).map((tab) => (
                 <button
                   key={tab}
@@ -965,23 +909,7 @@ const Index = () => {
                   />
                 )}
 
-                {sidebarTab === "actions" && viewMode === "firstperson" && world && (
-                  <ActionSystem
-                    world={world}
-                    playerPosition={playerPosition}
-                    actions={actions}
-                    onActionExecute={handleActionExecute}
-                    onActionReset={handleActionReset}
-                    disabled={isReplaying}
-                  />
-                )}
               </Suspense>
-
-              {sidebarTab === "actions" && viewMode === "map" && (
-                <div className="text-center text-muted-foreground text-sm py-8">
-                  Switch to First Person view to execute actions
-                </div>
-              )}
 
               {sidebarTab === "parameters" && (
                 <div className="space-y-4">
