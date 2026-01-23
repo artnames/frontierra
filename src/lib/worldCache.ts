@@ -21,10 +21,10 @@ interface WorldCacheState {
   maxSize: number;
 }
 
-// Singleton cache instance - reduced from 5 to 3 to limit memory usage
+// Singleton cache instance - minimal size since preloading is disabled
 const cache: WorldCacheState = {
   entries: new Map(),
-  maxSize: 3 // Current + 2 neighbors (reduced from 5)
+  maxSize: 2 // Current world + 1 for transition overlap
 };
 
 // Generate cache key from world coordinates
