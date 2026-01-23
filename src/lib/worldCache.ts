@@ -21,10 +21,10 @@ interface WorldCacheState {
   maxSize: number;
 }
 
-// Singleton cache instance
+// Singleton cache instance - reduced from 5 to 3 to limit memory usage
 const cache: WorldCacheState = {
   entries: new Map(),
-  maxSize: 5 // Current + 4 neighbors
+  maxSize: 3 // Current + 2 neighbors (reduced from 5)
 };
 
 // Generate cache key from world coordinates
@@ -96,7 +96,7 @@ export function cacheWorld(
   });
 }
 
-// Evict the least recently used entry
+// Evict the least recently used entry with proper cleanup
 function evictLRU(): void {
   let oldestKey: CacheKey | null = null;
   let oldestTime = Infinity;
@@ -109,6 +109,14 @@ function evictLRU(): void {
   }
   
   if (oldestKey) {
+    const entry = cache.entries.get(oldestKey);
+    if (entry) {
+      // Null out large terrain arrays to help GC
+      if (entry.world.terrain) {
+        entry.world.terrain.length = 0;
+      }
+      entry.world = null as unknown as WorldData;
+    }
     cache.entries.delete(oldestKey);
   }
 }
@@ -171,7 +179,7 @@ interface PreloadJob {
   status: 'pending' | 'complete' | 'failed';
 }
 
-const MAX_PRELOAD_ENTRIES = 10; // Keep only recent preload jobs
+const MAX_PRELOAD_ENTRIES = 4; // Reduced from 10 to limit memory
 const activePreloads: Map<CacheKey, PreloadJob> = new Map();
 
 // Prune completed/failed preload entries to prevent unbounded growth
@@ -256,7 +264,8 @@ export async function preloadWorld(
   return promise;
 }
 
-// Preload all 4 cardinal neighbors
+// Preload only 2 neighbors (reduced from 4 to limit memory - 1.2GB per world)
+// Prioritize north/south as most common movement directions
 export function preloadNeighbors(
   worldX: number,
   worldY: number,
@@ -264,7 +273,10 @@ export function preloadNeighbors(
 ): void {
   const neighbors = getNeighborCoords(worldX, worldY);
   
-  for (const neighbor of neighbors) {
+  // Only preload first 2 neighbors (north, south) to reduce memory pressure
+  const limitedNeighbors = neighbors.slice(0, 2);
+  
+  for (const neighbor of limitedNeighbors) {
     const params = getNeighborParams(neighbor.worldX, neighbor.worldY);
     if (!params) continue; // Unclaimed/invalid neighbor
     
