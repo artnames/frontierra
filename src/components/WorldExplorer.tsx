@@ -2,9 +2,10 @@
 // CRITICAL: Renders from shared artifact passed down from Index.tsx
 // NO internal generation - uses same artifact as 2D view
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
 import { WorldData, distanceToObject } from "@/lib/worldData";
+import { cleanupRenderer } from "@/lib/rendererCleanup";
 import { WorldAction, ReplayFrame, DeterminismTest } from "@/lib/worldContract";
 import {
   useFirstPersonControls,
@@ -157,6 +158,25 @@ function ReplayCamera({ frame }: { frame: ReplayFrame }) {
     camera.quaternion.setFromEuler(euler);
   });
 
+  return null;
+}
+
+// MEMORY FIX: Component to cleanup renderer caches on world change
+function RendererCleanupOnWorldChange({ worldKey }: { worldKey: string }) {
+  const { gl } = useThree();
+  const prevWorldKeyRef = useRef<string>('');
+  
+  useEffect(() => {
+    // Only cleanup when world actually changes
+    if (prevWorldKeyRef.current !== '' && prevWorldKeyRef.current !== worldKey) {
+      // Delay cleanup to next frame to ensure old resources are unmounted
+      requestAnimationFrame(() => {
+        cleanupRenderer(gl);
+      });
+    }
+    prevWorldKeyRef.current = worldKey;
+  }, [worldKey, gl]);
+  
   return null;
 }
 
@@ -389,6 +409,9 @@ export function WorldExplorer({
             outlineEnabled={postfxOutlineEnabled}
           />
         </group>
+
+        {/* MEMORY FIX: Cleanup renderer caches when world changes */}
+        <RendererCleanupOnWorldChange worldKey={world ? `${world.seed}_${(world.vars || []).join(',')}` : ''} />
 
         <PostFXZelda
           enabled={effectiveSettings.postFxEnabled}

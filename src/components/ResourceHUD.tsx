@@ -153,7 +153,7 @@ function ResourceHUDInner() {
       <div>Render: {stats.threeRenderCalls} calls, {(stats.threeTriangles / 1000).toFixed(0)}k tris</div>
       <div>Tex Cache: {stats.textureCacheSize}/50</div>
       <div>World Cache: {stats.worldCacheSize}/2</div>
-      <div>NexArt Cache: {stats.nexartCacheSize}/10</div>
+      <div>NexArt Cache: {stats.nexartCacheSize}/5</div>
       <div>Audio: {stats.audioElements}</div>
       <div style={{ fontSize: "9px", color: "#888", marginTop: "4px" }}>
         Samples: {history.length}/20
@@ -235,7 +235,7 @@ export function ResourceHUDSimple() {
       )}
       <div>Tex Cache: {stats.textureCacheSize}/50</div>
       <div>World Cache: {stats.worldCacheSize}/2</div>
-      <div>NexArt Cache: {stats.nexartCacheSize}/10</div>
+      <div>NexArt Cache: {stats.nexartCacheSize}/5</div>
       <div>Audio: {stats.audioElements}</div>
     </div>
   );

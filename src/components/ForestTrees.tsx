@@ -284,87 +284,60 @@ export function ForestTrees({
     const keyChanged = prevWorldKeyRef.current !== '' && prevWorldKeyRef.current !== worldKey;
     
     if (keyChanged && groupRef.current) {
-      // Traverse and dispose all geometries and materials from PREVIOUS world
-      groupRef.current.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          // Dispose geometry
-          if (child.geometry) {
-            try {
-              child.geometry.dispose();
-              trackResourceDispose('geometry');
-            } catch (e) {
-              // Suppress Three.js warnings on already-disposed resources
-            }
-          }
-          // Dispose material(s)
-          if (child.material) {
-            const materials = Array.isArray(child.material) ? child.material : [child.material];
-            materials.forEach((mat) => {
-              if (mat && mat !== outlineMaterial) { // Don't dispose singleton outline material
-                try {
-                  // Dispose any textures attached to the material
-                  if (mat.map) mat.map.dispose();
-                  if (mat.bumpMap) mat.bumpMap.dispose();
-                  if (mat.normalMap) mat.normalMap.dispose();
-                  mat.dispose();
-                  trackResourceDispose('material');
-                } catch (e) {
-                  // Suppress Three.js warnings
-                }
-              }
-            });
-          }
-        }
-        // Handle InstancedMesh (FallingLeaves)
-        if (child instanceof THREE.InstancedMesh) {
-          try {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-              const mats = Array.isArray(child.material) ? child.material : [child.material];
-              mats.forEach(m => m?.dispose());
-            }
-          } catch (e) {
-            // Suppress
-          }
-        }
+      // MEMORY FIX: Delay disposal to next frame to ensure React has finished unmounting
+      // This prevents race conditions where disposal runs before meshes are replaced
+      const groupToDispose = groupRef.current;
+      requestAnimationFrame(() => {
+        disposeGroup(groupToDispose);
       });
     }
     
     prevWorldKeyRef.current = worldKey;
     
-    // Cleanup on unmount
+    // Cleanup on unmount - immediate since component is going away
     return () => {
       if (groupRef.current) {
-        groupRef.current.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            if (child.geometry) {
-              try { child.geometry.dispose(); } catch (e) {}
-            }
-            if (child.material) {
-              const materials = Array.isArray(child.material) ? child.material : [child.material];
-              materials.forEach((mat) => {
-                if (mat && mat !== outlineMaterial) {
-                  try {
-                    if (mat.map) mat.map.dispose();
-                    mat.dispose();
-                  } catch (e) {}
-                }
-              });
-            }
-          }
-          if (child instanceof THREE.InstancedMesh) {
-            try {
-              if (child.geometry) child.geometry.dispose();
-              if (child.material) {
-                const mats = Array.isArray(child.material) ? child.material : [child.material];
-                mats.forEach(m => m?.dispose());
-              }
-            } catch (e) {}
-          }
-        });
+        disposeGroup(groupRef.current);
       }
     };
   }, [worldKey]); // Stable string key dependency
+  
+  // Helper function to dispose all resources in a group
+  function disposeGroup(group: THREE.Group) {
+    group.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        if (child.geometry) {
+          try { 
+            child.geometry.dispose(); 
+            trackResourceDispose('geometry');
+          } catch (e) {}
+        }
+        if (child.material) {
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach((mat) => {
+            if (mat && mat !== outlineMaterial) {
+              try {
+                if (mat.map) mat.map.dispose();
+                if (mat.bumpMap) mat.bumpMap.dispose();
+                if (mat.normalMap) mat.normalMap.dispose();
+                mat.dispose();
+                trackResourceDispose('material');
+              } catch (e) {}
+            }
+          });
+        }
+      }
+      if (child instanceof THREE.InstancedMesh) {
+        try {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach(m => m?.dispose());
+          }
+        } catch (e) {}
+      }
+    });
+  }
 
   const vegetation = useMemo(() => {
     const items: VegetationItem[] = [];

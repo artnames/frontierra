@@ -259,7 +259,8 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
 }
 
 // Global cache with LRU eviction to prevent unbounded memory growth
-const MAX_NEXART_CACHE_SIZE = 10;
+// MEMORY FIX: Reduced from 10 to 5 to prevent 500MB-1GB accumulation
+const MAX_NEXART_CACHE_SIZE = 5;
 
 // Helper to null out terrain arrays to assist GC
 function nullifyWorldData(world: WorldData | null | undefined): void {
