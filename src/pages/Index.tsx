@@ -51,6 +51,7 @@ import { useDiscoveryGame } from "@/hooks/useDiscoveryGame";
 import { useToast } from "@/hooks/use-toast";
 import { useSearchParams } from "react-router-dom";
 import { GeneratorProofOverlay, BuildStamp } from "@/components/GeneratorProofOverlay";
+import { EditorResourceStats } from "@/components/EditorResourceStats";
 
 // Helper to retry dynamic imports on failure (handles stale chunk cache)
 const retryImport = <T,>(importFn: () => Promise<T>, retries = 2): Promise<T> =>
@@ -485,6 +486,9 @@ const Index = () => {
     <div
       className={`h-screen bg-background flex flex-col overflow-hidden touch-none ${isInvalid ? "border-4 border-destructive" : ""}`}
     >
+      {/* DEV: Resource monitor for memory leak detection */}
+      {showSidebar && <EditorResourceStats />}
+      
       {/* Generator Proof Overlay - DEV only or ?debug=1 */}
       {showDebugOverlay && canonicalArtifact && (
         <GeneratorProofOverlay
