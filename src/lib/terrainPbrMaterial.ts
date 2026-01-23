@@ -82,11 +82,19 @@ export function createTerrainPbrDetailMaterial(opts: TerrainPbrDetailOptions): T
 varying vec3 vWorldPos;
 varying vec3 vWorldNormal;`
       )
+      // IMPORTANT: do NOT rely on Three's internal `worldPosition` symbol name.
+      // Compute world pos explicitly from `transformed` so shader stays compatible
+      // across Three.js chunk changes and avoids failed program compilation (GPU leaks).
       .replace(
-        "#include <worldpos_vertex>",
-        `#include <worldpos_vertex>
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
 
-vWorldPos = worldPosition.xyz;`
+vec4 wp = vec4( transformed, 1.0 );
+#ifdef USE_INSTANCING
+  wp = instanceMatrix * wp;
+#endif
+wp = modelMatrix * wp;
+vWorldPos = wp.xyz;`
       )
       .replace(
         "#include <defaultnormal_vertex>",
