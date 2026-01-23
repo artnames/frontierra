@@ -312,27 +312,32 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
     const shallowRgb = hexToRgb01(PALETTE.deep); // #232D26 - dark forest-blue
     const foamRgb = hexToRgb01(PALETTE.sage);    // #6B746B - muted foam
     
-    const deepColor = new THREE.Color(deepRgb.r, deepRgb.g, deepRgb.b);
+    // Deeper, darker riverbed colors
+    const deepColor = new THREE.Color(
+      deepRgb.r * 0.7,  // Even darker
+      deepRgb.g * 0.8,
+      deepRgb.b * 0.9   // Keep blue tint
+    );
     const shallowColor = new THREE.Color(
-      shallowRgb.r * 0.7 + deepRgb.r * 0.3,  // Blend toward deep blue
-      shallowRgb.g * 0.5 + 0.15,              // Add slight blue tint
-      shallowRgb.b * 0.5 + 0.25               // More blue
+      shallowRgb.r * 0.4 + deepRgb.r * 0.4,  // More blend toward deep
+      shallowRgb.g * 0.3 + 0.08,              // Darker green
+      shallowRgb.b * 0.3 + 0.18               // Keep blue
     );
     const foamColor = new THREE.Color(foamRgb.r, foamRgb.g, foamRgb.b);
     
     if (DEV) {
-      console.debug('[EnhancedWaterPlane] Water colors (darker, more opaque):', {
+      console.debug('[EnhancedWaterPlane] Water colors (darker riverbed):', {
         deep: PALETTE.abyss,
-        shallow: 'blend',
+        shallow: 'blend-darker',
         foam: PALETTE.sage,
-        opacity: 0.72
+        opacity: 0.78
       });
     }
     
     const m = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uOpacity: { value: 0.72 }, // 72% opacity - more solid water
+        uOpacity: { value: 0.78 }, // 78% opacity - darker, more solid water
         uDeep: { value: deepColor },
         uShallow: { value: shallowColor },
         uFoam: { value: foamColor },
@@ -417,7 +422,7 @@ export function EnhancedWaterPlane({ world, worldX = 0, worldY = 0, animated = t
           float w = flowPattern + ripples * 0.2;
 
           // Blend between deep and shallow based on flow pattern - favor deep color
-          vec3 col = mix(uDeep, uShallow, w * 0.35 + 0.1);
+          vec3 col = mix(uDeep, uShallow, w * 0.25 + 0.05); // Favor deeper color
 
           // Edge handling: smoother fade into ground, maintain high opacity
           float edgeFade = smoothstep(0.0, 0.5, vEdge);
