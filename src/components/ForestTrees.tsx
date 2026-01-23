@@ -275,41 +275,83 @@ export function ForestTrees({
 
   // BUG-003: CRITICAL - Dispose ALL geometries and materials when world changes or unmounts
   // This prevents the 200-400MB leak per world visit
+  // FIX: Use stable string key instead of array reference which changes every render
+  const worldKey = world ? `${world.seed}_${(world.vars || []).join(',')}` : '';
+  const prevWorldKeyRef = useRef<string>('');
+  
   useEffect(() => {
+    // Only cleanup when worldKey actually changes (not on every render)
+    const keyChanged = prevWorldKeyRef.current !== '' && prevWorldKeyRef.current !== worldKey;
+    
+    if (keyChanged && groupRef.current) {
+      // Traverse and dispose all geometries and materials from PREVIOUS world
+      groupRef.current.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          // Dispose geometry
+          if (child.geometry) {
+            try {
+              child.geometry.dispose();
+              trackResourceDispose('geometry');
+            } catch (e) {
+              // Suppress Three.js warnings on already-disposed resources
+            }
+          }
+          // Dispose material(s)
+          if (child.material) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach((mat) => {
+              if (mat && mat !== outlineMaterial) { // Don't dispose singleton outline material
+                try {
+                  // Dispose any textures attached to the material
+                  if (mat.map) mat.map.dispose();
+                  if (mat.bumpMap) mat.bumpMap.dispose();
+                  if (mat.normalMap) mat.normalMap.dispose();
+                  mat.dispose();
+                  trackResourceDispose('material');
+                } catch (e) {
+                  // Suppress Three.js warnings
+                }
+              }
+            });
+          }
+        }
+        // Handle InstancedMesh (FallingLeaves)
+        if (child instanceof THREE.InstancedMesh) {
+          try {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              const mats = Array.isArray(child.material) ? child.material : [child.material];
+              mats.forEach(m => m?.dispose());
+            }
+          } catch (e) {
+            // Suppress
+          }
+        }
+      });
+    }
+    
+    prevWorldKeyRef.current = worldKey;
+    
+    // Cleanup on unmount
     return () => {
       if (groupRef.current) {
-        // Traverse and dispose all geometries and materials
         groupRef.current.traverse((child) => {
           if (child instanceof THREE.Mesh) {
-            // Dispose geometry
             if (child.geometry) {
-              try {
-                child.geometry.dispose();
-                trackResourceDispose('geometry');
-              } catch (e) {
-                // Suppress Three.js warnings on already-disposed resources
-              }
+              try { child.geometry.dispose(); } catch (e) {}
             }
-            // Dispose material(s)
             if (child.material) {
               const materials = Array.isArray(child.material) ? child.material : [child.material];
               materials.forEach((mat) => {
-                if (mat && mat !== outlineMaterial) { // Don't dispose singleton outline material
+                if (mat && mat !== outlineMaterial) {
                   try {
-                    // Dispose any textures attached to the material
                     if (mat.map) mat.map.dispose();
-                    if (mat.bumpMap) mat.bumpMap.dispose();
-                    if (mat.normalMap) mat.normalMap.dispose();
                     mat.dispose();
-                    trackResourceDispose('material');
-                  } catch (e) {
-                    // Suppress Three.js warnings
-                  }
+                  } catch (e) {}
                 }
               });
             }
           }
-          // Handle InstancedMesh (FallingLeaves)
           if (child instanceof THREE.InstancedMesh) {
             try {
               if (child.geometry) child.geometry.dispose();
@@ -317,19 +359,12 @@ export function ForestTrees({
                 const mats = Array.isArray(child.material) ? child.material : [child.material];
                 mats.forEach(m => m?.dispose());
               }
-            } catch (e) {
-              // Suppress
-            }
+            } catch (e) {}
           }
         });
-        
-        // Clear children to help GC
-        while (groupRef.current.children.length > 0) {
-          groupRef.current.remove(groupRef.current.children[0]);
-        }
       }
     };
-  }, [world?.seed, world?.vars]); // Re-run cleanup when world changes
+  }, [worldKey]); // Stable string key dependency
 
   const vegetation = useMemo(() => {
     const items: VegetationItem[] = [];
