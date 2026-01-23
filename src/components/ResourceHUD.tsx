@@ -5,6 +5,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useThree } from "@react-three/fiber";
 import { getTextureCacheSize } from "@/lib/materialRegistry";
+import { getCacheStats } from "@/lib/worldCache";
 
 interface ResourceStats {
   jsHeapUsed: number | null;
@@ -15,6 +16,8 @@ interface ResourceStats {
   threeTriangles: number;
   textureCacheSize: number;
   audioElements: number;
+  worldCacheSize: number;
+  nexartCacheSize: number;
   timestamp: number;
 }
 
@@ -22,6 +25,13 @@ interface ResourceStats {
 function countAudioElements(): number {
   if (typeof document === "undefined") return 0;
   return document.querySelectorAll("audio").length;
+}
+
+// Helper to count NexArt cache entries
+function getNexartCacheSize(): number {
+  if (typeof window === "undefined") return 0;
+  const cache = (window as any).__nexartCache;
+  return cache ? Object.keys(cache).length : 0;
 }
 
 // Inner component that has access to Three.js context
@@ -44,6 +54,8 @@ function ResourceHUDInner() {
         threeTriangles: gl.info.render.triangles,
         textureCacheSize: getTextureCacheSize(),
         audioElements: countAudioElements(),
+        worldCacheSize: getCacheStats().size,
+        nexartCacheSize: getNexartCacheSize(),
         timestamp: Date.now(),
       };
 
@@ -140,6 +152,8 @@ function ResourceHUDInner() {
       </div>
       <div>Render: {stats.threeRenderCalls} calls, {(stats.threeTriangles / 1000).toFixed(0)}k tris</div>
       <div>Tex Cache: {stats.textureCacheSize}/50</div>
+      <div>World Cache: {stats.worldCacheSize}/5</div>
+      <div>NexArt Cache: {stats.nexartCacheSize}/10</div>
       <div>Audio: {stats.audioElements}</div>
       <div style={{ fontSize: "9px", color: "#888", marginTop: "4px" }}>
         Samples: {history.length}/20
@@ -179,6 +193,8 @@ export function ResourceHUDSimple() {
         jsHeapTotal: perf ? perf.totalJSHeapSize / (1024 * 1024) : null,
         textureCacheSize: getTextureCacheSize(),
         audioElements: countAudioElements(),
+        worldCacheSize: getCacheStats().size,
+        nexartCacheSize: getNexartCacheSize(),
         timestamp: Date.now(),
       });
     };
@@ -218,6 +234,8 @@ export function ResourceHUDSimple() {
         <div>Heap: {stats.jsHeapUsed.toFixed(0)}MB / {stats.jsHeapTotal?.toFixed(0)}MB</div>
       )}
       <div>Tex Cache: {stats.textureCacheSize}/50</div>
+      <div>World Cache: {stats.worldCacheSize}/5</div>
+      <div>NexArt Cache: {stats.nexartCacheSize}/10</div>
       <div>Audio: {stats.audioElements}</div>
     </div>
   );
