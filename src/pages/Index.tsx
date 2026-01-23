@@ -889,6 +889,9 @@ const Index = () => {
                 lastResult={discoveryGame.lastDiscoveryResult}
                 onResultDismiss={discoveryGame.clearLastResult}
                 isOwnLand={!isOtherPlayerLand}
+                leaderboard={discoveryGame.leaderboard}
+                playerRank={discoveryGame.playerRank}
+                playerId={user?.id ?? null}
               />
             </div>
           )}
