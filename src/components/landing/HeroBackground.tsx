@@ -1,11 +1,22 @@
 // Cinematic Hero Background - CSS-based atmospheric effects
-// Layered gradients, topographic pattern, subtle vignette
+// Layered gradients, topographic pattern, subtle vignette, background image
 
 import { useEffect, useRef } from 'react';
+import landingBg from '@/assets/landing-bg.jpeg';
 
 export function HeroBackground() {
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden">
+      {/* Background image with low opacity */}
+      <div 
+        className="absolute inset-0 opacity-[0.15]"
+        style={{
+          backgroundImage: `url(${landingBg})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      />
+      
       {/* Deep navy base with layered radial gradients */}
       <div 
         className="absolute inset-0"
@@ -14,7 +25,7 @@ export function HeroBackground() {
             radial-gradient(ellipse 80% 50% at 50% 0%, hsl(180 60% 25% / 0.25) 0%, transparent 50%),
             radial-gradient(ellipse 60% 40% at 80% 20%, hsl(280 50% 30% / 0.15) 0%, transparent 45%),
             radial-gradient(ellipse 50% 35% at 20% 30%, hsl(35 80% 45% / 0.12) 0%, transparent 40%),
-            hsl(220 25% 8%)
+            hsl(220 25% 8% / 0.85)
           `,
         }}
       />
@@ -59,7 +70,7 @@ export function HeroBackground() {
       <div 
         className="absolute inset-0"
         style={{
-          background: 'radial-gradient(ellipse at center, transparent 30%, hsl(220 25% 6% / 0.8) 100%)',
+          background: 'radial-gradient(ellipse at center, transparent 30%, hsl(220 25% 6% / 0.9) 100%)',
         }}
       />
       
