@@ -1,10 +1,9 @@
-// World Preloader Hook - Deterministic Neighbor Preloading
-// IMPORTANT: This hook ONLY preloads NEIGHBORS.
-// It never generates the current/active world - Index.tsx owns that via generateCanonicalWorld.
+// World Preloader Hook - On-Demand Loading (No Background Preloading)
+// IMPORTANT: Background preloading disabled to reduce memory usage.
+// Neighbors are loaded on-demand during edge transitions only.
 
 import { useCallback, useEffect, useRef } from 'react';
 import {
-  preloadNeighbors,
   getCachedWorld,
   ensureWorldReady,
   clearWorldCache,
@@ -80,8 +79,9 @@ export function useWorldPreloader({
     await Promise.all(neighbors.map(n => fetchNeighborParams(n.x, n.y)));
   }, [currentWorldX, currentWorldY, fetchNeighborParams]);
   
-  // Main preload effect - ONLY preloads NEIGHBORS, never generates current world
-  // Index.tsx owns generation of the active/current world via generateCanonicalWorld
+  // DISABLED: Background neighbor preloading removed to reduce memory pressure
+  // Worlds are now loaded on-demand during edge transitions only
+  // This saves ~1.2GB per preloaded neighbor (was preloading 2-4 neighbors)
   useEffect(() => {
     if (!enabled) return;
     
@@ -89,23 +89,13 @@ export function useWorldPreloader({
     if (preloadKey === lastPreloadKey.current) return;
     lastPreloadKey.current = preloadKey;
     
-    // Clear stale neighbor params cache
+    // Clear stale neighbor params cache on land change
     neighborParamsCache.current.clear();
     
-    const runPreload = async () => {
-      // IMPORTANT: Do NOT generate current world here!
-      // Index.tsx is the single source of truth for active world generation.
-      // This hook ONLY preloads neighbors to enable seamless edge transitions.
-      
-      // Pre-fetch neighbor parameters from registry
-      await prefetchNeighborParams();
-      
-      // Start preloading NEIGHBORS ONLY (fire-and-forget)
-      preloadNeighbors(currentWorldX, currentWorldY, getNeighborParamsSync);
-    };
-    
-    runPreload();
-  }, [currentWorldX, currentWorldY, currentSeed, currentVars, enabled, prefetchNeighborParams, getNeighborParamsSync]);
+    // Pre-fetch neighbor parameters only (metadata, not world data)
+    // This allows quick lookup during edge transitions
+    prefetchNeighborParams();
+  }, [currentWorldX, currentWorldY, enabled, prefetchNeighborParams]);
   
   // Get a cached neighbor world instantly (for seamless transitions)
   const getNeighborWorld = useCallback(async (
