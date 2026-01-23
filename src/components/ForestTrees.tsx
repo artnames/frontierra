@@ -834,19 +834,26 @@ function getWindGust(time: number): { strength: number; directionX: number; dire
 }
 
 // Falling leaves particle effect for autumn trees
+// FIX: Reuse Object3D and Color instances to prevent per-frame allocations
 function FallingLeaves({ treeX, treeY, treeZ, scale, colorVariant }: { 
   treeX: number; treeY: number; treeZ: number; scale: number; colorVariant: number 
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const leafCount = 8; // Leaves per tree
   
-  // Autumn colors for leaves
-  const autumnColors = [
+  // FIX: Create dummy Object3D ONCE via useRef (not per frame!)
+  const dummyRef = useRef<THREE.Object3D | null>(null);
+  if (!dummyRef.current) {
+    dummyRef.current = new THREE.Object3D();
+  }
+  
+  // FIX: Create autumn colors ONCE via useMemo (not per frame!)
+  const autumnColors = useMemo(() => [
     new THREE.Color('#FE9402'), // amber
     new THREE.Color('#FD5602'), // flame
     new THREE.Color('#D17A74'), // coral
     new THREE.Color('#AAC64B'), // lime-gold
-  ];
+  ], []);
   
   // Generate deterministic leaf data based on position
   const leafData = useMemo(() => {
@@ -883,13 +890,13 @@ function FallingLeaves({ treeX, treeY, treeZ, scale, colorVariant }: {
       });
     }
     return leaves;
-  }, [treeX, treeZ, colorVariant]);
+  }, [treeX, treeZ, colorVariant, autumnColors.length]);
 
   useFrame(({ clock }) => {
-    if (!meshRef.current) return;
+    if (!meshRef.current || !dummyRef.current) return;
     
     const time = clock.getElapsedTime();
-    const dummy = new THREE.Object3D();
+    const dummy = dummyRef.current; // FIX: Reuse existing Object3D
     
     // Get current wind gust state
     const gust = getWindGust(time);
