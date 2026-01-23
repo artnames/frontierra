@@ -245,6 +245,9 @@ export function ForestTrees({
   shadowsEnabled = true,
   outlineEnabled = false,
 }: ForestTreesProps) {
+  // BUG-003: Track the group ref for cleanup
+  const groupRef = useRef<THREE.Group>(null);
+  
   // When material richness is enabled...
   const { textures, isReady } = useWorldTextures({
     worldX,
@@ -269,6 +272,64 @@ export function ForestTrees({
       // Cleanup on unmount - textures are managed by useWorldTextures
     };
   }, [textures]);
+
+  // BUG-003: CRITICAL - Dispose ALL geometries and materials when world changes or unmounts
+  // This prevents the 200-400MB leak per world visit
+  useEffect(() => {
+    return () => {
+      if (groupRef.current) {
+        // Traverse and dispose all geometries and materials
+        groupRef.current.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            // Dispose geometry
+            if (child.geometry) {
+              try {
+                child.geometry.dispose();
+                trackResourceDispose('geometry');
+              } catch (e) {
+                // Suppress Three.js warnings on already-disposed resources
+              }
+            }
+            // Dispose material(s)
+            if (child.material) {
+              const materials = Array.isArray(child.material) ? child.material : [child.material];
+              materials.forEach((mat) => {
+                if (mat && mat !== outlineMaterial) { // Don't dispose singleton outline material
+                  try {
+                    // Dispose any textures attached to the material
+                    if (mat.map) mat.map.dispose();
+                    if (mat.bumpMap) mat.bumpMap.dispose();
+                    if (mat.normalMap) mat.normalMap.dispose();
+                    mat.dispose();
+                    trackResourceDispose('material');
+                  } catch (e) {
+                    // Suppress Three.js warnings
+                  }
+                }
+              });
+            }
+          }
+          // Handle InstancedMesh (FallingLeaves)
+          if (child instanceof THREE.InstancedMesh) {
+            try {
+              if (child.geometry) child.geometry.dispose();
+              if (child.material) {
+                const mats = Array.isArray(child.material) ? child.material : [child.material];
+                mats.forEach(m => m?.dispose());
+              }
+            } catch (e) {
+              // Suppress
+            }
+          }
+        });
+        
+        // Clear children to help GC
+        while (groupRef.current.children.length > 0) {
+          groupRef.current.remove(groupRef.current.children[0]);
+        }
+      }
+    };
+  }, [world?.seed, world?.vars]); // Re-run cleanup when world changes
 
   const vegetation = useMemo(() => {
     const items: VegetationItem[] = [];
@@ -516,7 +577,7 @@ export function ForestTrees({
       <VegetationRichnessContext.Provider value={useRichMaterials}>
         <VegetationTexturesContext.Provider value={useRichMaterials && isReady ? textures : null}>
           <VegetationShadowContext.Provider value={shadowsEnabled}>
-            <group>
+            <group ref={groupRef}>
               {vegetation.map((item, i) => (
                 <Vegetation key={i} {...item} seed={world.seed} />
               ))}

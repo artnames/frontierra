@@ -261,6 +261,20 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
 // Global cache with LRU eviction to prevent unbounded memory growth
 const MAX_NEXART_CACHE_SIZE = 10;
 
+// Helper to null out terrain arrays to assist GC
+function nullifyWorldData(world: WorldData | null | undefined): void {
+  if (!world) return;
+  // Null out terrain arrays to release memory
+  if (world.terrain) {
+    for (let i = 0; i < world.terrain.length; i++) {
+      if (world.terrain[i]) {
+        world.terrain[i].length = 0; // Clear inner array
+      }
+    }
+    world.terrain.length = 0; // Clear outer array
+  }
+}
+
 export function cacheWorldData(world: WorldData): void {
   const cacheKey = `nexart_${world.seed}_${world.vars.join(",")}`;
   if (!(window as any).__nexartCache) {
@@ -279,10 +293,13 @@ export function cacheWorldData(world: WorldData): void {
     return;
   }
   
-  // Evict oldest entries if at capacity
+  // Evict oldest entries if at capacity - with terrain array cleanup
   while (order.length >= MAX_NEXART_CACHE_SIZE) {
     const oldest = order.shift();
     if (oldest) {
+      // BUG-003: Null out terrain arrays before deleting to assist GC
+      const oldWorld = cache[oldest];
+      nullifyWorldData(oldWorld);
       delete cache[oldest];
     }
   }
@@ -294,6 +311,11 @@ export function cacheWorldData(world: WorldData): void {
 // Clear the global NexArt cache (for cleanup)
 export function clearNexartCache(): void {
   if ((window as any).__nexartCache) {
+    const cache = (window as any).__nexartCache;
+    // BUG-003: Null out all terrain arrays before clearing
+    for (const key of Object.keys(cache)) {
+      nullifyWorldData(cache[key]);
+    }
     (window as any).__nexartCache = {};
     (window as any).__nexartCacheOrder = [];
   }
