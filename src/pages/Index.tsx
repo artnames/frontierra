@@ -52,15 +52,26 @@ import { useToast } from "@/hooks/use-toast";
 import { useSearchParams } from "react-router-dom";
 import { GeneratorProofOverlay, BuildStamp } from "@/components/GeneratorProofOverlay";
 
+// Helper to retry dynamic imports on failure (handles stale chunk cache)
+const retryImport = <T,>(importFn: () => Promise<T>, retries = 2): Promise<T> =>
+  importFn().catch((err) => {
+    if (retries > 0) {
+      // Clear module cache and retry after brief delay
+      return new Promise<T>((resolve) => setTimeout(resolve, 100))
+        .then(() => retryImport(importFn, retries - 1));
+    }
+    throw err;
+  });
+
 // Lazy load sidebar components to reduce main-thread work
-const WorldContractPanel = lazy(() => import("@/components/WorldContractPanel").then(m => ({ default: m.WorldContractPanel })));
-const ActionSystem = lazy(() => import("@/components/ActionSystem").then(m => ({ default: m.ActionSystem })));
-const WorldAMap = lazy(() => import("@/components/WorldAMap").then(m => ({ default: m.WorldAMap })));
-const SocialPanel = lazy(() => import("@/components/social/SocialPanel").then(m => ({ default: m.SocialPanel })));
+const WorldContractPanel = lazy(() => retryImport(() => import("@/components/WorldContractPanel").then(m => ({ default: m.WorldContractPanel }))));
+const ActionSystem = lazy(() => retryImport(() => import("@/components/ActionSystem").then(m => ({ default: m.ActionSystem }))));
+const WorldAMap = lazy(() => retryImport(() => import("@/components/WorldAMap").then(m => ({ default: m.WorldAMap }))));
+const SocialPanel = lazy(() => retryImport(() => import("@/components/social/SocialPanel").then(m => ({ default: m.SocialPanel }))));
 
 // Lazy load heavy 3D components to reduce TTI
-const WorldExplorer = lazy(() => import("@/components/WorldExplorer").then(m => ({ default: m.WorldExplorer })));
-const WorldMap2D = lazy(() => import("@/components/WorldMap2D").then(m => ({ default: m.WorldMap2D })));
+const WorldExplorer = lazy(() => retryImport(() => import("@/components/WorldExplorer").then(m => ({ default: m.WorldExplorer }))));
+const WorldMap2D = lazy(() => retryImport(() => import("@/components/WorldMap2D").then(m => ({ default: m.WorldMap2D }))));
 
 // Lightweight loading placeholder for 3D view
 const WorldLoader = () => (
