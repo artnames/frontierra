@@ -1,5 +1,6 @@
 // Hook for managing deterministic world textures
 // Generates and caches procedural textures using @nexart/ui-renderer
+// FIX: Proper disposal of THREE.CanvasTexture instances to prevent GPU memory leaks
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -48,7 +49,7 @@ function isCanvasNonEmpty(canvas: HTMLCanvasElement): boolean {
     // If alpha is 0 it's almost certainly an unrendered canvas.
     return d[3] !== 0;
   } catch {
-    // If sampling fails (tainted canvas shouldn’t happen here), assume ok.
+    // If sampling fails (tainted canvas shouldn't happen here), assume ok.
     return true;
   }
 }
@@ -68,6 +69,17 @@ function canvasToThreeTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   return texture;
 }
 
+// FIX: Dispose old THREE.CanvasTexture instances to prevent GPU memory leak
+function disposeTextureMap(map: Map<MaterialKind, THREE.CanvasTexture>) {
+  map.forEach((texture) => {
+    try {
+      texture.dispose();
+    } catch {
+      // Ignore disposal errors
+    }
+  });
+}
+
 export function useWorldTextures({
   worldX,
   worldY,
@@ -81,6 +93,9 @@ export function useWorldTextures({
 
   // Keep track of previous textures to avoid flickering during reload
   const prevTexturesRef = useRef<Map<MaterialKind, THREE.CanvasTexture>>(new Map());
+  
+  // FIX: Track the currently active textures for disposal
+  const activeTexturesRef = useRef<Map<MaterialKind, THREE.CanvasTexture>>(new Map());
 
   // Stable key for dependency tracking
   const textureKey = useMemo(() => {
@@ -117,11 +132,20 @@ export function useWorldTextures({
         });
 
         if (!hasAllRequiredTextures(threeTextures)) {
-          // Don’t swap into a partial set (causes "good for a moment then black" artifacts)
+          // Don't swap into a partial set (causes "good for a moment then black" artifacts)
+          // FIX: Dispose failed textures
+          disposeTextureMap(threeTextures);
           throw new Error('Incomplete texture set generated');
         }
 
-        // Store in ref before updating state (stable during future reloads)
+        // FIX: Dispose OLD textures BEFORE updating refs/state
+        // Only dispose if we have valid new textures to replace them
+        if (activeTexturesRef.current.size > 0) {
+          disposeTextureMap(activeTexturesRef.current);
+        }
+        
+        // Store new textures as active
+        activeTexturesRef.current = threeTextures;
         prevTexturesRef.current = threeTextures;
 
         setTextureMap(threeTextures);
@@ -139,7 +163,17 @@ export function useWorldTextures({
     return () => {
       cancelled = true;
     };
-  }, [textureKey, enabled]);
+  }, [textureKey, enabled, worldX, worldY, seed, vars]);
+
+  // FIX: Cleanup on unmount - dispose all textures
+  useEffect(() => {
+    return () => {
+      if (activeTexturesRef.current.size > 0) {
+        disposeTextureMap(activeTexturesRef.current);
+        activeTexturesRef.current = new Map();
+      }
+    };
+  }, []);
 
   // Prefer current textures; fall back to previous stable textures if we have them.
   const stableTextures = textureMap.size > 0 ? textureMap : prevTexturesRef.current;
@@ -159,4 +193,3 @@ export function useTerrainTexture(
 ): THREE.CanvasTexture | null {
   return textures.get(kind) ?? null;
 }
-

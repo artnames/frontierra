@@ -273,6 +273,8 @@ async function extractPixelData(blob: Blob, size: number): Promise<Uint8ClampedA
       
       if (!ctx) {
         URL.revokeObjectURL(url);
+        // FIX: Cleanup image reference
+        img.src = '';
         reject(new Error('Failed to create canvas context'));
         return;
       }
@@ -281,12 +283,22 @@ async function extractPixelData(blob: Blob, size: number): Promise<Uint8ClampedA
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(img, 0, 0, size, size);
       const imageData = ctx.getImageData(0, 0, size, size);
+      
+      // FIX: Cleanup resources to prevent memory leak
       URL.revokeObjectURL(url);
+      // Zero out canvas to release GPU memory
+      canvas.width = 0;
+      canvas.height = 0;
+      // Clear image src to release memory
+      img.src = '';
+      
       resolve(imageData.data);
     };
     
     img.onerror = () => {
       URL.revokeObjectURL(url);
+      // FIX: Cleanup image reference
+      img.src = '';
       reject(new Error('Failed to load NexArt image'));
     };
     

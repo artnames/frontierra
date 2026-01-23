@@ -768,6 +768,13 @@ export async function generateMaterialTexture(
     (ctx.seed * 1000 + ctx.worldX * 100 + ctx.worldY) % 100000
   );
 
+  // FIX: Helper to cleanup render canvas after use
+  const cleanupRenderCanvas = () => {
+    // Zero out canvas dimensions to release GPU memory
+    renderCanvas.width = 0;
+    renderCanvas.height = 0;
+  };
+
   try {
     const system = createSystem({
       type: 'code',
@@ -792,6 +799,9 @@ export async function generateMaterialTexture(
 
     renderer.destroy();
     
+    // FIX: Cleanup temporary render canvas to release memory
+    cleanupRenderCanvas();
+    
     const textureSet: TextureSet = {
       diffuse: canvas,
       kind,
@@ -804,6 +814,9 @@ export async function generateMaterialTexture(
     return textureSet;
   } catch (error) {
     console.error(`[uiTextures] Failed to generate ${kind} texture:`, error);
+    
+    // FIX: Cleanup render canvas even on error
+    cleanupRenderCanvas();
     
     // Return fallback solid color texture
     const ctx2d = canvas.getContext('2d');

@@ -252,14 +252,37 @@ export const AO_INTENSITY: Record<MaterialKind, number> = {
 
 const textureCache = new Map<string, TextureSet>();
 
+// FIX: DEV-only cache monitoring
+const DEV = import.meta.env.DEV;
+let devCacheMonitorStarted = false;
+
+function startCacheMonitoring() {
+  if (!DEV || devCacheMonitorStarted) return;
+  devCacheMonitorStarted = true;
+  setInterval(() => {
+    console.debug(`[MaterialRegistry] Texture cache size: ${textureCache.size}`);
+  }, 10000);
+}
+if (DEV) startCacheMonitoring();
+
+// FIX: Export cache size for DEV monitoring
+export function getTextureCacheSize(): number {
+  return textureCache.size;
+}
+
 export function getCachedTexture(hash: string): TextureSet | undefined {
   return textureCache.get(hash);
 }
 
 export function setCachedTexture(hash: string, texture: TextureSet): void {
-  if (textureCache.size > 50) {
-    const firstKey = textureCache.keys().next().value;
-    if (firstKey) textureCache.delete(firstKey);
+  // FIX: Limit cache size to prevent unbounded growth
+  const MAX_CACHE_SIZE = 50;
+  if (textureCache.size >= MAX_CACHE_SIZE) {
+    // Remove oldest entries (FIFO)
+    const keysToRemove = Array.from(textureCache.keys()).slice(0, textureCache.size - MAX_CACHE_SIZE + 1);
+    for (const key of keysToRemove) {
+      textureCache.delete(key);
+    }
   }
   textureCache.set(hash, texture);
 }
