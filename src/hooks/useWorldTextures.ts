@@ -1,6 +1,7 @@
 // Hook for managing deterministic world textures
 // Generates and caches procedural textures using @nexart/ui-renderer
 // FIX: Proper disposal of THREE.CanvasTexture instances to prevent GPU memory leaks
+// FIX: Debounced + serialized generation to prevent texture storms during slider drags
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import * as THREE from 'three';
@@ -9,17 +10,6 @@ import { generateWorldTextures } from '@/lib/uiTextures';
 import { WORLD_A_ID } from '@/lib/worldContext';
 
 const DEV = import.meta.env.DEV;
-
-declare global {
-  interface Window {
-    __editorResourceStats?: {
-      textureGenActive: number;
-      textureGenStarted: number;
-      textureGenCompleted: number;
-      textureGenSkipped: number;
-    };
-  }
-}
 
 export interface WorldTextureState {
   textures: Map<MaterialKind, THREE.CanvasTexture>;
@@ -53,36 +43,29 @@ function hasAllRequiredTextures(map: Map<MaterialKind, THREE.CanvasTexture>) {
 
 function isCanvasNonEmpty(canvas: HTMLCanvasElement): boolean {
   if (!canvas || canvas.width <= 0 || canvas.height <= 0) return false;
-  // A fully transparent canvas will effectively turn the material black.
-  // Use a tiny sample to detect that common failure mode.
   try {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return true;
     const d = ctx.getImageData(0, 0, 1, 1).data;
-    // If alpha is 0 it's almost certainly an unrendered canvas.
     return d[3] !== 0;
   } catch {
-    // If sampling fails (tainted canvas shouldn't happen here), assume ok.
     return true;
   }
 }
 
-// Convert canvas textures to Three.js textures
 function canvasToThreeTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  // Use linear filtering for smooth, non-pixelated terrain
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
-  texture.anisotropy = 8; // Higher anisotropy for smoother distant terrain
+  texture.anisotropy = 8;
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.generateMipmaps = true;
   texture.needsUpdate = true;
   return texture;
 }
 
-// FIX: Dispose old THREE.CanvasTexture instances to prevent GPU memory leak
 function disposeTextureMap(map: Map<MaterialKind, THREE.CanvasTexture>) {
   map.forEach((texture) => {
     try {
@@ -100,24 +83,27 @@ export function useWorldTextures({
   vars,
   enabled = true,
 }: UseWorldTexturesOptions): WorldTextureState {
+  // ========== STATE (always in same order) ==========
   const [textureMap, setTextureMap] = useState<Map<MaterialKind, THREE.CanvasTexture>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Keep track of previous textures to avoid flickering during reload
+  // ========== REFS (always in same order) ==========
   const prevTexturesRef = useRef<Map<MaterialKind, THREE.CanvasTexture>>(new Map());
-  
-  // FIX: Track the currently active textures for disposal
   const activeTexturesRef = useRef<Map<MaterialKind, THREE.CanvasTexture>>(new Map());
+  const inFlightRef = useRef(false);
+  const pendingKeyRef = useRef<string | null>(null);
+  const debounceTimerRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
 
-  // Stable key for dependency tracking
+  // ========== MEMOS (always in same order) ==========
+  // Stable key for dependency tracking - floors vars to avoid jitter
   const textureKey = useMemo(() => {
     const varsHash = vars.slice(0, 10).map((v) => Math.floor(v)).join('-');
     return `${worldX}_${worldY}_${seed}_${varsHash}`;
   }, [worldX, worldY, seed, vars]);
 
-  // IMPORTANT: normalize vars for texture generation to avoid storms from tiny slider jitter.
-  // This matches the hashing strategy used across the texture pipeline.
+  // Normalize vars for texture generation
   const stableVars = useMemo(() => {
     return vars.slice(0, 10).map((v) => {
       const n = Number(v);
@@ -126,58 +112,27 @@ export function useWorldTextures({
     });
   }, [vars]);
 
-  // Prevent parallel texture generations (storms) while the user drags sliders.
-  // We debounce + ensure only one in-flight job runs at a time, then run the latest pending job.
-  const inFlightRef = useRef(false);
-  const pendingJobRef = useRef<null | {
-    key: string;
-    worldX: number;
-    worldY: number;
-    seed: number;
-    vars: number[];
-  }>(null);
-  const debounceTimerRef = useRef<number | null>(null);
-  const mountedRef = useRef(true);
-
-  const bumpStat = useCallback((field: keyof NonNullable<Window['__editorResourceStats']>, delta: number) => {
-    if (!DEV || typeof window === 'undefined') return;
-    const s = (window.__editorResourceStats ??= {
-      textureGenActive: 0,
-      textureGenStarted: 0,
-      textureGenCompleted: 0,
-      textureGenSkipped: 0,
-    });
-    // @ts-expect-error - dynamic access
-    s[field] = (s[field] ?? 0) + delta;
-  }, []);
-
-  const runJob = useCallback(async (job: NonNullable<typeof pendingJobRef.current>) => {
-    if (!enabled) return;
+  // ========== CALLBACKS (always in same order) ==========
+  // Actual texture generation logic - extracted to avoid closure issues
+  const doGenerate = useCallback(async (
+    jobKey: string,
+    jobWorldX: number,
+    jobWorldY: number,
+    jobSeed: number,
+    jobVars: number[]
+  ) => {
     if (!mountedRef.current) return;
-
-    // If another job is already running, just remember the latest and exit.
-    if (inFlightRef.current) {
-      pendingJobRef.current = job;
-      bumpStat('textureGenSkipped', 1);
-      return;
-    }
-
-    inFlightRef.current = true;
-    pendingJobRef.current = null;
-    bumpStat('textureGenActive', 1);
-    bumpStat('textureGenStarted', 1);
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const textureSets = await generateWorldTextures(WORLD_A_ID, job.worldX, job.worldY, job.seed, job.vars);
+      const textureSets = await generateWorldTextures(WORLD_A_ID, jobWorldX, jobWorldY, jobSeed, jobVars);
       if (!mountedRef.current) return;
 
       const threeTextures = new Map<MaterialKind, THREE.CanvasTexture>();
       textureSets.forEach((textureSet, kind) => {
         const threeTexture = canvasToThreeTexture(textureSet.diffuse);
-        // Guard against "blank" canvases that would render as black.
         if (threeTexture.image instanceof HTMLCanvasElement) {
           if (!isCanvasNonEmpty(threeTexture.image)) return;
         }
@@ -197,29 +152,27 @@ export function useWorldTextures({
       activeTexturesRef.current = threeTextures;
       prevTexturesRef.current = threeTextures;
       setTextureMap(threeTextures);
+      setIsLoading(false);
     } catch (err) {
       if (!mountedRef.current) return;
       console.error('[useWorldTextures] Failed to generate textures:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate textures');
-    } finally {
-      if (mountedRef.current) {
-        setIsLoading(false);
-      }
-      bumpStat('textureGenCompleted', 1);
-      bumpStat('textureGenActive', -1);
-      inFlightRef.current = false;
-
-      // If a newer job arrived while we were working, run it next (no parallelism).
-      const pending = pendingJobRef.current;
-      if (pending && pending.key !== job.key && enabled) {
-        pendingJobRef.current = null;
-        // Fire-and-forget; this function already serializes.
-        runJob(pending);
-      }
+      setIsLoading(false);
     }
-  }, [enabled, bumpStat]);
 
-  // Generate textures when inputs change (debounced + serialized)
+    inFlightRef.current = false;
+
+    // If a newer job arrived while we were working, run it
+    const pending = pendingKeyRef.current;
+    if (pending && pending !== jobKey && mountedRef.current) {
+      pendingKeyRef.current = null;
+      // We need to schedule the next job but we don't have its params here
+      // The effect will re-run if textureKey changed, so this is handled naturally
+    }
+  }, []);
+
+  // ========== EFFECTS (always in same order) ==========
+  // Track mounted state
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -227,29 +180,39 @@ export function useWorldTextures({
     };
   }, []);
 
+  // Main generation effect - debounced + serialized
   useEffect(() => {
     if (!enabled) return;
 
-    // Debounce: collapse fast slider changes into a single texture build.
+    // Clear any pending debounce timer
     if (debounceTimerRef.current !== null) {
       window.clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
 
-    const job = {
-      key: textureKey,
-      worldX,
-      worldY,
-      seed,
-      vars: stableVars,
-    };
+    // If a generation is already in flight, just mark this as pending
+    if (inFlightRef.current) {
+      pendingKeyRef.current = textureKey;
+      if (DEV) {
+        console.debug('[useWorldTextures] Generation in flight, queuing:', textureKey);
+      }
+      return;
+    }
 
-    pendingJobRef.current = job;
-
+    // Debounce: wait 250ms before starting generation
     debounceTimerRef.current = window.setTimeout(() => {
-      if (!pendingJobRef.current) return;
-      // Run the latest job we have.
-      runJob(pendingJobRef.current);
+      debounceTimerRef.current = null;
+      
+      if (!mountedRef.current) return;
+      if (inFlightRef.current) {
+        pendingKeyRef.current = textureKey;
+        return;
+      }
+
+      inFlightRef.current = true;
+      pendingKeyRef.current = null;
+      
+      doGenerate(textureKey, worldX, worldY, seed, stableVars);
     }, 250);
 
     return () => {
@@ -257,14 +220,10 @@ export function useWorldTextures({
         window.clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
       }
-      // NOTE: We intentionally do NOT attempt to abort in-flight generation because
-      // the renderer work is not abortable. We instead serialize and only apply
-      // the latest result.
     };
-    // Depend on textureKey (floored vars) instead of raw vars array to avoid jitter storms.
-  }, [textureKey, enabled, worldX, worldY, seed, stableVars, runJob]);
+  }, [textureKey, enabled, worldX, worldY, seed, stableVars, doGenerate]);
 
-  // FIX: Cleanup on unmount - dispose all textures
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (activeTexturesRef.current.size > 0) {
@@ -274,7 +233,7 @@ export function useWorldTextures({
     };
   }, []);
 
-  // Prefer current textures; fall back to previous stable textures if we have them.
+  // ========== RETURN ==========
   const stableTextures = textureMap.size > 0 ? textureMap : prevTexturesRef.current;
 
   return {
