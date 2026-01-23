@@ -278,9 +278,23 @@ export function setCachedTexture(hash: string, texture: TextureSet): void {
   // FIX: Limit cache size to prevent unbounded growth
   const MAX_CACHE_SIZE = 50;
   if (textureCache.size >= MAX_CACHE_SIZE) {
-    // Remove oldest entries (FIFO)
+    // Remove oldest entries (FIFO) with proper disposal
     const keysToRemove = Array.from(textureCache.keys()).slice(0, textureCache.size - MAX_CACHE_SIZE + 1);
     for (const key of keysToRemove) {
+      const evicted = textureCache.get(key);
+      if (evicted) {
+        // FIX: Properly dispose canvas to release GPU memory
+        try {
+          const canvas = evicted.diffuse;
+          if (canvas) {
+            // Clear canvas dimensions to release backing store
+            canvas.width = 0;
+            canvas.height = 0;
+          }
+        } catch (e) {
+          // Ignore disposal errors
+        }
+      }
       textureCache.delete(key);
     }
   }

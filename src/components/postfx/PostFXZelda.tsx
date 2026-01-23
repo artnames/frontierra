@@ -2,7 +2,7 @@
 // BRIGHT & VIBRANT version - emphasizes color and light, minimal darkening
 // Properly handles sky dome, stars, and all scene elements
 
-import { memo, useMemo, useEffect } from "react";
+import { memo, useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -213,6 +213,7 @@ class ScreenPostFXMaterial extends THREE.ShaderMaterial {
 }
 
 // PostFX renderer component
+// FIX: Proper lifecycle management - create resources once, dispose on unmount only
 function PostFXEffect({
   strength = "zelda",
   bloomEnabled = true,
@@ -222,34 +223,48 @@ function PostFXEffect({
   const { gl, scene, camera, size } = useThree();
   const preset = STRENGTH_PRESETS[strength];
 
-  // Render target to capture the scene
-  const renderTarget = useMemo(() => {
-    return new THREE.WebGLRenderTarget(size.width, size.height, {
+  // FIX: Use refs to track resources for proper lifecycle
+  const renderTargetRef = useRef<THREE.WebGLRenderTarget | null>(null);
+  const postMaterialRef = useRef<ScreenPostFXMaterial | null>(null);
+  const fsQuadRef = useRef<THREE.Mesh | null>(null);
+  const orthoCameraRef = useRef<THREE.OrthographicCamera | null>(null);
+  const geometryRef = useRef<THREE.PlaneGeometry | null>(null);
+
+  // FIX: Create resources only once (lazy initialization)
+  if (!renderTargetRef.current) {
+    renderTargetRef.current = new THREE.WebGLRenderTarget(size.width, size.height, {
       minFilter: THREE.LinearFilter,
       magFilter: THREE.LinearFilter,
       format: THREE.RGBAFormat,
       type: THREE.UnsignedByteType,
     });
-  }, [size.width, size.height]);
+  }
 
-  // Post material
-  const postMaterial = useMemo(() => new ScreenPostFXMaterial(), []);
+  if (!postMaterialRef.current) {
+    postMaterialRef.current = new ScreenPostFXMaterial();
+  }
 
-  // Fullscreen quad
-  const fsQuad = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(2, 2);
-    const mesh = new THREE.Mesh(geo, postMaterial);
-    mesh.frustumCulled = false;
-    return mesh;
-  }, [postMaterial]);
+  if (!geometryRef.current) {
+    geometryRef.current = new THREE.PlaneGeometry(2, 2);
+  }
 
-  // Ortho camera for the post pass
-  const orthoCamera = useMemo(() => {
-    return new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  }, []);
+  if (!fsQuadRef.current && postMaterialRef.current && geometryRef.current) {
+    fsQuadRef.current = new THREE.Mesh(geometryRef.current, postMaterialRef.current);
+    fsQuadRef.current.frustumCulled = false;
+  }
+
+  if (!orthoCameraRef.current) {
+    orthoCameraRef.current = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  }
+
+  const renderTarget = renderTargetRef.current;
+  const postMaterial = postMaterialRef.current;
+  const fsQuad = fsQuadRef.current;
+  const orthoCamera = orthoCameraRef.current;
 
   // Update uniforms
   useEffect(() => {
+    if (!postMaterial) return;
     postMaterial.uniforms.uVignetteStrength.value = preset.vignette;
     postMaterial.uniforms.uVignetteOffset.value = preset.vignetteOffset;
     postMaterial.uniforms.uVignetteEnabled.value = vignetteEnabled ? 1.0 : 0.0;
@@ -264,19 +279,32 @@ function PostFXEffect({
     postMaterial.uniforms.uResolution.value.set(size.width, size.height);
   }, [postMaterial, preset, bloomEnabled, vignetteEnabled, noiseEnabled, size]);
 
-  // Update render target size
+  // FIX: Resize render target without recreating it
   useEffect(() => {
-    renderTarget.setSize(size.width, size.height);
-  }, [size, renderTarget]);
+    if (renderTarget) {
+      renderTarget.setSize(size.width, size.height);
+    }
+  }, [size.width, size.height, renderTarget]);
 
-  // Cleanup
+  // FIX: Cleanup ONLY on unmount - dispose all resources once
   useEffect(() => {
     return () => {
-      renderTarget.dispose();
-      postMaterial.dispose();
-      fsQuad.geometry.dispose();
+      if (renderTargetRef.current) {
+        renderTargetRef.current.dispose();
+        renderTargetRef.current = null;
+      }
+      if (postMaterialRef.current) {
+        postMaterialRef.current.dispose();
+        postMaterialRef.current = null;
+      }
+      if (geometryRef.current) {
+        geometryRef.current.dispose();
+        geometryRef.current = null;
+      }
+      fsQuadRef.current = null;
+      orthoCameraRef.current = null;
     };
-  }, [renderTarget, postMaterial, fsQuad]);
+  }, []);
 
   // Main render loop - runs after everything else
   useFrame(({ clock }) => {

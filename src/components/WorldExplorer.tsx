@@ -23,6 +23,7 @@ import { ForestTrees } from "@/components/ForestTrees";
 import { SkyDome } from "@/components/SkyDome";
 import { TimeOfDayHUD } from "@/components/TimeOfDayHUD";
 import { PostFXZelda } from "@/components/postfx/PostFXZelda";
+import { ResourceHUD } from "@/components/ResourceHUD";
 import { DiscoveryToast } from "@/components/DiscoveryToast";
 import { MobileControls } from "@/components/MobileControls";
 import { useAmbientAudio } from "@/hooks/useAmbientAudio";
@@ -397,6 +398,9 @@ export function WorldExplorer({
           vignetteEnabled={postfxVignetteEnabled}
           noiseEnabled={postfxNoiseEnabled}
         />
+        
+        {/* DEV-only resource monitoring (visible with ?debug=1) */}
+        <ResourceHUD />
       </Canvas>
 
       {!isReplaying && <DiscoveryToast worldX={worldX} worldY={worldY} isOwnLand={isOwnLand} />}

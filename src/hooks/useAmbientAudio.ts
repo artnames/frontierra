@@ -237,10 +237,34 @@ export function useAmbientAudio({
       if (fadeRafRef.current) cancelAnimationFrame(fadeRafRef.current);
       if (musicFadeTimeoutRef.current) clearTimeout(musicFadeTimeoutRef.current);
 
+      // FIX: Proper audio cleanup to release decoded buffers
       layersRef.current.forEach((layer) => {
-        layer.audio.pause();
-        layer.audio.src = "";
+        try {
+          // 1. Pause playback
+          layer.audio.pause();
+          
+          // 2. Remove all event listeners
+          layer.audio.oncanplaythrough = null;
+          layer.audio.onended = null;
+          layer.audio.onerror = null;
+          layer.audio.onplay = null;
+          layer.audio.onpause = null;
+          
+          // 3. Clear source
+          layer.audio.src = "";
+          
+          // 4. Call load() to release decoded audio buffers
+          layer.audio.load();
+          
+          // 5. Null out volume/state
+          layer.currentVolume = 0;
+          layer.targetVolume = 0;
+        } catch (e) {
+          // Ignore cleanup errors
+        }
       });
+      
+      // 6. Clear the map to release references
       layersRef.current.clear();
       initRef.current = false;
     };
