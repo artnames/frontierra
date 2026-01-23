@@ -344,14 +344,17 @@ export interface SimpleTerrainMeshProps {
 }
 
 export function SimpleTerrainMesh({ world, worldX = 0, worldY = 0 }: SimpleTerrainMeshProps) {
-  // Early return if world data isn't ready
-  if (!world || !world.terrain || world.terrain.length === 0 || !world.gridSize) {
-    return null;
-  }
-
+  const prevGeometryRef = useRef<THREE.BufferGeometry | null>(null);
+  const prevMaterialRef = useRef<THREE.MeshStandardMaterial | null>(null);
+  
   const heightScale = WORLD_HEIGHT_SCALE;
 
+  // Early validation
+  const isValidWorld = world && world.terrain && world.terrain.length > 0 && world.gridSize > 0;
+
   const geometry = useMemo(() => {
+    if (!isValidWorld) return null;
+    
     const size = world.gridSize;
     const heights: number[][] = [];
     for (let y = 0; y < size; y++) {
@@ -423,11 +426,48 @@ export function SimpleTerrainMesh({ world, worldX = 0, worldY = 0 }: SimpleTerra
     geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
     return geo;
-  }, [world, heightScale]);
+  }, [world, heightScale, isValidWorld]);
+
+  const material = useMemo(() => {
+    if (!isValidWorld) return null;
+    return new THREE.MeshStandardMaterial({ 
+      vertexColors: true, 
+      side: THREE.DoubleSide, 
+      roughness: 0.85, 
+      metalness: 0.05 
+    });
+  }, [isValidWorld]);
+
+  // Dispose previous geometry/material when new ones are created, and on unmount
+  useEffect(() => {
+    // Dispose previous geometry if we have a new one
+    if (prevGeometryRef.current && prevGeometryRef.current !== geometry) {
+      try { prevGeometryRef.current.dispose(); } catch { /* ignore */ }
+    }
+    prevGeometryRef.current = geometry;
+    
+    // Dispose previous material if we have a new one
+    if (prevMaterialRef.current && prevMaterialRef.current !== material) {
+      try { prevMaterialRef.current.dispose(); } catch { /* ignore */ }
+    }
+    prevMaterialRef.current = material;
+    
+    return () => {
+      // Final cleanup on unmount
+      if (geometry) {
+        try { geometry.dispose(); } catch { /* ignore */ }
+      }
+      if (material) {
+        try { material.dispose(); } catch { /* ignore */ }
+      }
+    };
+  }, [geometry, material]);
+
+  if (!isValidWorld || !geometry || !material) {
+    return null;
+  }
 
   return (
-    <mesh geometry={geometry} receiveShadow>
-      <meshStandardMaterial vertexColors side={THREE.DoubleSide} roughness={0.85} metalness={0.05} />
-    </mesh>
+    <mesh geometry={geometry} material={material} receiveShadow />
   );
 }

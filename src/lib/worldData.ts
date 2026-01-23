@@ -258,12 +258,45 @@ export function generateWorldData(seed: number, vars: number[]): WorldData {
   };
 }
 
+// Global cache with LRU eviction to prevent unbounded memory growth
+const MAX_NEXART_CACHE_SIZE = 10;
+
 export function cacheWorldData(world: WorldData): void {
   const cacheKey = `nexart_${world.seed}_${world.vars.join(",")}`;
   if (!(window as any).__nexartCache) {
     (window as any).__nexartCache = {};
+    (window as any).__nexartCacheOrder = [];
   }
-  (window as any).__nexartCache[cacheKey] = world;
+  
+  const cache = (window as any).__nexartCache;
+  const order: string[] = (window as any).__nexartCacheOrder;
+  
+  // If already cached, move to end (most recent)
+  const existingIndex = order.indexOf(cacheKey);
+  if (existingIndex !== -1) {
+    order.splice(existingIndex, 1);
+    order.push(cacheKey);
+    return;
+  }
+  
+  // Evict oldest entries if at capacity
+  while (order.length >= MAX_NEXART_CACHE_SIZE) {
+    const oldest = order.shift();
+    if (oldest) {
+      delete cache[oldest];
+    }
+  }
+  
+  cache[cacheKey] = world;
+  order.push(cacheKey);
+}
+
+// Clear the global NexArt cache (for cleanup)
+export function clearNexartCache(): void {
+  if ((window as any).__nexartCache) {
+    (window as any).__nexartCache = {};
+    (window as any).__nexartCacheOrder = [];
+  }
 }
 
 // ============================================

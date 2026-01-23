@@ -164,14 +164,35 @@ export function getNeighborCoords(worldX: number, worldY: number): NeighborCoord
   ];
 }
 
-// Preload status tracking
+// Preload status tracking - BOUNDED to prevent memory leak
 interface PreloadJob {
   key: CacheKey;
   promise: Promise<WorldData | null>;
   status: 'pending' | 'complete' | 'failed';
 }
 
+const MAX_PRELOAD_ENTRIES = 10; // Keep only recent preload jobs
 const activePreloads: Map<CacheKey, PreloadJob> = new Map();
+
+// Prune completed/failed preload entries to prevent unbounded growth
+function pruneCompletedPreloads(): void {
+  if (activePreloads.size <= MAX_PRELOAD_ENTRIES) return;
+  
+  // Remove oldest completed/failed entries first
+  const entriesToRemove: CacheKey[] = [];
+  for (const [key, job] of activePreloads) {
+    if (job.status !== 'pending') {
+      entriesToRemove.push(key);
+      if (activePreloads.size - entriesToRemove.length <= MAX_PRELOAD_ENTRIES) break;
+    }
+  }
+  entriesToRemove.forEach(key => activePreloads.delete(key));
+}
+
+// Clear all preload tracking (for cleanup)
+export function clearPreloadTracking(): void {
+  activePreloads.clear();
+}
 
 // Check if debug mode is enabled (disables preloading to avoid log confusion)
 function isDebugMode(): boolean {
@@ -214,15 +235,19 @@ export async function preloadWorld(
       
       if (isWorldValid(worldData)) {
         cacheWorld(worldX, worldY, worldData, seed, vars);
+        // Mark complete then prune old entries to prevent unbounded growth
         activePreloads.set(key, { key, promise, status: 'complete' });
+        pruneCompletedPreloads();
         return worldData;
       } else {
         activePreloads.set(key, { key, promise, status: 'failed' });
+        pruneCompletedPreloads();
         return null;
       }
     } catch (error) {
       console.error(`[WorldCache] Preload failed for ${key}:`, error);
       activePreloads.set(key, { key, promise, status: 'failed' });
+      pruneCompletedPreloads();
       return null;
     }
   })();
